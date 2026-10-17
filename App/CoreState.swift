@@ -1,4 +1,5 @@
 import Foundation
+import PosternAudit
 import PosternBridge
 import PosternModel
 import PosternPolicy
@@ -9,12 +10,24 @@ import PosternVault
 final class CoreState: @unchecked Sendable {
     static let shared = CoreState()
     static let accessGroup = "D8HG34L8XK.ch.rubencatalao.postern"
+    static let activityRetention: TimeInterval = 90 * 24 * 3600
 
     let vault: any SecretStore = KeychainVault(accessGroup: CoreState.accessGroup)
+    let activity: ActivityLog
     private let lock = NSLock()
     private var _policy: Policy = .initial
     private var _backend: BridgeBackend?
-    private var sessions: [ObjectIdentifier: Session] = [:]
+    private var sessions: [ObjectIdentifier: (session: Session, connection: RelayConnection)] = [:]
+    /// Called on the main queue whenever the policy, the configuration or the connected apps change.
+    var onChange: (@Sendable () -> Void)?
+
+    private init() {
+        let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+        activity = ActivityLog(
+            fileURL: support.appendingPathComponent("Postern/activity.jsonl"), head: VaultHeadStore(vault: vault)
+        )
+        try? activity.prune(olderThan: Date().addingTimeInterval(-Self.activityRetention))
+    }
 
     var policy: Policy { lock.withLock { _policy } }
     var backend: BridgeBackend? { lock.withLock { _backend } }
@@ -26,7 +39,6 @@ final class CoreState: @unchecked Sendable {
 
     /// Reads the configuration and policy from the Keychain. Anything missing leaves Postern closed.
     func reload() {
-        let policy = PolicyStore(vault: vault).load()
         var backend: BridgeBackend?
         if let endpoint = try? vault.read(.bridgeEndpoint, as: BridgeEndpoint.self),
            let pin = try? vault.read(.certificatePin, as: CertificatePin.self),
@@ -35,22 +47,54 @@ final class CoreState: @unchecked Sendable {
         }
         let previous = lock.withLock { () -> BridgeBackend? in
             let old = _backend
-            _policy = policy
             _backend = backend
             return old
         }
         if let previous { Task { await previous.shutdown() } }
-        notifySessions()
+        reloadPolicy()
     }
 
-    func add(_ session: Session, for key: ObjectIdentifier) { lock.withLock { sessions[key] = session } }
+    /// Re-reads the policy only, keeping the Bridge session, and pushes the new tool list to every client.
+    func reloadPolicy() {
+        let policy = PolicyStore(vault: vault).load()
+        lock.withLock { _policy = policy }
+        let current = lock.withLock { sessions.values.map(\.session) }
+        for session in current { Task { await session.toolsChanged() } }
+        changed()
+    }
 
-    func removeSession(for key: ObjectIdentifier) -> Session? { lock.withLock { sessions.removeValue(forKey: key) } }
+    func add(_ session: Session, connection: RelayConnection, for key: ObjectIdentifier) {
+        lock.withLock { sessions[key] = (session, connection) }
+        changed()
+    }
+
+    func removeSession(for key: ObjectIdentifier) -> Session? {
+        let removed = lock.withLock { sessions.removeValue(forKey: key)?.session }
+        changed()
+        return removed
+    }
 
     var sessionCount: Int { lock.withLock { sessions.count } }
 
-    private func notifySessions() {
-        let current = lock.withLock { Array(sessions.values) }
-        for session in current { Task { await session.toolsChanged() } }
+    /// Names of the apps connected right now, one entry per session.
+    var connectedApps: [String] { lock.withLock { sessions.values.map(\.connection.clientName) }.sorted() }
+
+    func record(_ report: ToolCallReport, client: String) {
+        try? activity.append(client: client, tool: report.tool, outcome: report.outcome, items: report.items)
+        changed()
     }
+
+    /// Tells the interface that something it shows has changed.
+    func changed() {
+        guard let onChange else { return }
+        DispatchQueue.main.async { onChange() }
+    }
+}
+
+/// Keeps the activity log's last hash in the Keychain, out of reach of whoever can edit the log file.
+struct VaultHeadStore: HeadStore {
+    let vault: any SecretStore
+
+    func load() -> String? { try? vault.read(.activityHead, as: String.self) }
+    func save(_ hash: String) { try? vault.write(hash, for: .activityHead) }
 }

@@ -43,6 +43,14 @@ targets:
           - D8HG34L8XK.ch.rubencatalao.postern
         keychain-access-groups:
           - $(AppIdentifierPrefix)ch.rubencatalao.postern
+        # The Connect buttons: the configuration files of Claude Code, Claude Desktop and Codex, and any other
+        # Claude Code profile folder the user picks.
+        com.apple.security.temporary-exception.files.home-relative-path.read-write:
+          - /.claude.json
+          - /Library/Application Support/Claude/
+          - /.codex/
+        com.apple.security.files.user-selected.read-write: true
+        com.apple.security.files.bookmarks.app-scope: true
     dependencies:
       - package: PosternKit
         product: PosternModel
@@ -54,6 +62,10 @@ targets:
         product: PosternPolicy
       - package: PosternKit
         product: PosternServer
+      - package: PosternKit
+        product: PosternAudit
+      - package: PosternKit
+        product: PosternClients
       - target: postern-mcp
         link: false
         embed: true

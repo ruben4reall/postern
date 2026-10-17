@@ -24,9 +24,10 @@ final class CoreListener: NSObject, NSXPCListenerDelegate, @unchecked Sendable {
         let state = CoreState.shared
         let session = Session(
             transport: transport, backend: LiveBackend(), version: Bundle.main.shortVersion,
-            policy: { state.policy }, readiness: { state.readiness }
+            policy: { state.policy }, readiness: { state.readiness },
+            onCall: { [weak handler] report in state.record(report, client: handler?.clientName ?? "MCP client") }
         )
-        state.add(session, for: key)
+        state.add(session, connection: handler, for: key)
         let stop: @Sendable () -> Void = {
             transport.finish()
             if let session = state.removeSession(for: key) { Task { await session.stop() } }
@@ -42,19 +43,33 @@ final class CoreListener: NSObject, NSXPCListenerDelegate, @unchecked Sendable {
 /// Receives the relay's messages for one session.
 final class RelayConnection: NSObject, CoreXPC, @unchecked Sendable {
     private let transport: XPCTransport
-    private(set) var clientName = "MCP client"
+    private let lock = NSLock()
+    private var name = "MCP client"
+
+    var clientName: String { lock.withLock { name } }
 
     init(transport: XPCTransport) {
         self.transport = transport
     }
 
     func hello(clientName: String, reply: @escaping @Sendable (Bool) -> Void) {
-        self.clientName = String(clientName.prefix(64))
+        let label = Self.label(for: clientName)
+        lock.withLock { name = label }
+        CoreState.shared.changed()
         reply(true)
     }
 
     func deliver(_ message: Data) {
         transport.deliver(message)
+    }
+
+    /// A readable name for the process that launched the relay.
+    static func label(for process: String) -> String {
+        let name = process.lowercased()
+        if name == "claude" || name.contains("claude-code") { return "Claude Code" }
+        if name.contains("claude") { return "Claude Desktop" }
+        if name.contains("codex") { return "Codex" }
+        return String(process.prefix(40))
     }
 }
 

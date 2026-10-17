@@ -11,6 +11,15 @@ public struct ActivityRecord: Codable, Sendable, Equatable {
     public let items: Int?
     /// SHA-256 of the previous line, which chains the log.
     public let previous: String
+
+    public init(date: Date, client: String, tool: String, outcome: String, items: Int?, previous: String) {
+        self.date = date
+        self.client = client
+        self.tool = tool
+        self.outcome = outcome
+        self.items = items
+        self.previous = previous
+    }
 }
 
 public enum Integrity: Equatable, Sendable {

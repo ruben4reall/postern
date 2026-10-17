@@ -1,0 +1,193 @@
+import Foundation
+import Observation
+import PosternAudit
+import PosternBridge
+import PosternModel
+import PosternPolicy
+import PosternVault
+
+/// What the control window shows, and the only place that changes the policy.
+@MainActor @Observable
+final class ControlModel {
+    enum Pane: String, CaseIterable, Identifiable {
+        case overview, tools, mailboxes, clients, activity, security
+
+        var id: String { rawValue }
+
+        var title: String {
+            switch self {
+            case .overview: "Overview"
+            case .tools: "Tools"
+            case .mailboxes: "Mailboxes"
+            case .clients: "Apps"
+            case .activity: "Activity"
+            case .security: "Security"
+            }
+        }
+
+        var symbol: String {
+            switch self {
+            case .overview: "shield.lefthalf.filled"
+            case .tools: "switch.2"
+            case .mailboxes: "tray.2"
+            case .clients: "app.connected.to.app.below.fill"
+            case .activity: "list.bullet.rectangle"
+            case .security: "lock"
+            }
+        }
+    }
+
+    enum MailboxState: Equatable {
+        case idle, loading, loaded, failed(String)
+    }
+
+    var pane: Pane = .overview
+    var policy: Policy = .initial
+    var configured = false
+    var connectedApps: [String] = []
+    var mailboxes: [MailboxInfo] = []
+    var mailboxState: MailboxState = .idle
+    var clients: [ClientRow] = []
+    var activity: [ActivityRecord] = []
+    var integrity: Integrity?
+    var pin: CertificatePin?
+    var endpoint: BridgeEndpoint?
+    var notice: String?
+
+    /// Snapshots and previews fill the model by hand and never touch the system.
+    let isLive: Bool
+    var openSetup: () -> Void = {}
+
+    init(live: Bool = true) {
+        isLive = live
+    }
+
+    // MARK: Loading
+
+    func refresh() {
+        guard isLive else { return }
+        let state = CoreState.shared
+        policy = state.policy
+        configured = state.backend != nil
+        connectedApps = state.connectedApps
+        activity = (try? state.activity.records(limit: 200)) ?? []
+        integrity = try? state.activity.verify()
+        pin = try? state.vault.read(.certificatePin, as: CertificatePin.self)
+        endpoint = try? state.vault.read(.bridgeEndpoint, as: BridgeEndpoint.self)
+        clients = ClientConnector.rows()
+    }
+
+    func loadMailboxes() async {
+        guard isLive, let backend = CoreState.shared.backend else { return }
+        mailboxState = .loading
+        do {
+            mailboxes = try await backend.listMailboxes().sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
+            mailboxState = .loaded
+        } catch let error as PosternError {
+            mailboxState = .failed(error.message)
+        } catch {
+            mailboxState = .failed("Postern couldn't list your mailboxes.")
+        }
+    }
+
+    // MARK: Policy
+
+    /// Applies a change. Anything that gives apps more power waits for Touch ID first; taking power away is
+    /// immediate.
+    func update(_ reason: String, _ change: (inout Policy) -> Void) async {
+        guard isLive else { return }
+        let old = CoreState.shared.policy
+        var new = old
+        change(&new)
+        guard new != old else { return }
+        if new.addsPower(over: old) {
+            switch await Authenticator.confirm(reason, allowPassword: old.allowPasswordFallback) {
+            case .confirmed: break
+            case .cancelled: refresh(); return
+            case .unavailable:
+                notice = "Touch ID isn't available right now. Open the lid or connect your Apple Watch, or allow the Mac password in Security."
+                refresh()
+                return
+            }
+        }
+        do {
+            try PolicyStore(vault: CoreState.shared.vault).save(new)
+            notice = nil
+        } catch {
+            notice = "Postern couldn't save this change."
+        }
+        CoreState.shared.reloadPolicy()
+        refresh()
+    }
+
+    func setTool(_ tool: ToolID, enabled: Bool) async {
+        await update("let your apps \(ToolCopy.for(tool).verb)") { policy in
+            if enabled { policy.enabledTools.insert(tool) } else { policy.enabledTools.remove(tool) }
+        }
+    }
+
+    func setMailbox(_ name: String, visible: Bool) async {
+        await update("show \(name) to your apps") { policy in
+            if visible { policy.hiddenMailboxes.remove(name) } else { policy.hiddenMailboxes.insert(name) }
+        }
+    }
+
+    func setPaused(_ paused: Bool) async {
+        await update("resume Postern") { $0.paused = paused }
+    }
+
+    func setPauseWhenLocked(_ value: Bool) async {
+        await update("stop pausing Postern when the screen locks") { $0.pauseWhenLocked = value }
+    }
+
+    func setPasswordFallback(_ value: Bool) async {
+        await update("allow your Mac password for Postern") { $0.allowPasswordFallback = value }
+    }
+
+    // MARK: Apps
+
+    func connect(_ row: ClientRow) {
+        guard isLive else { return }
+        do {
+            try ClientConnector.connect(row.target)
+            notice = "\(row.target.title) is connected. Restart it, or open a new session, to see Postern."
+        } catch {
+            notice = "Postern couldn't update \(row.target.title)'s settings."
+        }
+        refresh()
+    }
+
+    func addProfile() {
+        guard isLive, ClientConnector.addProfile() != nil else { return }
+        refresh()
+    }
+}
+
+/// How each tool is described to the user: what it lets an app do, and what could go wrong.
+struct ToolCopy {
+    let title: String
+    let verb: String
+    let allows: String
+    let risk: String
+
+    static func `for`(_ tool: ToolID) -> ToolCopy {
+        switch tool {
+        case .listMailboxes:
+            ToolCopy(title: "List mailboxes", verb: "list your mailboxes",
+                     allows: "See your folders and labels, with how many messages they hold.",
+                     risk: "Folder names can say a lot about your life.")
+        case .searchMessages:
+            ToolCopy(title: "Search messages", verb: "search your mail",
+                     allows: "Find messages by sender, recipient, subject, words or date.",
+                     risk: "The app sees the senders and subjects of what it finds.")
+        case .getMessage:
+            ToolCopy(title: "Read messages", verb: "read your messages",
+                     allows: "Open a message: its text, links and attachment names.",
+                     risk: "Whatever you can read in a message, the app can read.")
+        case .getThread:
+            ToolCopy(title: "Read conversations", verb: "read your conversations",
+                     allows: "Follow a conversation across folders.",
+                     risk: "Like reading messages, for every message of the conversation.")
+        }
+    }
+}

@@ -24,7 +24,7 @@ public enum ClientKind: String, CaseIterable, Sendable, Identifiable {
     }
 }
 
-public enum ConnectionStatus: Equatable, Sendable {
+public enum ConnectionStatus: Hashable, Sendable {
     case notConnected
     case connected
     /// Postern is listed, but at another path: an older copy of the app.

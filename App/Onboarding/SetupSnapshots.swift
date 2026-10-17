@@ -1,6 +1,10 @@
 #if DEBUG
 import AppKit
+import PosternAudit
 import PosternBridge
+import PosternClients
+import PosternModel
+import PosternPolicy
 import SwiftUI
 
 /// Renders each setup step in a window that is never put on screen. The sandbox keeps the app out of the rest of
@@ -9,6 +13,88 @@ import SwiftUI
 enum SetupSnapshots {
     static func write() {
         _ = NSApplication.shared
+        writeSetup()
+    }
+
+    private static func render(_ root: some View, size: NSSize, appearance: NSAppearance.Name, name: String) {
+        let view = NSHostingView(rootView: root.background(Color(nsColor: .windowBackgroundColor)))
+        view.frame = NSRect(origin: .zero, size: size)
+        let window = NSWindow(contentRect: view.frame, styleMask: [.titled, .fullSizeContentView], backing: .buffered, defer: false)
+        window.titlebarAppearsTransparent = true
+        window.appearance = NSAppearance(named: appearance)
+        window.contentView = view
+        view.layoutSubtreeIfNeeded()
+        RunLoop.main.run(until: Date().addingTimeInterval(0.4))
+        guard let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        if let png = bitmap.representation(using: .png, properties: [:]) {
+            print("\(name)\t\(png.base64EncodedString())")
+        }
+    }
+
+    /// Puts the real control window outside every display, prints its window number, and keeps it there for the
+    /// given time so `screencapture -l` can take it. Nothing appears on screen and focus is not taken.
+    static func holdControlWindow(pane: String, dark: Bool, seconds: Double) {
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.accessory)
+        let model = sampleModel(pane: ControlModel.Pane(rawValue: pane) ?? .overview)
+        let window = NSWindow(contentViewController: NSHostingController(rootView: ControlView(model: model)))
+        window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
+        window.toolbarStyle = .unified
+        window.title = "Postern"
+        window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        window.setContentSize(NSSize(width: 820, height: 580))
+        window.setFrameOrigin(NSPoint(x: -6000, y: -6000))
+        window.orderFrontRegardless()
+        print(window.windowNumber)
+        fflush(stdout)
+        RunLoop.main.run(until: Date().addingTimeInterval(seconds))
+    }
+
+    static func sampleModel(pane: ControlModel.Pane) -> ControlModel {
+        let pin = CertificatePin(sha256Hex: "7F2193528AB83E4142D113FCB7C8623A64EB7066AFBBC3650BF1F1A010547168")
+        let home = ClientConnector.realHome
+        do {
+            do {
+                let model = ControlModel(live: false)
+                model.pane = pane
+                model.configured = true
+                model.policy = Policy(enabledTools: [.listMailboxes, .searchMessages, .getMessage],
+                                      hiddenMailboxes: ["Folders/Health"], pauseWhenLocked: true)
+                model.connectedApps = ["Claude Code", "Claude Code", "Codex"]
+                model.pin = pin
+                model.endpoint = BridgeEndpoint(imap: BridgePort(port: 1143, mode: .startTLS), smtp: BridgePort(port: 1025, mode: .implicit))
+                model.mailboxState = .loaded
+                model.mailboxes = [
+                    MailboxInfo(name: "INBOX", kind: .system, total: 140, unread: 12),
+                    MailboxInfo(name: "Archive", kind: .system, total: 1052, unread: 0),
+                    MailboxInfo(name: "Sent", kind: .system, total: 627, unread: 0),
+                    MailboxInfo(name: "All Mail", kind: .virtual, total: 3563, unread: 12),
+                    MailboxInfo(name: "Folders/Health", kind: .folder, total: 31, unread: 0),
+                    MailboxInfo(name: "Folders/Invoices", kind: .folder, total: 69, unread: 2),
+                    MailboxInfo(name: "Folders/Travel", kind: .folder, total: 18, unread: 0),
+                    MailboxInfo(name: "Labels/To pay", kind: .label, total: 4, unread: 1),
+                ]
+                model.clients = [
+                    ClientRow(target: ClientTarget(id: "a", title: "Claude Code", kind: .claudeCode, fileURL: home.appendingPathComponent(".claude.json"), bookmark: nil), installed: true, status: .connected),
+                    ClientRow(target: ClientTarget(id: "b", title: "Claude Desktop", kind: .claudeDesktop, fileURL: home.appendingPathComponent(ClientKind.claudeDesktop.relativePath), bookmark: nil), installed: true, status: .notConnected),
+                    ClientRow(target: ClientTarget(id: "c", title: "Codex", kind: .codex, fileURL: home.appendingPathComponent(".codex/config.toml"), bookmark: nil), installed: true, status: .connected),
+                ]
+                let now = Date()
+                model.activity = [
+                    ActivityRecord(date: now.addingTimeInterval(-40), client: "Claude Code", tool: "get_message", outcome: "ok", items: 1, previous: ""),
+                    ActivityRecord(date: now.addingTimeInterval(-55), client: "Claude Code", tool: "search_messages", outcome: "ok", items: 8, previous: ""),
+                    ActivityRecord(date: now.addingTimeInterval(-300), client: "Codex", tool: "get_thread", outcome: "policy_disabled", items: nil, previous: ""),
+                    ActivityRecord(date: now.addingTimeInterval(-900), client: "Claude Code", tool: "search_messages", outcome: "scope_hidden", items: nil, previous: ""),
+                    ActivityRecord(date: now.addingTimeInterval(-3600), client: "Claude Code", tool: "list_mailboxes", outcome: "ok", items: 30, previous: ""),
+                ]
+                model.integrity = .intact(count: 128)
+                return model
+            }
+        }
+    }
+
+    private static func writeSetup() {
         let pin = CertificatePin(sha256Hex: "7F2193528AB83E4142D113FCB7C8623A64EB7066AFBBC3650BF1F1A010547168")
         for appearance in [NSAppearance.Name.aqua, .darkAqua] {
             for step in OnboardingModel.Step.allCases {
