@@ -60,7 +60,8 @@ public struct Policy: Codable, Sendable, Equatable {
     /// Nothing is allowed until the user turns tools on.
     public static let initial = Policy(enabledTools: [])
 
-    public static let readOnly = Policy(enabledTools: Set(ToolID.allCases.filter { $0.tier == .read }))
+    /// What setup turns on: reading only. Saving attachments to disk has its own switch.
+    public static let readOnly = Policy(enabledTools: [.listMailboxes, .searchMessages, .getMessage, .getThread])
 
     public func allows(_ tool: ToolID) -> Bool { !paused && enabledTools.contains(tool) }
 

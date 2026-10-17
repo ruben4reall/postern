@@ -31,6 +31,36 @@ public protocol MailBackend: Sendable {
     func deleteDraft(_ id: MessageID) async throws
     /// Sends an approved message through Bridge.
     func send(_ message: ApprovedMessage) async throws
+
+    // Attachments.
+    /// Writes attachment `index` of a message into the Postern folder of Downloads, quarantined like any download.
+    func saveAttachment(_ id: MessageID, index: Int) async throws -> SavedAttachment
+    /// A file the user put in the Postern outbox folder: the only place attachments can come from.
+    func outboxAttachment(named name: String) async throws -> OutgoingAttachment
+    /// The attachments of a message, to forward them.
+    func attachments(of id: MessageID) async throws -> [OutgoingAttachment]
+
+    // Deleting.
+    /// What the deletion panel lists for these messages.
+    func deletionItems(_ ids: [MessageID]) async throws -> [DeletionItem]
+    func trash(_ approved: ApprovedDeletion) async throws -> ChangeReport
+    func erase(_ approved: ApprovedDeletion) async throws -> ChangeReport
+}
+
+public struct SavedAttachment: Sendable, Equatable {
+    public let path: String
+    public let filename: String
+    public let mimeType: String
+    public let size: Int
+    public let sha256: String
+
+    public init(path: String, filename: String, mimeType: String, size: Int, sha256: String) {
+        self.path = path
+        self.filename = filename
+        self.mimeType = mimeType
+        self.size = size
+        self.sha256 = sha256
+    }
 }
 
 /// Where recent sends are counted, out of the client's reach.

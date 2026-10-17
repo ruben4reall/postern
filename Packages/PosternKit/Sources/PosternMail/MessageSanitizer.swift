@@ -43,14 +43,36 @@ public enum MessageSanitizer {
         )
     }
 
+    /// The decoded bytes of attachment `index` (counted from 1, as `sanitize` lists them).
+    public static func attachment(raw: Data, index: Int, limits: MIMELimits = MIMELimits()) throws -> (filename: String?, mimeType: String, data: Data) {
+        let root = try MIMEParser.parse(raw, limits: limits)
+        var plain: [MIMEEntity] = []
+        var html: [MIMEEntity] = []
+        var attachments: [AttachmentInfo] = []
+        var inlineImages = 0
+        var entities: [MIMEEntity] = []
+        collect(root, plain: &plain, html: &html, attachments: &attachments, inlineImages: &inlineImages, entities: &entities)
+        guard index >= 1, index <= entities.count else { throw MIMEError.tooManyParts }
+        let entity = entities[index - 1]
+        return (entity.filename, entity.contentType.mimeType, entity.decodedBody)
+    }
+
     private static func collect(
         _ entity: MIMEEntity, plain: inout [MIMEEntity], html: inout [MIMEEntity],
         attachments: inout [AttachmentInfo], inlineImages: inout Int
     ) {
+        var entities: [MIMEEntity] = []
+        collect(entity, plain: &plain, html: &html, attachments: &attachments, inlineImages: &inlineImages, entities: &entities)
+    }
+
+    private static func collect(
+        _ entity: MIMEEntity, plain: inout [MIMEEntity], html: inout [MIMEEntity],
+        attachments: inout [AttachmentInfo], inlineImages: inout Int, entities: inout [MIMEEntity]
+    ) {
         switch entity.body {
         case .multipart(let parts):
             for part in parts {
-                collect(part, plain: &plain, html: &html, attachments: &attachments, inlineImages: &inlineImages)
+                collect(part, plain: &plain, html: &html, attachments: &attachments, inlineImages: &inlineImages, entities: &entities)
             }
         case .leaf:
             if entity.isAttachment {
@@ -63,6 +85,7 @@ public enum MessageSanitizer {
                     index: attachments.count + 1, filename: entity.filename,
                     mimeType: entity.contentType.mimeType, size: entity.decodedBody.count
                 ))
+                entities.append(entity)
             } else if entity.contentType.mimeType == "text/html" {
                 html.append(entity)
             } else if entity.contentType.type == "text" {

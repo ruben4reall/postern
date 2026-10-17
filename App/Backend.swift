@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import NIOCore
 import OSLog
@@ -45,6 +46,16 @@ struct LiveBackend: MailBackend {
     func saveDraft(_ message: OutgoingMessage) async throws -> MessageID { try await current().saveDraft(message) }
     func deleteDraft(_ id: MessageID) async throws { try await current().deleteDraft(id) }
     func send(_ message: ApprovedMessage) async throws { try await current().send(message) }
+    func saveAttachment(_ id: MessageID, index: Int) async throws -> SavedAttachment {
+        try await current().saveAttachment(id, index: index)
+    }
+    func outboxAttachment(named name: String) async throws -> OutgoingAttachment {
+        try await current().outboxAttachment(named: name)
+    }
+    func attachments(of id: MessageID) async throws -> [OutgoingAttachment] { try await current().attachments(of: id) }
+    func deletionItems(_ ids: [MessageID]) async throws -> [DeletionItem] { try await current().deletionItems(ids) }
+    func trash(_ approved: ApprovedDeletion) async throws -> ChangeReport { try await current().trash(approved) }
+    func erase(_ approved: ApprovedDeletion) async throws -> ChangeReport { try await current().erase(approved) }
 }
 
 /// The mailbox over Bridge, with every message body decoded in the sandboxed parser service.
@@ -225,11 +236,75 @@ final class BridgeBackend: MailBackend, Sendable {
         try await bridge { try await self.sender.send(message) }
     }
 
+    // MARK: Attachments
+
+    func saveAttachment(_ id: MessageID, index: Int) async throws -> SavedAttachment {
+        let raw = try await rawMessage(id)
+        let file = try await parser.attachment(raw, index: index)
+        return try PosternFolders.save(file.data, suggestedName: file.filename ?? "attachment-\(index)", mimeType: file.mimeType)
+    }
+
+    func outboxAttachment(named name: String) async throws -> OutgoingAttachment {
+        try PosternFolders.outboxFile(named: name)
+    }
+
+    func attachments(of id: MessageID) async throws -> [OutgoingAttachment] {
+        let raw = try await rawMessage(id)
+        let listed = try await parser.sanitize(raw, maxChars: 100).attachments
+        var files: [OutgoingAttachment] = []
+        for item in listed {
+            let file = try await parser.attachment(raw, index: item.index)
+            let name = PosternFolders.safeName(file.filename ?? "attachment-\(item.index)")
+            files.append(try OutgoingAttachment.make(filename: name, data: file.data, mimeType: file.mimeType))
+        }
+        return files
+    }
+
+    // MARK: Deleting
+
+    func deletionItems(_ ids: [MessageID]) async throws -> [DeletionItem] {
+        try await bridge {
+            try await self.client.withConnection { connection in
+                var items: [DeletionItem] = []
+                let mailboxes = try await connection.mailboxes()
+                for (raw, group) in Dictionary(grouping: ids, by: \.mailbox) {
+                    guard let mailbox = mailboxes.first(where: { $0.raw == raw }) else { continue }
+                    let status = try await connection.examine(mailbox)
+                    let valid = group.filter { $0.uidValidity == status.uidValidity }
+                    let summaries = try await connection.fetchSummaries(valid.map(\.uid))
+                    for id in valid {
+                        let summary = summaries.first { $0.uid == id.uid }
+                        let from = summary?.from.first.map { $0.name.map { "\($0) <\(summary!.from[0].email)>" } ?? $0.email } ?? "Unknown sender"
+                        items.append(DeletionItem(id: id, mailbox: mailbox.display, from: from,
+                                                  subject: summary?.subject ?? "(not found)", date: summary?.date))
+                    }
+                }
+                return items
+            }
+        }
+    }
+
+    func trash(_ approved: ApprovedDeletion) async throws -> ChangeReport {
+        try await bridge {
+            try await self.client.withConnection { connection in
+                Self.report(try await Organizer(connection: connection).trash(approved))
+            }
+        }
+    }
+
+    func erase(_ approved: ApprovedDeletion) async throws -> ChangeReport {
+        try await bridge {
+            try await self.client.withConnection { connection in
+                Self.report(try await Organizer(connection: connection).erase(approved))
+            }
+        }
+    }
+
     static func report(_ result: OrganizeResult) -> ChangeReport {
         ChangeReport(done: result.done, failed: result.failed.map { ($0.id, $0.reason) }, verified: result.verified)
     }
 
-    private func rawMessage(_ id: MessageID) async throws -> Data {
+    func rawMessage(_ id: MessageID) async throws -> Data {
         try await bridge {
             try await self.client.withConnection { connection in
                 guard let mailbox = try await connection.mailboxes().first(where: { $0.raw == id.mailbox }) else {
@@ -296,7 +371,7 @@ final class ParserClient: @unchecked Sendable {
     private let lock = NSLock()
     private var connection: NSXPCConnection?
 
-    private func proxy(onError: @escaping @Sendable (any Error) -> Void) -> ParserXPC {
+    func proxy(onError: @escaping @Sendable (any Error) -> Void) -> ParserXPC {
         lock.withLock {
             if connection == nil {
                 let fresh = NSXPCConnection(serviceName: PosternXPC.parserService)
@@ -328,6 +403,99 @@ final class ParserClient: @unchecked Sendable {
                 if once.claim() { continuation.resume(returning: message) }
             }
             DispatchQueue.global().asyncAfter(deadline: .now() + 20) { fail("Reading this message took too long.") }
+        }
+    }
+}
+
+extension ParserClient {
+    func attachment(_ raw: Data, index: Int) async throws -> (data: Data, filename: String?, mimeType: String) {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<(data: Data, filename: String?, mimeType: String), any Error>) in
+            let once = OnceFlag()
+            let fail: @Sendable (String) -> Void = { message in
+                if once.claim() { continuation.resume(throwing: PosternError(.parseFailed, message)) }
+            }
+            let parser = proxy { _ in fail("The message reader stopped. Try again.") }
+            parser.attachment(raw, index: index) { data, filename, mimeType, error in
+                guard let data, let mimeType else {
+                    fail(error == nil ? "This attachment could not be read." : "There is no attachment \(index) in this message.")
+                    return
+                }
+                if once.claim() { continuation.resume(returning: (data, filename, mimeType)) }
+            }
+            DispatchQueue.global().asyncAfter(deadline: .now() + 30) { fail("Reading this attachment took too long.") }
+        }
+    }
+}
+
+/// The two folders Postern touches on disk, both inside Downloads: saved attachments, and the outbox, the only
+/// place a file can be attached from.
+enum PosternFolders {
+    static let maxOutboxFile = OutgoingMessage.maxAttachmentBytes
+
+    static var downloads: URL {
+        guard let entry = getpwuid(getuid()), let home = entry.pointee.pw_dir else {
+            return FileManager.default.urls(for: .downloadsDirectory, in: .userDomainMask)[0]
+        }
+        return URL(fileURLWithPath: String(cString: home)).appendingPathComponent("Downloads", isDirectory: true)
+    }
+
+    static var saved: URL { downloads.appendingPathComponent("Postern", isDirectory: true) }
+    static var outbox: URL { saved.appendingPathComponent("Outbox", isDirectory: true) }
+
+    static func prepare() {
+        try? FileManager.default.createDirectory(at: outbox, withIntermediateDirectories: true)
+    }
+
+    /// A file name with no path, no leading dot, no control or invisible characters.
+    static func safeName(_ name: String) -> String {
+        let cleaned = name.unicodeScalars.filter { scalar in
+            !"/\\:".unicodeScalars.contains(scalar) && scalar.properties.generalCategory != .control
+                && scalar.properties.generalCategory != .format
+        }
+        var result = String(String.UnicodeScalarView(cleaned)).trimmingCharacters(in: .whitespacesAndNewlines)
+        while result.hasPrefix(".") { result.removeFirst() }
+        if result.isEmpty { result = "attachment" }
+        return String(result.prefix(150))
+    }
+
+    static func save(_ data: Data, suggestedName: String, mimeType: String) throws -> SavedAttachment {
+        try FileManager.default.createDirectory(at: saved, withIntermediateDirectories: true)
+        let name = safeName(suggestedName)
+        var url = saved.appendingPathComponent(name)
+        var counter = 2
+        while FileManager.default.fileExists(atPath: url.path) {
+            let base = (name as NSString).deletingPathExtension
+            let ext = (name as NSString).pathExtension
+            url = saved.appendingPathComponent(ext.isEmpty ? "\(base) \(counter)" : "\(base) \(counter).\(ext)")
+            counter += 1
+        }
+        try data.write(to: url, options: .withoutOverwriting)
+        // Marked as downloaded: Gatekeeper and the quarantine checks apply before it opens.
+        var values = URLResourceValues()
+        values.quarantineProperties = [
+            kLSQuarantineTypeKey as String: kLSQuarantineTypeOtherDownload as String,
+            kLSQuarantineAgentNameKey as String: "Postern",
+        ]
+        try? url.setResourceValues(values)
+        let hash = SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
+        return SavedAttachment(path: url.path, filename: url.lastPathComponent, mimeType: mimeType, size: data.count, sha256: hash)
+    }
+
+    /// Only a plain file sitting directly in the outbox: no path, no link out of it.
+    static func outboxFile(named name: String) throws -> OutgoingAttachment {
+        guard name == safeName(name), !name.contains("/") else {
+            throw PosternError(.invalidArgument, "\(name) is not a plain file name. Attachments come only from Downloads › Postern › Outbox.")
+        }
+        let url = outbox.appendingPathComponent(name)
+        let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
+        guard let values, values.isRegularFile == true, values.isSymbolicLink != true else {
+            throw PosternError(.notFound, "\(name) is not in Downloads › Postern › Outbox. Put the file there first.")
+        }
+        guard (values.fileSize ?? 0) <= maxOutboxFile else { throw PosternError(.tooLarge, "\(name) is larger than 20 MB.") }
+        do {
+            return try OutgoingAttachment.make(filename: name, data: try Data(contentsOf: url))
+        } catch {
+            throw PosternError(.invalidArgument, "\(name) could not be attached.")
         }
     }
 }

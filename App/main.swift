@@ -20,8 +20,20 @@ if let index = CommandLine.arguments.firstIndex(of: "--hold-control-window"), in
 }
 if let index = CommandLine.arguments.firstIndex(of: "--hold-approval-panel"), index + 1 < CommandLine.arguments.count {
     let dark = CommandLine.arguments[index + 1] == "dark"
-    MainActor.assumeIsolated { SetupSnapshots.holdApprovalPanel(dark: dark, seconds: 6) }
+    let kind = index + 2 < CommandLine.arguments.count ? CommandLine.arguments[index + 2] : "email"
+    MainActor.assumeIsolated { SetupSnapshots.holdApprovalPanel(dark: dark, kind: kind, seconds: 6) }
     exit(0)
+}
+if CommandLine.arguments.contains("--selftest") {
+    exit(SelfTest.runBlocking())
+}
+if let index = CommandLine.arguments.firstIndex(of: "--selftest-status"), index + 1 < CommandLine.arguments.count {
+    let stamp = "[selftest \(CommandLine.arguments[index + 1])]"
+    exit(SelfTest.runBlocking { await SelfTest.status(stamp: stamp) })
+}
+if let index = CommandLine.arguments.firstIndex(of: "--selftest-cleanup"), index + 1 < CommandLine.arguments.count {
+    let stamp = "[selftest \(CommandLine.arguments[index + 1])]"
+    exit(SelfTest.runBlocking { await SelfTest.cleanUp(stamp: stamp) })
 }
 if CommandLine.arguments.contains("--snapshot-setup") {
     MainActor.assumeIsolated { SetupSnapshots.write() }

@@ -72,3 +72,28 @@ import PosternModel
         #expect(message.headers.subject == "Urgent")
     }
 }
+
+@Suite struct AttachmentExtractionTests {
+    @Test func returnsTheDecodedBytesOfTheListedAttachment() throws {
+        let raw = eml("""
+        Content-Type: multipart/mixed; boundary=m
+
+        --m
+        Content-Type: text/plain
+
+        Body
+        --m
+        Content-Type: text/plain; name="notes.txt"
+        Content-Disposition: attachment; filename="notes.txt"
+        Content-Transfer-Encoding: base64
+
+        aGVsbG8gd29ybGQ=
+        --m--
+        """)
+        let listed = try MessageSanitizer.sanitize(raw: raw, maxChars: 100).attachments
+        #expect(listed.map(\.filename) == ["notes.txt"])
+        let file = try MessageSanitizer.attachment(raw: raw, index: 1)
+        #expect(file.filename == "notes.txt" && file.data == Data("hello world".utf8))
+        #expect(throws: MIMEError.self) { try MessageSanitizer.attachment(raw: raw, index: 2) }
+    }
+}

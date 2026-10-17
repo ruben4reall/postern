@@ -8,6 +8,10 @@ final class FakeMailStore: @unchecked Sendable {
         var folder: String
         var labels: Set<String>
         var flags: Set<String>
+        /// Other mailboxes showing the same message: a message sent to yourself is in Inbox and in Sent.
+        var alsoIn: Set<String> = []
+        /// Mailboxes Bridge still shows the message in after Proton moved it away, until Proton's event arrives.
+        var staleIn: Set<String> = []
     }
 
     private let lock = NSLock()
@@ -17,9 +21,9 @@ final class FakeMailStore: @unchecked Sendable {
     private var nextUID: [String: UInt32] = [:]
     private(set) var commands: [String] = []
 
-    func add(_ messageID: String, folder: String, labels: Set<String> = [], flags: Set<String> = []) {
+    func add(_ messageID: String, folder: String, labels: Set<String> = [], flags: Set<String> = [], alsoIn: Set<String> = []) {
         lock.withLock {
-            messages.append(Message(messageID: messageID, folder: folder, labels: labels, flags: flags))
+            messages.append(Message(messageID: messageID, folder: folder, labels: labels, flags: flags, alsoIn: alsoIn))
             for name in [folder] + Array(labels) where !mailboxNames.contains(name) { mailboxNames.append(name) }
         }
     }
@@ -43,7 +47,9 @@ final class FakeMailStore: @unchecked Sendable {
             switch mailbox {
             case "All Mail": return true
             case "Starred": return message.flags.contains("\\Flagged")
-            default: return message.folder == mailbox || message.labels.contains(mailbox)
+            default:
+                return message.folder == mailbox || message.labels.contains(mailbox) || message.alsoIn.contains(mailbox)
+                    || message.staleIn.contains(mailbox)
             }
         }
     }
@@ -73,6 +79,8 @@ final class FakeMailStore: @unchecked Sendable {
             messages[index].folder = "(removed)"
             messages[index].labels = []
             messages[index].flags = []
+            messages[index].alsoIn = []
+            messages[index].staleIn = []
         }
     }
 
@@ -86,7 +94,20 @@ final class FakeMailStore: @unchecked Sendable {
     func move(index: Int, from source: String, to destination: String) -> UInt32 {
         lock.withLock {
             let isLabel = { (name: String) in name.hasPrefix("Labels/") }
+            // Bridge 3.27, seen on 18.10.2026: moving a message into Trash from an out-of-date view while it is
+            // already in Trash erases it for good.
+            if destination == "Trash", messages[index].folder == "Trash", source != "Trash" {
+                messages[index] = Message(messageID: messages[index].messageID, folder: "(removed)", labels: [], flags: [])
+                return 0
+            }
             if isLabel(source) { messages[index].labels.remove(source) }
+            // Bridge removes every label from a message added to Trash; its other views stay until Proton's event.
+            if destination == "Trash" {
+                let views = Set([messages[index].folder]).union(messages[index].alsoIn).subtracting([source])
+                messages[index].staleIn.formUnion(views)
+                messages[index].alsoIn = []
+                messages[index].labels = []
+            }
             if isLabel(destination) {
                 messages[index].labels.insert(destination)
             } else {

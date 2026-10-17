@@ -50,6 +50,8 @@ targets:
           - /Library/Application Support/Claude/
           - /.codex/
         com.apple.security.files.user-selected.read-write: true
+        # Saved attachments and the outbox, both in Downloads › Postern.
+        com.apple.security.files.downloads.read-write: true
         com.apple.security.files.bookmarks.app-scope: true
     dependencies:
       - package: PosternKit

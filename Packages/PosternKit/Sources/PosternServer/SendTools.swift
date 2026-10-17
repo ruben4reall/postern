@@ -106,19 +106,18 @@ struct SendTools {
         quoted += "From: \(headers.from.map(Self.describe).joined(separator: ", "))\n"
         if let date = headers.date { quoted += "Date: \(Self.dateText(date))\n" }
         quoted += "Subject: \(headers.subject)\nTo: \(headers.to.map(Self.describe).joined(separator: ", "))\n\n" + original.body
-        let message = try OutgoingMessage.make(
-            from: try await backend.ownAddress(), to: recipients, subject: subject, body: string(arguments["note"]) ?? "",
-            quoted: quoted
-        )
-        let sender = headers.from.first.map(Self.describe) ?? "someone"
-        var outcome = try await deliver(message, tool: .forwardMessage, context: "Forward of \(sender): \(headers.subject)", extra: [:])
-        if !original.attachments.isEmpty, outcome.isError != true {
-            outcome = CallTool.Result(
-                content: outcome.content + [.text(text: "Attachments are not forwarded in this version of Postern.", annotations: nil, _meta: nil)],
-                structuredContent: outcome.structuredContent, isError: outcome.isError
+        let files = bool(arguments["include_attachments"]) == false ? [] : try await backend.attachments(of: id)
+        let message: OutgoingMessage
+        do {
+            message = try OutgoingMessage.make(
+                from: try await backend.ownAddress(), to: recipients, subject: subject, body: string(arguments["note"]) ?? "",
+                quoted: quoted, attachments: files
             )
+        } catch let error as ComposeError {
+            throw PosternError(.invalidArgument, Self.explain(error))
         }
-        return outcome
+        let sender = headers.from.first.map(Self.describe) ?? "someone"
+        return try await deliver(message, tool: .forwardMessage, context: "Forward of \(sender): \(headers.subject)", extra: [:])
     }
 
     // MARK: The send pipeline
@@ -178,14 +177,27 @@ struct SendTools {
         let bcc = arguments["bcc"] == nil ? base?.headers.bcc ?? [] : try addresses(arguments["bcc"])
         let subject = string(arguments["subject"]) ?? base?.headers.subject ?? ""
         let body = arguments["body"] == nil ? base?.body ?? "" : (string(arguments["body"]) ?? "")
+        let files = try await outboxFiles(arguments["attachments"])
         do {
             return try OutgoingMessage.make(
                 from: try await backend.ownAddress(), to: to, cc: cc, bcc: bcc, subject: subject, body: body,
-                inReplyTo: base?.headers.inReplyTo, references: base?.headers.references ?? []
+                inReplyTo: base?.headers.inReplyTo, references: base?.headers.references ?? [], attachments: files
             )
         } catch let error as ComposeError {
             throw PosternError(.invalidArgument, Self.explain(error))
         }
+    }
+
+    /// Files named by the client, taken only from the Postern outbox folder; the panel shows each one.
+    private func outboxFiles(_ value: Value?) async throws -> [OutgoingAttachment] {
+        guard let value else { return [] }
+        guard case .array(let list) = value else { throw PosternError(.invalidArgument, "attachments is a list of file names.") }
+        var files: [OutgoingAttachment] = []
+        for item in list {
+            guard case .string(let name) = item else { throw PosternError(.invalidArgument, "attachments is a list of file names.") }
+            files.append(try await backend.outboxAttachment(named: name))
+        }
+        return files
     }
 
     private func addresses(_ value: Value?) throws -> [Address] {
@@ -259,7 +271,8 @@ struct SendTools {
         case .tooManyRecipients: "At most \(OutgoingMessage.maxRecipients) recipients per email."
         case .invalidAddress(let address): "\(address) is not a valid email address."
         case .headerInjection: "Subjects and names cannot contain line breaks."
-        case .tooLong: "The text is too long."
+        case .tooLong: "The text or the attachments are too large (20 MB of attachments at most)."
+        case .invalidFileName(let name): "\(name) is not a file name Postern accepts."
         }
     }
 }

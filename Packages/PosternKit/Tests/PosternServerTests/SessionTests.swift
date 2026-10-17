@@ -84,6 +84,32 @@ final class FakeBackend: MailBackend, @unchecked Sendable {
     func deleteDraft(_ id: MessageID) async throws { lock.withLock { deletedDrafts.append(id) } }
     func send(_ message: ApprovedMessage) async throws { lock.withLock { sent.append(message.message) } }
 
+    var trashed: [MessageID] = []
+    var erased: [MessageID] = []
+    var outbox: [String: Data] = ["contract.pdf": Data("%PDF".utf8)]
+
+    func saveAttachment(_ id: MessageID, index: Int) async throws -> SavedAttachment {
+        SavedAttachment(path: "/Users/x/Downloads/Postern/notes.txt", filename: "notes.txt", mimeType: "text/plain", size: 11, sha256: String(repeating: "a", count: 64))
+    }
+    func outboxAttachment(named name: String) async throws -> OutgoingAttachment {
+        guard let data = lock.withLock({ outbox[name] }) else { throw PosternError(.notFound, "\(name) is not in the outbox.") }
+        return try OutgoingAttachment.make(filename: name, data: data)
+    }
+    func attachments(of id: MessageID) async throws -> [OutgoingAttachment] {
+        [try OutgoingAttachment.make(filename: "invoice.pdf", data: Data("%PDF-invoice".utf8))]
+    }
+    func deletionItems(_ ids: [MessageID]) async throws -> [DeletionItem] {
+        ids.map { DeletionItem(id: $0, mailbox: $0.mailbox, from: "a@b.c", subject: "S", date: nil) }
+    }
+    func trash(_ approved: ApprovedDeletion) async throws -> ChangeReport {
+        lock.withLock { trashed += approved.ids }
+        return ChangeReport(done: approved.ids, failed: [], verified: true)
+    }
+    func erase(_ approved: ApprovedDeletion) async throws -> ChangeReport {
+        lock.withLock { erased += approved.ids }
+        return ChangeReport(done: approved.ids, failed: [], verified: true)
+    }
+
     func createMailbox(_ name: String) async throws -> MailboxInfo {
         lock.withLock { changes.append("create \(name)") }
         return MailboxInfo(name: name, kind: name.hasPrefix("Labels/") ? .label : .folder, total: 0, unread: 0)
@@ -223,7 +249,7 @@ final class Reports: @unchecked Sendable {
         #expect(try await readOnly.listTools().tools.count == 4)
         let (all, _) = try await connect(policy: organizePolicy)
         let tools = try await all.listTools().tools
-        #expect(tools.count == 12)
+        #expect(tools.count == 13)
         let move = try #require(tools.first { $0.name == "move_messages" })
         #expect(move.annotations.readOnlyHint == false && move.annotations.destructiveHint == false)
     }
@@ -303,8 +329,14 @@ final class CapturingPresenter: ApprovalPresenter, @unchecked Sendable {
     let intent: ApprovalIntent?
     let lock = NSLock()
     var requests: [ApprovalRequest] = []
+    var deletions: [DeletionRequest] = []
 
     init(_ intent: ApprovalIntent?) { self.intent = intent }
+
+    func presentDeletion(_ request: DeletionRequest, deadline: Date) async -> ApprovalIntent {
+        lock.withLock { deletions.append(request) }
+        return intent ?? .reject(reason: nil)
+    }
 
     func present(_ request: ApprovalRequest, deadline: Date) async -> ApprovalIntent {
         lock.withLock { requests.append(request) }
@@ -460,5 +492,91 @@ final class MemoryLedger: SendLedger, @unchecked Sendable {
         #expect(backend.lock.withLock { backend.drafts }.count == 1 && backend.lock.withLock { backend.sent }.isEmpty)
         let (notDraft, isError) = try await client.callTool(name: "delete_draft", arguments: ["id": .string(MessageID(mailbox: "INBOX", uidValidity: 1, uid: 1).opaque)])
         #expect(isError == true && text(notDraft).hasPrefix("invalid_argument"))
+    }
+}
+
+@Suite struct DeleteAndAttachmentToolTests {
+    let everything = Policy(enabledTools: Set(ToolID.allCases))
+
+    func connect(intent: ApprovalIntent? = .send, backend: FakeBackend) async throws -> (Client, CapturingPresenter) {
+        let presenter = CapturingPresenter(intent)
+        let desk = ApprovalDesk(presenter: presenter, authenticator: AlwaysAuthenticated(), timeout: .seconds(5))
+        let (clientTransport, serverTransport) = await InMemoryTransport.createConnectedPair()
+        let policy = everything
+        let session = Session(transport: serverTransport, backend: backend, version: "test", policy: { policy },
+                              desk: desk, ledger: MemoryLedger(), clientName: { "Claude Code" })
+        try await session.start()
+        let client = Client(name: "test", version: "1")
+        _ = try await client.connect(transport: clientTransport)
+        return (client, presenter)
+    }
+
+    func text(_ content: [Tool.Content]) -> String {
+        content.compactMap { if case .text(let text, _, _) = $0 { text } else { nil } }.joined()
+    }
+
+    @Test func trashWaitsForTheUser() async throws {
+        let backend = FakeBackend()
+        let (client, presenter) = try await connect(backend: backend)
+        let (content, isError) = try await client.callTool(name: "trash_messages", arguments: ["ids": .array([.string(backend.inbox.opaque)])])
+        #expect(isError != true && text(content).contains("moved to Trash"))
+        #expect(presenter.lock.withLock { presenter.deletions }.first?.permanent == false)
+        #expect(backend.lock.withLock { backend.trashed } == [backend.inbox])
+
+        let refusing = FakeBackend()
+        let (other, _) = try await connect(intent: .reject(reason: "Keep it"), backend: refusing)
+        let (refused, refusedError) = try await other.callTool(name: "trash_messages", arguments: ["ids": .array([.string(refusing.inbox.opaque)])])
+        #expect(refusedError == true && text(refused).hasPrefix("approval_rejected"))
+        #expect(refusing.lock.withLock { refusing.trashed }.isEmpty)
+    }
+
+    @Test func erasingOnlyWorksInTrashOrSpam() async throws {
+        let backend = FakeBackend()
+        let (client, presenter) = try await connect(backend: backend)
+        let (inbox, inboxError) = try await client.callTool(name: "delete_permanently", arguments: ["ids": .array([.string(backend.inbox.opaque)])])
+        #expect(inboxError == true && text(inbox).hasPrefix("invalid_argument"))
+        #expect(presenter.lock.withLock { presenter.deletions }.isEmpty)
+        let inTrash = MessageID(mailbox: "Trash", uidValidity: 1, uid: 3)
+        let (erased, erasedError) = try await client.callTool(name: "delete_permanently", arguments: ["ids": .array([.string(inTrash.opaque)])])
+        #expect(erasedError != true && text(erased).contains("erased for good"))
+        #expect(presenter.lock.withLock { presenter.deletions }.first?.permanent == true)
+        #expect(backend.lock.withLock { backend.erased } == [inTrash])
+    }
+
+    @Test func savesAttachmentsOnlyThroughTheBackendFolder() async throws {
+        let backend = FakeBackend()
+        let (client, _) = try await connect(backend: backend)
+        let (content, isError) = try await client.callTool(name: "save_attachment", arguments: ["message_id": .string(backend.inbox.opaque), "index": .int(1)])
+        #expect(isError != true && text(content).contains("Downloads/Postern/notes.txt"))
+        let tools = try await client.listTools().tools
+        let schema = try #require(tools.first { $0.name == "save_attachment" }).inputSchema
+        #expect(!String(describing: schema).contains("path"))
+    }
+
+    @Test func attachesOutboxFilesAndShowsThemOnThePanel() async throws {
+        let backend = FakeBackend()
+        let (client, presenter) = try await connect(backend: backend)
+        _ = try await client.callTool(name: "send_message", arguments: [
+            "to": .array([.string("known@example.com")]), "subject": .string("Contract"), "body": .string("Attached"),
+            "attachments": .array([.string("contract.pdf")]),
+        ])
+        let request = try #require(presenter.lock.withLock { presenter.requests.first })
+        #expect(request.message.attachments.map(\.filename) == ["contract.pdf"])
+        let (missing, missingError) = try await client.callTool(name: "send_message", arguments: [
+            "to": .array([.string("known@example.com")]), "subject": .string("x"), "body": .string("y"),
+            "attachments": .array([.string("../../.ssh/id_rsa")]),
+        ])
+        #expect(missingError == true && text(missing).hasPrefix("not_found"))
+    }
+
+    @Test func forwardsWithTheOriginalAttachments() async throws {
+        let backend = FakeBackend()
+        let (client, presenter) = try await connect(backend: backend)
+        _ = try await client.callTool(name: "forward_message", arguments: [
+            "id": .string(MessageID(mailbox: "INBOX", uidValidity: 1, uid: 77).opaque), "to": .array([.string("known@example.com")]),
+        ])
+        let request = try #require(presenter.lock.withLock { presenter.requests.first })
+        #expect(request.message.attachments.map(\.filename) == ["invoice.pdf"])
+        #expect(request.message.subject == "Fwd: Invoice")
     }
 }
