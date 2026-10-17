@@ -40,7 +40,7 @@ let package = Package(
         .target(
             name: "PosternBridge",
             dependencies: [
-                "PosternModel", "PosternText",
+                "PosternModel", "PosternText", "PosternCompose", "PosternApproval",
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
@@ -79,7 +79,7 @@ let package = Package(
         .testTarget(
             name: "PosternBridgeTests",
             dependencies: [
-                "PosternBridge",
+                "PosternBridge", "PosternCompose", "PosternApproval",
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),

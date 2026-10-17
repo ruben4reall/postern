@@ -193,6 +193,23 @@ public actor IMAPConnection {
         try await send(command, timeout: timeout)
     }
 
+    /// APPEND is a stream of parts under one tag; the client handler waits for Bridge's continuation request.
+    func sendAppend(to mailbox: MailboxName, parts: [CommandStreamPart]) async throws -> CommandResult {
+        guard let channel, let router else { throw BridgeError.unreachable }
+        nextTag += 1
+        let tag = "P\(nextTag)"
+        let promise = channel.eventLoop.makePromise(of: CommandResult.self)
+        let all = [CommandStreamPart.append(.start(tag: tag, appendingTo: mailbox))] + parts
+        channel.eventLoop.execute {
+            router.expect(tag: tag, promise)
+            for part in all { channel.write(IMAPClientHandler.Message.part(part), promise: nil) }
+            channel.flush()
+        }
+        let timer = channel.eventLoop.scheduleTask(in: .seconds(60)) { router.timeOut(tag: tag) }
+        defer { timer.cancel() }
+        return try await promise.futureResult.get()
+    }
+
     private func send(_ command: Command, timeout: TimeAmount = .seconds(30)) async throws -> CommandResult {
         guard let channel else { throw BridgeError.unreachable }
         return try await send(on: channel, command, timeout: timeout)
