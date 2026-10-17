@@ -5,10 +5,32 @@ public struct Policy: Codable, Sendable, Equatable {
     public var enabledTools: Set<ToolID>
     /// Mailboxes the client never sees, by display name.
     public var hiddenMailboxes: Set<String>
+    /// Every tool is suspended: the list is empty and calls are refused.
+    public var paused: Bool
+    /// Pause as soon as the screen locks.
+    public var pauseWhenLocked: Bool
+    /// Accept the Mac's password when Touch ID or an Apple Watch is not available.
+    public var allowPasswordFallback: Bool
 
-    public init(enabledTools: Set<ToolID>, hiddenMailboxes: Set<String> = []) {
+    public init(
+        enabledTools: Set<ToolID>, hiddenMailboxes: Set<String> = [], paused: Bool = false,
+        pauseWhenLocked: Bool = false, allowPasswordFallback: Bool = false
+    ) {
         self.enabledTools = enabledTools
         self.hiddenMailboxes = hiddenMailboxes
+        self.paused = paused
+        self.pauseWhenLocked = pauseWhenLocked
+        self.allowPasswordFallback = allowPasswordFallback
+    }
+
+    /// Fields added after the first release decode with their safe default, so an older policy still loads.
+    public init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        enabledTools = try container.decode(Set<ToolID>.self, forKey: .enabledTools)
+        hiddenMailboxes = try container.decodeIfPresent(Set<String>.self, forKey: .hiddenMailboxes) ?? []
+        paused = try container.decodeIfPresent(Bool.self, forKey: .paused) ?? false
+        pauseWhenLocked = try container.decodeIfPresent(Bool.self, forKey: .pauseWhenLocked) ?? false
+        allowPasswordFallback = try container.decodeIfPresent(Bool.self, forKey: .allowPasswordFallback) ?? false
     }
 
     /// Nothing is allowed until the user turns tools on.
@@ -16,7 +38,7 @@ public struct Policy: Codable, Sendable, Equatable {
 
     public static let readOnly = Policy(enabledTools: Set(ToolID.allCases.filter { $0.tier == .read }))
 
-    public func allows(_ tool: ToolID) -> Bool { enabledTools.contains(tool) }
+    public func allows(_ tool: ToolID) -> Bool { !paused && enabledTools.contains(tool) }
 
     /// `All Mail` and `Starred` show messages from every mailbox, so hiding any mailbox hides them too.
     public func isHidden(_ mailbox: String) -> Bool {
@@ -26,4 +48,15 @@ public struct Policy: Codable, Sendable, Equatable {
     }
 
     public static let aggregateViews: Set<String> = ["All Mail", "Starred"]
+
+    /// True when going from `old` to this policy gives clients more than they had, or weakens the proof asked of
+    /// the user. Such a change needs the user's fingerprint; a change that only takes power away never does.
+    public func addsPower(over old: Policy) -> Bool {
+        if !enabledTools.isSubset(of: old.enabledTools) { return true }
+        if !old.hiddenMailboxes.isSubset(of: hiddenMailboxes) { return true }
+        if old.paused && !paused { return true }
+        if old.pauseWhenLocked && !pauseWhenLocked { return true }
+        if allowPasswordFallback && !old.allowPasswordFallback { return true }
+        return false
+    }
 }

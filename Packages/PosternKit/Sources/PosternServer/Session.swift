@@ -13,16 +13,19 @@ public actor Session {
     private let backend: any MailBackend
     private let policy: @Sendable () -> Policy
     private let readiness: @Sendable () -> PosternError?
+    private let onCall: @Sendable (ToolCallReport) -> Void
 
     /// - Parameter readiness: returns why Postern cannot serve yet (not configured, paused), or nil when it can.
     public init(
         transport: any Transport, backend: any MailBackend, version: String,
-        policy: @escaping @Sendable () -> Policy, readiness: @escaping @Sendable () -> PosternError? = { nil }
+        policy: @escaping @Sendable () -> Policy, readiness: @escaping @Sendable () -> PosternError? = { nil },
+        onCall: @escaping @Sendable (ToolCallReport) -> Void = { _ in }
     ) {
         self.transport = transport
         self.backend = backend
         self.policy = policy
         self.readiness = readiness
+        self.onCall = onCall
         self.server = Server(
             name: Self.serverName, version: version, title: "Postern",
             instructions: ServerInstructions.text,
@@ -34,12 +37,15 @@ public actor Session {
         let policy = self.policy
         let readiness = self.readiness
         let backend = self.backend
+        let onCall = self.onCall
         await server.withMethodHandler(ListTools.self) { _ in
-            guard readiness() == nil else { return ListTools.Result(tools: []) }
+            guard readiness() == nil, !policy().paused else { return ListTools.Result(tools: []) }
             return ListTools.Result(tools: ToolCatalog.tools(for: policy()))
         }
         await server.withMethodHandler(CallTool.self) { parameters in
-            await Self.call(parameters, backend: backend, policy: policy(), readiness: readiness())
+            let result = await Self.call(parameters, backend: backend, policy: policy(), readiness: readiness())
+            onCall(ToolCallReport(tool: parameters.name, result: result))
+            return result
         }
         try await server.start(transport: transport)
     }
@@ -58,6 +64,7 @@ public actor Session {
     ) async -> CallTool.Result {
         do {
             if let readiness { throw readiness }
+            if policy.paused { throw PosternError(.paused, "The user has paused Postern. Nothing can be read until they resume it.") }
             guard let tool = ToolID(rawValue: parameters.name) else {
                 throw PosternError(.invalidArgument, "Postern has no tool named \(parameters.name).")
             }
@@ -80,5 +87,35 @@ public actor Session {
             ])])),
             isError: true
         )
+    }
+}
+
+/// What the activity log keeps of one call: the tool, the outcome code and how many items it returned.
+public struct ToolCallReport: Sendable, Equatable {
+    public let tool: String
+    public let outcome: String
+    public let items: Int?
+
+    public init(tool: String, outcome: String, items: Int?) {
+        self.tool = String(tool.prefix(64))
+        self.outcome = outcome
+        self.items = items
+    }
+
+    init(tool: String, result: CallTool.Result) {
+        var outcome = "ok"
+        var items: Int?
+        if case .object(let object)? = result.structuredContent {
+            if case .object(let error)? = object["error"], case .string(let code)? = error["code"] {
+                outcome = code
+            } else if case .array(let list)? = object["messages"] {
+                items = list.count
+            } else if case .array(let list)? = object["mailboxes"] {
+                items = list.count
+            } else if object["id"] != nil {
+                items = 1
+            }
+        }
+        self.init(tool: tool, outcome: outcome, items: items)
     }
 }

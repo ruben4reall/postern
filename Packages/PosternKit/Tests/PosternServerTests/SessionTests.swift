@@ -44,11 +44,21 @@ final class FakeBackend: MailBackend, @unchecked Sendable {
     }
 }
 
+final class Reports: @unchecked Sendable {
+    private let lock = NSLock()
+    private var items: [ToolCallReport] = []
+    func add(_ report: ToolCallReport) { lock.withLock { items.append(report) } }
+    var all: [ToolCallReport] { lock.withLock { items } }
+}
+
 @Suite struct SessionTests {
-    func connect(policy: Policy, backend: FakeBackend = FakeBackend(), readiness: PosternError? = nil) async throws -> (Client, Session) {
+    func connect(
+        policy: Policy, backend: FakeBackend = FakeBackend(), readiness: PosternError? = nil,
+        reports: Reports = Reports()
+    ) async throws -> (Client, Session) {
         let (clientTransport, serverTransport) = await InMemoryTransport.createConnectedPair()
         let session = Session(transport: serverTransport, backend: backend, version: "test",
-                              policy: { policy }, readiness: { readiness })
+                              policy: { policy }, readiness: { readiness }, onCall: { reports.add($0) })
         try await session.start()
         let client = Client(name: "test", version: "1")
         _ = try await client.connect(transport: clientTransport)
@@ -125,5 +135,30 @@ final class FakeBackend: MailBackend, @unchecked Sendable {
         let (bad, badError) = try await client.callTool(name: "get_message", arguments: ["id": .string("garbage")])
         #expect(badError == true)
         #expect(text(bad).hasPrefix("invalid_argument"))
+    }
+
+    @Test func pauseEmptiesTheListAndRefusesCalls() async throws {
+        var paused = Policy.readOnly
+        paused.paused = true
+        let (client, _) = try await connect(policy: paused)
+        let (tools, _) = try await client.listTools()
+        #expect(tools.isEmpty)
+        let (content, isError) = try await client.callTool(name: "list_mailboxes")
+        #expect(isError == true)
+        #expect(text(content).hasPrefix("paused"))
+    }
+
+    @Test func reportsEveryCallToTheActivityLog() async throws {
+        let reports = Reports()
+        let backend = FakeBackend()
+        let (client, _) = try await connect(policy: .readOnly, backend: backend, reports: reports)
+        _ = try await client.callTool(name: "search_messages")
+        _ = try await client.callTool(name: "get_message", arguments: ["id": .string(backend.inbox.opaque)])
+        _ = try await client.callTool(name: "get_message", arguments: ["id": .string("bad")])
+        #expect(reports.all == [
+            ToolCallReport(tool: "search_messages", outcome: "ok", items: 1),
+            ToolCallReport(tool: "get_message", outcome: "ok", items: 1),
+            ToolCallReport(tool: "get_message", outcome: "invalid_argument", items: nil),
+        ])
     }
 }
