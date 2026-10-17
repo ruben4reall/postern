@@ -37,6 +37,36 @@ import PosternModel
         #expect(store.allCommands.contains("MOVE Archive -> Trash"))
     }
 
+    /// A message sent to yourself is one message, shown in Inbox and in Sent. Passing both views must trash it
+    /// once: a second move, from the view Bridge has not updated yet, would erase it for good.
+    @Test func aMessageSeenInTwoMailboxesIsTrashedOnce() async throws {
+        let store = FakeMailStore()
+        store.add("<self@x>", folder: "INBOX", alsoIn: ["Sent"])
+        let (organizer, connection, server) = try await session(store)
+        defer { Task { await connection.close(); await server.stop() } }
+        let both = [id(store, "<self@x>", in: "INBOX"), id(store, "<self@x>", in: "Sent")]
+        let result = try await organizer.trash(approval(both, permanent: false))
+        #expect(store.message("<self@x>")?.folder == "Trash")
+        #expect(result.done.count == 1)
+        #expect(result.failed.map(\.reason) == ["Already in Trash."])
+        #expect(store.allCommands.filter { $0.hasPrefix("MOVE") }.count == 1)
+    }
+
+    @Test func anOutOfDateViewOfATrashedMessageIsLeftAlone() async throws {
+        let store = FakeMailStore()
+        store.add("<self@x>", folder: "INBOX", alsoIn: ["Sent"])
+        let (organizer, connection, server) = try await session(store)
+        defer { Task { await connection.close(); await server.stop() } }
+        let sent = id(store, "<self@x>", in: "Sent")
+        _ = try await organizer.trash(approval([id(store, "<self@x>", in: "INBOX")], permanent: false))
+        // Bridge still lists the message in Sent; trashing it from there must not touch it.
+        #expect(store.members(of: "Sent").count == 1)
+        let again = try await organizer.trash(approval([sent], permanent: false))
+        #expect(store.message("<self@x>")?.folder == "Trash")
+        #expect(again.done.isEmpty && again.failed.map(\.reason) == ["Already in Trash."])
+        #expect(!store.allCommands.contains("MOVE Sent -> Trash"))
+    }
+
     @Test func erasesOnlyFromTrashOrSpam() async throws {
         let store = FakeMailStore()
         store.add("<old@x>", folder: "Trash")

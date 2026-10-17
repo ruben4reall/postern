@@ -66,17 +66,37 @@ public struct Organizer: Sendable {
 
     // MARK: Moving
 
+    ///
+    /// Bridge erases a message for good when it is moved into Trash from a view Bridge has not updated yet while
+    /// it is already in Trash (seen with Bridge 3.27 on a message sent to yourself, which is one message shown in
+    /// Inbox and in Sent). So a message is never moved where its Message-ID already is, each message moves once per
+    /// call, and a message without a Message-ID never moves to Trash, since that check can't be made for it.
     public func move(_ ids: [PosternModel.MessageID], to destination: BridgeMailbox) async throws -> OrganizeResult {
         var result = OrganizeResult()
         let located = try await locate(ids, into: &result)
         let destinationStatus = try await connection.examine(destination)
+        let present = try await messageIDsPresent(in: destination, among: located.compactMap(\.messageID))
+        let toTrash = destination.display == "Trash"
+        var moving = Set<String>()
         var bySource: [BridgeMailbox: [(PosternModel.MessageID, UInt32, String?)]] = [:]
         for item in located {
             if item.folder == destination {
                 result.done.append(PosternModel.MessageID(mailbox: destination.raw, uidValidity: destinationStatus.uidValidity, uid: item.uid))
-            } else {
-                bySource[item.folder, default: []].append((item.id, item.uid, item.messageID))
+                continue
             }
+            guard let messageID = item.messageID else {
+                if toTrash {
+                    result.failed.append(.init(id: item.id, reason: "This message has no Message-ID, so Postern can't make sure moving it is safe."))
+                } else {
+                    bySource[item.folder, default: []].append((item.id, item.uid, nil))
+                }
+                continue
+            }
+            guard !present.contains(messageID), moving.insert(messageID).inserted else {
+                result.failed.append(.init(id: item.id, reason: "Already in \(destination.display)."))
+                continue
+            }
+            bySource[item.folder, default: []].append((item.id, item.uid, messageID))
         }
         for (source, items) in bySource {
             _ = try await connection.select(source)
@@ -91,11 +111,19 @@ public struct Organizer: Sendable {
         }
         // Read back: every moved message must now be in the destination.
         _ = try await connection.examine(destination)
-        for item in located where item.folder != destination {
-            guard let messageID = item.messageID else { continue }
+        for messageID in moving {
             if try await connection.uids(withMessageID: messageID).isEmpty { result.verified = false }
         }
         return result
+    }
+
+    /// The Message-IDs among `messageIDs` that `mailbox` already shows.
+    private func messageIDsPresent(in mailbox: BridgeMailbox, among messageIDs: [String]) async throws -> Set<String> {
+        guard let key = SearchKeyBuilder.messageIDs(Array(Set(messageIDs))) else { return [] }
+        _ = try await connection.examine(mailbox)
+        let uids = try await connection.uidSearch(key)
+        guard !uids.isEmpty else { return [] }
+        return Set(try await connection.messageIDs(uids).values)
     }
 
     // MARK: Labels

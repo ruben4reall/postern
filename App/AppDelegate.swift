@@ -19,6 +19,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         CoreState.shared.onChange = { [weak self] in
             Task { @MainActor in self?.control.refresh() }
         }
+        PosternFolders.prepare()
         CoreState.shared.reload()
         listener.start()
         installStatusItem()

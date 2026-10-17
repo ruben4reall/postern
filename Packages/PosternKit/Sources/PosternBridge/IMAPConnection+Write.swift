@@ -109,9 +109,15 @@ extension IMAPConnection {
 extension IMAPConnection {
     /// Saves a message as a draft (APPEND with `\Draft \Seen`). Returns its UID in Drafts when Bridge reports it.
     public func appendDraft(_ bytes: Data, to drafts: BridgeMailbox) async throws -> (validity: UInt32, uid: UInt32)? {
+        try await append(bytes, to: drafts, flags: [.draft, .seen])
+    }
+
+    /// APPEND a message to a mailbox. Returns its UID when Bridge reports it (APPENDUID).
+    public func append(_ bytes: Data, to mailbox: BridgeMailbox, flags: [Flag]) async throws -> (validity: UInt32, uid: UInt32)? {
+        let drafts = mailbox
         let parts: [CommandStreamPart] = [
             .append(.beginMessage(message: AppendMessage(
-                options: AppendOptions(flagList: [.draft, .seen]), data: AppendData(byteCount: bytes.count)
+                options: AppendOptions(flagList: flags), data: AppendData(byteCount: bytes.count)
             ))),
             .append(.messageBytes(ByteBuffer(bytes: bytes))),
             .append(.endMessage),
