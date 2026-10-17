@@ -188,6 +188,38 @@ struct ToolCopy {
             ToolCopy(title: "Read conversations", verb: "read your conversations",
                      allows: "Follow a conversation across folders.",
                      risk: "Like reading messages, for every message of the conversation.")
+        case .markRead:
+            ToolCopy(title: "Mark as read", verb: "mark your mail as read",
+                     allows: "Mark messages as read.",
+                     risk: "You could miss a message the app marked as read.")
+        case .markUnread:
+            ToolCopy(title: "Mark as unread", verb: "mark your mail as unread",
+                     allows: "Mark messages as unread, to come back to them.",
+                     risk: "Your unread counts change.")
+        case .setStarred:
+            ToolCopy(title: "Star", verb: "star your mail",
+                     allows: "Add or remove the star on messages.",
+                     risk: "Your Starred view changes.")
+        case .moveMessages:
+            ToolCopy(title: "Move", verb: "move your mail",
+                     allows: "Move messages to Inbox, Archive or one of your folders. Labels stay.",
+                     risk: "A message moved to the wrong folder can be hard to find. Never to Trash or Spam.")
+        case .archiveMessages:
+            ToolCopy(title: "Archive", verb: "archive your mail",
+                     allows: "Move messages to Archive. Labels stay.",
+                     risk: "Archived messages leave your Inbox.")
+        case .addLabel:
+            ToolCopy(title: "Add labels", verb: "label your mail",
+                     allows: "Add one of your labels to messages. They stay in their folder.",
+                     risk: "Your label views change.")
+        case .removeLabel:
+            ToolCopy(title: "Remove labels", verb: "remove labels from your mail",
+                     allows: "Remove a label from messages. They stay in their folder.",
+                     risk: "Your label views change.")
+        case .createMailbox:
+            ToolCopy(title: "Create folders and labels", verb: "create folders and labels",
+                     allows: "Create a new folder or label.",
+                     risk: "New folders and labels appear in Proton on all your devices.")
         }
     }
 }

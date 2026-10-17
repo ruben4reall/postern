@@ -71,7 +71,13 @@ public actor Session {
             guard policy.allows(tool) else {
                 throw PosternError(.policyDisabled, "The user has not enabled \(tool.rawValue) in Postern.")
             }
-            return try await ReadTools(backend: backend, policy: policy).call(tool, parameters.arguments ?? [:])
+            let arguments = parameters.arguments ?? [:]
+            switch tool.tier {
+            case .read: return try await ReadTools(backend: backend, policy: policy).call(tool, arguments)
+            case .organize: return try await OrganizeTools(backend: backend, policy: policy).call(tool, arguments)
+            case .draft, .send, .delete:
+                throw PosternError(.policyDisabled, "\(tool.rawValue) is not available in this version.")
+            }
         } catch let error as PosternError {
             return failure(error)
         } catch {

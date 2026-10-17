@@ -24,6 +24,19 @@ struct LiveBackend: MailBackend {
     func displayName(ofRawMailbox raw: String) async throws -> String {
         try await current().displayName(ofRawMailbox: raw)
     }
+    func setFlag(_ flag: MessageFlag, on: Bool, ids: [MessageID]) async throws -> ChangeReport {
+        try await current().setFlag(flag, on: on, ids: ids)
+    }
+    func move(_ ids: [MessageID], to mailbox: String) async throws -> ChangeReport {
+        try await current().move(ids, to: mailbox)
+    }
+    func addLabel(_ ids: [MessageID], label: String) async throws -> ChangeReport {
+        try await current().addLabel(ids, label: label)
+    }
+    func removeLabel(_ ids: [MessageID], label: String) async throws -> ChangeReport {
+        try await current().removeLabel(ids, label: label)
+    }
+    func createMailbox(_ name: String) async throws -> MailboxInfo { try await current().createMailbox(name) }
 }
 
 /// The mailbox over Bridge, with every message body decoded in the sandboxed parser service.
@@ -102,6 +115,61 @@ final class BridgeBackend: MailBackend, Sendable {
                 try await connection.mailboxes().first { $0.raw == raw }?.display ?? raw
             }
         }
+    }
+
+    // MARK: Organize
+
+    func setFlag(_ flag: MessageFlag, on: Bool, ids: [MessageID]) async throws -> ChangeReport {
+        try await bridge {
+            try await self.client.withConnection { connection in
+                let change: FlagChange = flag == .read ? .read(on) : .starred(on)
+                return Self.report(try await Organizer(connection: connection).setFlag(change, ids: ids))
+            }
+        }
+    }
+
+    func move(_ ids: [MessageID], to mailbox: String) async throws -> ChangeReport {
+        try await bridge {
+            try await self.client.withConnection { connection in
+                let destination = try await connection.mailbox(named: mailbox)
+                return Self.report(try await Organizer(connection: connection).move(ids, to: destination))
+            }
+        }
+    }
+
+    func addLabel(_ ids: [MessageID], label: String) async throws -> ChangeReport {
+        try await bridge {
+            try await self.client.withConnection { connection in
+                let target = try await connection.mailbox(named: label)
+                return Self.report(try await Organizer(connection: connection).addLabel(ids, label: target))
+            }
+        }
+    }
+
+    func removeLabel(_ ids: [MessageID], label: String) async throws -> ChangeReport {
+        try await bridge {
+            try await self.client.withConnection { connection in
+                let target = try await connection.mailbox(named: label)
+                return Self.report(try await Organizer(connection: connection).removeLabel(ids, label: target))
+            }
+        }
+    }
+
+    func createMailbox(_ name: String) async throws -> MailboxInfo {
+        try await bridge {
+            try await self.client.withConnection { connection in
+                let organizer = Organizer(connection: connection)
+                let components = name.split(separator: "/").dropFirst().map(String.init)
+                let created = name.hasPrefix("Labels/")
+                    ? try await organizer.create(label: components.joined(separator: "/"))
+                    : try await organizer.create(folder: components)
+                return MailboxInfo(name: created.display, kind: Self.kind(of: created.display), total: 0, unread: 0)
+            }
+        }
+    }
+
+    static func report(_ result: OrganizeResult) -> ChangeReport {
+        ChangeReport(done: result.done, failed: result.failed.map { ($0.id, $0.reason) }, verified: result.verified)
     }
 
     private func rawMessage(_ id: MessageID) async throws -> Data {
