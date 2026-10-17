@@ -56,7 +56,7 @@ let package = Package(
         .target(
             name: "PosternServer",
             dependencies: [
-                "PosternModel", "PosternText", "PosternPolicy",
+                "PosternModel", "PosternText", "PosternPolicy", "PosternCompose", "PosternApproval",
                 .product(name: "MCP", package: "swift-sdk"),
                 .product(name: "Logging", package: "swift-log"),
             ]
@@ -88,7 +88,7 @@ let package = Package(
             ]
         ),
         .testTarget(name: "PosternPolicyTests", dependencies: ["PosternPolicy", "PosternVault"]),
-        .testTarget(name: "PosternServerTests", dependencies: ["PosternServer", .product(name: "MCP", package: "swift-sdk")]),
+        .testTarget(name: "PosternServerTests", dependencies: ["PosternServer", "PosternApproval", "PosternCompose", .product(name: "MCP", package: "swift-sdk")]),
     ],
     swiftLanguageModes: [.v6]
 )

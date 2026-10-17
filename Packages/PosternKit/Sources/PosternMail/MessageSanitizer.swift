@@ -86,7 +86,7 @@ public enum MessageSanitizer {
             value.matches(of: #/<([^<>]+)>/#).map { UnicodeCleaner.clean(String($0.1), keepNewlines: false) }
         } ?? []
         return SanitizedHeaders(
-            from: addresses("From"), replyTo: addresses("Reply-To"), to: addresses("To"), cc: addresses("Cc"),
+            from: addresses("From"), replyTo: addresses("Reply-To"), to: addresses("To"), cc: addresses("Cc"), bcc: addresses("Bcc"),
             date: single("Date").flatMap(MailDate.parse), subject: single("Subject") ?? "",
             messageID: ids(root.header("Message-ID")).first, inReplyTo: ids(root.header("In-Reply-To")).first,
             references: ids(root.header("References")), listUnsubscribe: unsubscribe

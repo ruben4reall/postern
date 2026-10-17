@@ -12,6 +12,10 @@ public enum PosternErrorCode: String, Codable, Sendable {
     case invalidArgument = "invalid_argument"
     case tooLarge = "too_large"
     case paused
+    case recipientNotAllowed = "recipient_not_allowed"
+    case quotaExceeded = "quota_exceeded"
+    case approvalRejected = "approval_rejected"
+    case approvalTimeout = "approval_timeout"
 }
 
 public struct PosternError: Error, Codable, Sendable, Equatable {

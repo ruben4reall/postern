@@ -8,6 +8,7 @@ import PosternPolicy
 struct ReadTools {
     let backend: any MailBackend
     let policy: Policy
+    var provenance = Provenance()
     let renderer = UntrustedRenderer()
 
     static let defaultLimit = 20
@@ -61,6 +62,7 @@ struct ReadTools {
         guard offset >= 0 else { throw PosternError(.invalidArgument, "cursor is not valid.") }
 
         let page = try await backend.search(query, limit: limit, offset: offset)
+        for item in page.items { provenance.record(item.from + item.to + item.cc) }
         let nextOffset = offset + page.items.count
         let next: Value = nextOffset < page.total ? .string(String(nextOffset)) : .null
         let structured: Value = .object([
@@ -81,6 +83,8 @@ struct ReadTools {
         let maxChars = min(max(int(arguments["max_chars"]) ?? Self.defaultMaxChars, 500), 100_000)
         let message = try await backend.message(id, maxChars: maxChars)
         let headers = message.headers
+        provenance.record(headers.from + headers.replyTo + headers.to + headers.cc)
+        provenance.record(text: message.body + " " + message.links.map(\.url).joined(separator: " "))
         let verdict = message.verdict
         let structured: Value = .object([
             "id": .string(id.opaque),
@@ -152,6 +156,7 @@ struct ReadTools {
         for summary in try await backend.thread(id) {
             if !policy.isHidden(try await backend.displayName(ofRawMailbox: summary.id.mailbox)) { visible.append(summary) }
         }
+        for item in visible { provenance.record(item.from + item.to + item.cc) }
         let structured: Value = .object(["messages": .array(visible.map(summaryValue))])
         let listing = visible.map(summaryLine).joined(separator: "\n")
         let text = "\(visible.count) message(s) in this conversation.\n" + renderer.wrap(listing, source: "conversation")
