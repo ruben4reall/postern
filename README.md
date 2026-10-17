@@ -5,7 +5,7 @@
   </picture>
 </p>
 
-<p align="center"><strong>Your mailbox, behind a door you hold.</strong></p>
+<p align="center"><strong>Your mailbox, behind a door you hold.</strong><br><a href="https://getpostern.vercel.app">getpostern.vercel.app</a></p>
 
 <p align="center">
   <a href="https://github.com/ruben4reall/postern/actions/workflows/ci.yml"><img src="https://github.com/ruben4reall/postern/actions/workflows/ci.yml/badge.svg" alt="CI"></a>
