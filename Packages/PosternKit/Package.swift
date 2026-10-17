@@ -13,6 +13,8 @@ let package = Package(
         .library(name: "PosternVault", targets: ["PosternVault"]),
         .library(name: "PosternPolicy", targets: ["PosternPolicy"]),
         .library(name: "PosternServer", targets: ["PosternServer"]),
+        .library(name: "PosternAudit", targets: ["PosternAudit"]),
+        .library(name: "PosternClients", targets: ["PosternClients"]),
     ],
     dependencies: [
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", exact: "0.12.1"),
@@ -57,6 +59,12 @@ let package = Package(
                 .product(name: "Logging", package: "swift-log"),
             ]
         ),
+        // The activity log: metadata only, each line chained to the previous one.
+        .target(name: "PosternAudit"),
+        // Adds Postern to the configuration files of MCP clients. No I/O: callers read and write the files.
+        .target(name: "PosternClients"),
+        .testTarget(name: "PosternAuditTests", dependencies: ["PosternAudit"]),
+        .testTarget(name: "PosternClientsTests", dependencies: ["PosternClients"]),
         .testTarget(name: "PosternModelTests", dependencies: ["PosternModel"]),
         .testTarget(name: "PosternTextTests", dependencies: ["PosternText"]),
         .testTarget(name: "PosternMailTests", dependencies: ["PosternMail"]),

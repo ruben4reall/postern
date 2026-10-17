@@ -7,6 +7,8 @@ public enum VaultKey: String, CaseIterable, Sendable {
     case bridgeEndpoint = "bridge-endpoint"
     case certificatePin = "certificate-pin"
     case policy
+    /// Hash of the activity log's last line, so edits to the log file are detected.
+    case activityHead = "activity-head"
 }
 
 public enum VaultError: Error, Equatable, Sendable {
