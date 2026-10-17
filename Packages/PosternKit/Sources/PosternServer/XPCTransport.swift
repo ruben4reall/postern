@@ -7,7 +7,7 @@ public actor XPCTransport: Transport {
     public nonisolated let logger: Logger
     private let sendHandler: @Sendable (Data) -> Void
     private let stream: AsyncThrowingStream<Data, any Swift.Error>
-    private let continuation: AsyncThrowingStream<Data, any Swift.Error>.Continuation
+    private nonisolated let continuation: AsyncThrowingStream<Data, any Swift.Error>.Continuation
 
     public init(send: @escaping @Sendable (Data) -> Void) {
         self.sendHandler = send
@@ -21,6 +21,10 @@ public actor XPCTransport: Transport {
         continuation.finish()
     }
 
+    public nonisolated func finish() {
+        continuation.finish()
+    }
+
     public func send(_ data: Data) async throws {
         sendHandler(data)
     }
@@ -29,8 +33,9 @@ public actor XPCTransport: Transport {
         stream
     }
 
-    /// A message from the client, as the relay received it on stdin.
-    public func deliver(_ data: Data) {
+    /// A message from the client, as the relay received it on stdin. Nonisolated so messages keep the order in
+    /// which XPC delivers them.
+    public nonisolated func deliver(_ data: Data) {
         continuation.yield(data)
     }
 }

@@ -9,6 +9,12 @@ public struct PortIdentity: Sendable, Equatable {
     public let mode: TLSMode
     public let greeting: String
     public let pin: CertificatePin
+
+    public init(mode: TLSMode, greeting: String, pin: CertificatePin) {
+        self.mode = mode
+        self.greeting = greeting
+        self.pin = pin
+    }
 }
 
 /// Looks at a Bridge port without logging in: detects the TLS mode, completes a handshake and records the
