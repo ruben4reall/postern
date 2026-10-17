@@ -40,12 +40,15 @@ enum SetupSnapshots {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.accessory)
         let model = sampleModel(pane: ControlModel.Pane(rawValue: pane) ?? .overview)
-        let window = NSWindow(contentViewController: NSHostingController(rootView: ControlView(model: model)))
+        if pane == "welcome" { model.configured = false }
+        let host = NSHostingController(rootView: ControlView(model: model))
+        host.sceneBridgingOptions = [.toolbars, .title]
+        let window = NSWindow(contentViewController: host)
         window.styleMask = [.titled, .closable, .miniaturizable, .resizable, .fullSizeContentView]
         window.toolbarStyle = .unified
         window.title = "Postern"
         window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
-        window.setContentSize(NSSize(width: 820, height: 580))
+        window.setContentSize(NSSize(width: 940, height: 640))
         window.setFrameOrigin(NSPoint(x: -6000, y: -6000))
         window.orderFrontRegardless()
         print(window.windowNumber)

@@ -3,6 +3,8 @@ import SwiftUI
 
 struct OnboardingView: View {
     @Bindable var model: OnboardingModel
+    /// Shown when Postern is already set up and the setup runs again.
+    var cancel: (() -> Void)?
 
     var body: some View {
         VStack(alignment: .leading, spacing: 0) {
@@ -25,7 +27,7 @@ struct OnboardingView: View {
     @ViewBuilder private var content: some View {
         switch model.step {
         case .detect:
-            StepHeader(symbol: "envelope.badge.shield.half.filled", title: "Postern guards your mailbox",
+            StepHeader(symbol: nil, title: "Postern guards your mailbox",
                        text: "Postern lets apps like Claude Code work with your Proton Mail, through Proton Mail Bridge on this Mac. You decide what they may do; nothing leaves without you.")
             Text("First, Postern looks for Bridge. Make sure it is open and signed in.")
                 .foregroundStyle(.secondary)
@@ -68,7 +70,7 @@ struct OnboardingView: View {
             .padding(.top, 20)
         case .done:
             StepHeader(symbol: "checkmark.seal", title: "Postern is ready",
-                       text: "Reading is on. Postern stays in the menu bar and starts by itself when an app connects. You can run this setup again from the menu bar at any time.")
+                       text: "Reading is on. Postern starts by itself when an app connects, even with this window closed. Open Postern from the Dock or Applications to choose what apps may do.")
         }
     }
 
@@ -83,6 +85,9 @@ struct OnboardingView: View {
             }
             Spacer()
             if model.working { ProgressView().controlSize(.small).padding(.trailing, 8) }
+            if let cancel, model.step != .done {
+                Button("Cancel", action: cancel).controlSize(.large).keyboardShortcut(.cancelAction)
+            }
             primaryButton
         }
     }
@@ -104,17 +109,24 @@ struct OnboardingView: View {
 }
 
 private struct StepHeader: View {
-    let symbol: String
+    /// nil shows Postern's own symbol.
+    let symbol: String?
     let title: String
     let text: String
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Image(systemName: symbol)
-                .font(.system(size: 34, weight: .regular))
-                .foregroundStyle(.tint)
-                .symbolRenderingMode(.hierarchical)
-                .padding(.bottom, 4)
+            Group {
+                if let symbol {
+                    Image(systemName: symbol)
+                        .font(.system(size: 34, weight: .regular))
+                        .foregroundStyle(.tint)
+                        .symbolRenderingMode(.hierarchical)
+                } else {
+                    PosternMark().fill(.primary).frame(width: 40, height: 40)
+                }
+            }
+            .padding(.bottom, 4)
             Text(title).font(.title2.weight(.semibold))
             Text(text).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }

@@ -32,6 +32,7 @@ targets:
         INFOPLIST_KEY_CFBundleDisplayName: Postern
         INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 Ruben Catalao. MIT License."
         INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+        ASSETCATALOG_COMPILER_APPICON_NAME: Postern
     # The core holds the secrets: sandboxed, network limited to outgoing connections (Bridge on the loopback
     # address), its own application group for the Mach service name, and its own Keychain access group.
     entitlements:
