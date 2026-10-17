@@ -1,0 +1,16 @@
+name: Feature request
+description: An idea for Postern.
+labels: [enhancement]
+body:
+  - type: textarea
+    id: need
+    attributes:
+      label: What you want to do
+      description: The task you would like an app to do with your mail, or what you would like to see in Postern.
+    validations:
+      required: true
+  - type: textarea
+    id: risk
+    attributes:
+      label: What could go wrong
+      description: If an app or a stranger's email misused this, what could happen? Postern turns every new power off by default and guards the risky ones with a panel and Touch ID.

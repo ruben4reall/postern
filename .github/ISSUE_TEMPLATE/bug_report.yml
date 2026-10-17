@@ -1,0 +1,34 @@
+name: Bug report
+description: Something in Postern does not work as it should.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. **Never paste the content of a real email here.** For a security issue, please
+        follow SECURITY.md and report it privately instead.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened
+      description: What you asked the app, what Postern did, and what you expected instead.
+    validations:
+      required: true
+  - type: textarea
+    id: activity
+    attributes:
+      label: Activity entry
+      description: The line from Postern's Activity pane, if there is one (time, app, tool, result).
+  - type: input
+    id: versions
+    attributes:
+      label: Versions
+      description: Postern, macOS and Proton Mail Bridge.
+      placeholder: Postern 0.1.0, macOS 26.1, Bridge 3.27.1
+    validations:
+      required: true
+  - type: input
+    id: client
+    attributes:
+      label: MCP client
+      placeholder: Claude Code 2.1, Claude Desktop, Codex...
