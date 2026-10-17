@@ -1,0 +1,106 @@
+name: Postern
+options:
+  bundleIdPrefix: ch.rubencatalao.postern
+  deploymentTarget:
+    macOS: "26.0"
+  createIntermediateGroups: true
+settings:
+  base:
+    SWIFT_VERSION: "6.0"
+    MARKETING_VERSION: "0.1.0"
+    CURRENT_PROJECT_VERSION: "1"
+    DEVELOPMENT_TEAM: D8HG34L8XK
+    CODE_SIGN_STYLE: Automatic
+    ENABLE_HARDENED_RUNTIME: YES
+    DEAD_CODE_STRIPPING: YES
+packages:
+  PosternKit:
+    path: Packages/PosternKit
+targets:
+  Postern:
+    type: application
+    platform: macOS
+    sources:
+      - App
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ch.rubencatalao.postern
+        PRODUCT_NAME: Postern
+        GENERATE_INFOPLIST_FILE: YES
+        INFOPLIST_KEY_LSUIElement: YES
+        INFOPLIST_KEY_CFBundleDisplayName: Postern
+        INFOPLIST_KEY_NSHumanReadableCopyright: "Copyright © 2026 Ruben Catalao. MIT License."
+        INFOPLIST_KEY_LSApplicationCategoryType: public.app-category.productivity
+    # The core holds the secrets: sandboxed, network limited to outgoing connections (Bridge on the loopback
+    # address), its own application group for the Mach service name, and its own Keychain access group.
+    entitlements:
+      path: App/Postern.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.application-groups:
+          - D8HG34L8XK.ch.rubencatalao.postern
+        keychain-access-groups:
+          - $(AppIdentifierPrefix)ch.rubencatalao.postern
+    dependencies:
+      - package: PosternKit
+        product: PosternModel
+      - package: PosternKit
+        product: PosternBridge
+      - package: PosternKit
+        product: PosternVault
+      - package: PosternKit
+        product: PosternPolicy
+      - package: PosternKit
+        product: PosternServer
+      - target: postern-mcp
+        link: false
+        embed: true
+        copy:
+          destination: wrapper
+          subpath: Contents/Helpers
+      - target: PosternParser
+        embed: true
+    postBuildScripts:
+      - name: Embed the launch agent
+        script: |
+          mkdir -p "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Library/LaunchAgents"
+          cp "$SRCROOT/App/LaunchAgents/ch.rubencatalao.postern.core.plist" "$TARGET_BUILD_DIR/$CONTENTS_FOLDER_PATH/Library/LaunchAgents/"
+        basedOnDependencyAnalysis: false
+  postern-mcp:
+    type: tool
+    platform: macOS
+    sources:
+      - Relay
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ch.rubencatalao.postern.mcp
+        PRODUCT_NAME: postern-mcp
+  PosternParser:
+    type: xpc-service
+    platform: macOS
+    sources:
+      - ParserService
+      - Shared
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: ch.rubencatalao.postern.parser
+        PRODUCT_NAME: PosternParser
+    info:
+      path: ParserService/Info.plist
+      properties:
+        CFBundleDisplayName: PosternParser
+        XPCService:
+          ServiceType: Application
+    # Hostile input is parsed here: the sandbox with no other entitlement means no network, no Keychain, no files.
+    entitlements:
+      path: ParserService/PosternParser.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+    dependencies:
+      - package: PosternKit
+        product: PosternMail
+      - package: PosternKit
+        product: PosternModel
