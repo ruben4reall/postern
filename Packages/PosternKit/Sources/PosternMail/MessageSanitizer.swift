@@ -87,7 +87,7 @@ public enum MessageSanitizer {
         } ?? []
         return SanitizedHeaders(
             from: addresses("From"), replyTo: addresses("Reply-To"), to: addresses("To"), cc: addresses("Cc"),
-            date: single("Date").flatMap(DateParser.parse), subject: single("Subject") ?? "",
+            date: single("Date").flatMap(MailDate.parse), subject: single("Subject") ?? "",
             messageID: ids(root.header("Message-ID")).first, inReplyTo: ids(root.header("In-Reply-To")).first,
             references: ids(root.header("References")), listUnsubscribe: unsubscribe
         )
@@ -138,23 +138,5 @@ public enum AddressParser {
             guard bare.contains("@") else { return nil }
             return Address(name: nil, email: UnicodeCleaner.clean(bare, keepNewlines: false))
         }
-    }
-}
-
-enum DateParser {
-    private static let formats = [
-        "EEE, d MMM yyyy HH:mm:ss Z", "d MMM yyyy HH:mm:ss Z", "EEE, d MMM yyyy HH:mm Z", "EEE, d MMM yyyy HH:mm:ss zzz",
-        "d MMM yyyy HH:mm Z",
-    ]
-
-    static func parse(_ value: String) -> Date? {
-        let cleaned = value.replacing(#/\s*\([^()]*\)\s*$/#, with: "").trimmingCharacters(in: .whitespaces)
-        for format in formats {
-            let formatter = DateFormatter()
-            formatter.locale = Locale(identifier: "en_US_POSIX")
-            formatter.dateFormat = format
-            if let date = formatter.date(from: cleaned) { return date }
-        }
-        return nil
     }
 }
