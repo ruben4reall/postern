@@ -1,5 +1,4 @@
 import Foundation
-import LocalAuthentication
 import Observation
 import PosternBridge
 import PosternModel
@@ -84,18 +83,19 @@ final class OnboardingModel {
 
     func allowReading() async {
         error = nil
-        let context = LAContext()
-        var policy = LAPolicy.deviceOwnerAuthenticationWithBiometricsOrWatch
-        if !context.canEvaluatePolicy(policy, error: nil) { policy = .deviceOwnerAuthentication }
-        do {
-            try await context.evaluatePolicy(policy, localizedReason: "let your MCP clients read your mail")
-            try PolicyStore(vault: vault).save(.readOnly)
-            CoreState.shared.reload()
-            step = .done
-        } catch let error as LAError where error.code == .userCancel || error.code == .appCancel {
-            self.error = nil
-        } catch {
-            self.error = "Postern couldn't save this choice. Try again."
+        switch await Authenticator.confirm("let your apps read your mail", allowPassword: false) {
+        case .confirmed:
+            do {
+                try PolicyStore(vault: vault).save(.readOnly)
+                CoreState.shared.reloadPolicy()
+                step = .done
+            } catch {
+                self.error = "Postern couldn't save this choice. Try again."
+            }
+        case .cancelled:
+            break
+        case .unavailable:
+            error = "Touch ID isn't available right now. Open the lid or connect your Apple Watch, then try again."
         }
     }
 

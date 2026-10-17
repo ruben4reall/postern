@@ -11,6 +11,7 @@ public enum PosternErrorCode: String, Codable, Sendable {
     case parseFailed = "parse_failed"
     case invalidArgument = "invalid_argument"
     case tooLarge = "too_large"
+    case paused
 }
 
 public struct PosternError: Error, Codable, Sendable, Equatable {
