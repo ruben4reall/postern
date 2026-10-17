@@ -102,6 +102,12 @@ Debug builds also have `--selftest`, which checks attachments and Trash against 
 creates itself and nothing else**: a message created in Inbox, a draft, and an email sent to your own address, each
 with two attachments, all put in Trash at the end. It never erases.
 
+### Releases
+
+Maintainers build releases with `scripts/release.sh`: a Release archive signed with a Developer ID, notarized and
+stapled, packed in a disk image laid out by `dmgbuild` (no Finder window), with its SHA-256. Every release has a
+section in [CHANGELOG.md](CHANGELOG.md).
+
 ## Rules every change keeps
 
 These come from the threat model. A pull request that breaks one will not be merged, however useful it is.
