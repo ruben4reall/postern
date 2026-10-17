@@ -20,6 +20,7 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-ssl.git", exact: "2.37.5"),
         .package(url: "https://github.com/apple/swift-nio-imap.git", exact: "0.4.0"),
         .package(url: "https://github.com/scinfu/SwiftSoup.git", exact: "2.14.3"),
+        .package(url: "https://github.com/apple/swift-log.git", exact: "1.16.1"),
     ],
     targets: [
         // Plain value types shared by every process. No I/O.
@@ -46,13 +47,14 @@ let package = Package(
         // Secrets and policy in the data protection Keychain.
         .target(name: "PosternVault", dependencies: ["PosternModel"]),
         // What the user allows. No I/O.
-        .target(name: "PosternPolicy", dependencies: ["PosternModel"]),
+        .target(name: "PosternPolicy", dependencies: ["PosternModel", "PosternVault"]),
         // The MCP side: tools, sessions, the untrusted envelope.
         .target(
             name: "PosternServer",
             dependencies: [
                 "PosternModel", "PosternText", "PosternPolicy",
                 .product(name: "MCP", package: "swift-sdk"),
+                .product(name: "Logging", package: "swift-log"),
             ]
         ),
         .testTarget(name: "PosternModelTests", dependencies: ["PosternModel"]),
@@ -68,7 +70,7 @@ let package = Package(
                 .product(name: "NIOIMAP", package: "swift-nio-imap"),
             ]
         ),
-        .testTarget(name: "PosternPolicyTests", dependencies: ["PosternPolicy"]),
+        .testTarget(name: "PosternPolicyTests", dependencies: ["PosternPolicy", "PosternVault"]),
         .testTarget(name: "PosternServerTests", dependencies: ["PosternServer", .product(name: "MCP", package: "swift-sdk")]),
     ],
     swiftLanguageModes: [.v6]
