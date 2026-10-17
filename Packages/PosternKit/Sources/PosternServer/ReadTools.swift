@@ -20,6 +20,7 @@ struct ReadTools {
         case .searchMessages: try await search(arguments)
         case .getMessage: try await getMessage(arguments)
         case .getThread: try await getThread(arguments)
+        default: throw PosternError(.invalidArgument, "\(tool.rawValue) is not a read tool.")
         }
     }
 

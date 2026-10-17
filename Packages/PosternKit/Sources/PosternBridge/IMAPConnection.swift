@@ -150,20 +150,7 @@ public actor IMAPConnection {
     public func examine(_ mailbox: BridgeMailbox) async throws -> MailboxStatusInfo {
         let reply = try await send(.examine(MailboxName(Array(mailbox.raw.utf8))))
         guard reply.isOK else { throw BridgeError.mailboxNotFound(mailbox.display) }
-        var validity: UInt32?
-        var exists = 0
-        for response in reply.responses {
-            switch response {
-            case .untagged(.conditionalState(.ok(let text))):
-                if case .uidValidity(let value)? = text.code { validity = UInt32(value) }
-            case .untagged(.mailboxData(.exists(let count))):
-                exists = count
-            default:
-                break
-            }
-        }
-        guard let validity else { throw BridgeError.commandFailed("No UIDVALIDITY for \(mailbox.display)") }
-        return MailboxStatusInfo(uidValidity: validity, exists: exists)
+        return try Self.status(from: reply, mailbox: mailbox)
     }
 
     /// UIDs matching `key` in the examined mailbox, newest first.
@@ -201,6 +188,10 @@ public actor IMAPConnection {
     }
 
     // MARK: Plumbing
+
+    func sendCommand(_ command: Command, timeout: TimeAmount = .seconds(30)) async throws -> CommandResult {
+        try await send(command, timeout: timeout)
+    }
 
     private func send(_ command: Command, timeout: TimeAmount = .seconds(30)) async throws -> CommandResult {
         guard let channel else { throw BridgeError.unreachable }
