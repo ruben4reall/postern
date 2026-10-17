@@ -25,4 +25,6 @@ enum PosternXPC {
 @objc protocol ParserXPC {
     /// Returns a JSON-encoded `SanitizedMessage`, or an error message.
     func sanitize(_ raw: Data, maxChars: Int, reply: @escaping @Sendable (Data?, String?) -> Void)
+    /// Returns the decoded bytes, file name and type of attachment `index`, or an error message.
+    func attachment(_ raw: Data, index: Int, reply: @escaping @Sendable (Data?, String?, String?, String?) -> Void)
 }

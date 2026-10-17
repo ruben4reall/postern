@@ -1,3 +1,4 @@
+import AppKit
 import Foundation
 import Observation
 import PosternAudit
@@ -175,6 +176,12 @@ final class ControlModel {
         await update("allow your Mac password for Postern") { $0.allowPasswordFallback = value }
     }
 
+    func showOutbox() {
+        guard isLive else { return }
+        PosternFolders.prepare()
+        NSWorkspace.shared.activateFileViewerSelecting([PosternFolders.outbox])
+    }
+
     // MARK: Apps
 
     func connect(_ row: ClientRow) {
@@ -279,6 +286,18 @@ struct ToolCopy {
             ToolCopy(title: "Send drafts", verb: "send drafts",
                      allows: "Send a draft as it is, after your approval, then remove it from Drafts.",
                      risk: "Once you approve, it leaves for good.")
+        case .saveAttachment:
+            ToolCopy(title: "Save attachments", verb: "save attachments to your Mac",
+                     allows: "Save an attachment to Downloads › Postern, marked as downloaded.",
+                     risk: "A file from a stranger lands on your Mac. macOS checks it before it opens.")
+        case .trashMessages:
+            ToolCopy(title: "Move to Trash", verb: "move mail to Trash",
+                     allows: "Move messages to Trash. Each time, you approve the list with Touch ID.",
+                     risk: "Messages leave your folders; you can move them back until Trash is emptied.")
+        case .deletePermanently:
+            ToolCopy(title: "Erase for good", verb: "erase mail for good",
+                     allows: "Erase messages already in Trash or Spam. Each time, with Touch ID.",
+                     risk: "Erased messages cannot be recovered.")
         }
     }
 }

@@ -78,3 +78,45 @@ import PosternModel
         #expect(body.first?.hasSuffix("=") == true)
     }
 }
+
+@Suite struct OutgoingAttachmentTests {
+    let me = Address(name: nil, email: "me@example.ch")
+    let anna = Address(name: nil, email: "anna@example.com")
+
+    func text(_ data: Data) -> String { String(decoding: data, as: UTF8.self) }
+
+    @Test func rendersAMultipartMessageWithBase64Attachments() throws {
+        let file = try OutgoingAttachment.make(filename: "Facture n°1.pdf", data: Data("%PDF-1.7 test".utf8))
+        let message = try OutgoingMessage.make(from: me, to: [anna], subject: "Invoice", body: "Here it is", attachments: [file])
+        let raw = text(message.rfc822(includeBcc: false))
+        #expect(raw.contains("Content-Type: multipart/mixed; boundary=\""))
+        #expect(raw.contains("Content-Type: application/pdf; name=\"Facture n1.pdf\""))
+        #expect(raw.contains("Content-Disposition: attachment; filename=\"Facture n1.pdf\"; filename*=utf-8''Facture%20n%C2%B01.pdf"))
+        #expect(raw.contains(Data("%PDF-1.7 test".utf8).base64EncodedString()))
+        #expect(raw.contains("Here it is"))
+        #expect(file.mimeType == "application/pdf")
+        #expect(file.sha256.count == 64)
+    }
+
+    @Test func theDigestCoversTheAttachmentBytes() throws {
+        let one = try OutgoingAttachment.make(filename: "a.txt", data: Data("one".utf8))
+        let two = try OutgoingAttachment.make(filename: "a.txt", data: Data("two".utf8))
+        let first = try OutgoingMessage.make(from: me, to: [anna], subject: "S", body: "B", attachments: [one])
+        var second = first
+        second.attachments = [two]
+        #expect(first.digest != second.digest)
+        #expect(first.digest == first.digest)
+    }
+
+    @Test(arguments: ["../secret", "a/b.txt", "a\\b", "bad\nname.txt", "", ".hidden"])
+    func refusesUnsafeFileNames(_ name: String) {
+        #expect(throws: ComposeError.self) { try OutgoingAttachment.make(filename: name, data: Data("x".utf8)) }
+    }
+
+    @Test func refusesMoreThanTheSizeLimit() throws {
+        let big = try OutgoingAttachment.make(filename: "big.bin", data: Data(count: OutgoingMessage.maxAttachmentBytes + 1))
+        #expect(throws: ComposeError.tooLong) {
+            try OutgoingMessage.make(from: me, to: [anna], subject: "S", body: "B", attachments: [big])
+        }
+    }
+}

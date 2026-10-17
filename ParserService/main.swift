@@ -16,6 +16,17 @@ final class Parser: NSObject, ParserXPC {
     }
 }
 
+extension Parser {
+    func attachment(_ raw: Data, index: Int, reply: @escaping @Sendable (Data?, String?, String?, String?) -> Void) {
+        do {
+            let file = try MessageSanitizer.attachment(raw: raw, index: index)
+            reply(file.data, file.filename, file.mimeType, nil)
+        } catch {
+            reply(nil, nil, nil, String(describing: error))
+        }
+    }
+}
+
 final class Delegate: NSObject, NSXPCListenerDelegate {
     let parser = Parser()
 

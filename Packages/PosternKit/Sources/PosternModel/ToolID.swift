@@ -24,14 +24,18 @@ public enum ToolID: String, Codable, Sendable, CaseIterable {
     case replyToMessage = "reply_to_message"
     case forwardMessage = "forward_message"
     case sendDraft = "send_draft"
+    case saveAttachment = "save_attachment"
+    case trashMessages = "trash_messages"
+    case deletePermanently = "delete_permanently"
 
     public var tier: Tier {
         switch self {
-        case .listMailboxes, .searchMessages, .getMessage, .getThread: .read
+        case .listMailboxes, .searchMessages, .getMessage, .getThread, .saveAttachment: .read
         case .markRead, .markUnread, .setStarred, .moveMessages, .archiveMessages, .addLabel, .removeLabel,
              .createMailbox: .organize
         case .createDraft, .updateDraft, .deleteDraft: .draft
         case .sendMessage, .replyToMessage, .forwardMessage, .sendDraft: .send
+        case .trashMessages, .deletePermanently: .delete
         }
     }
 }

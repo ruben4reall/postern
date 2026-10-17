@@ -160,11 +160,24 @@ private struct ToolsPane: View {
             } header: {
                 Label("Send", systemImage: "paperplane")
             } footer: {
-                Text("Every email waits for you on a panel that shows all of it: recipients, subject, the whole text. It leaves only after Touch ID. Limits and trusted recipients are in Security.")
+                VStack(alignment: .leading, spacing: 8) {
+                    Text("Every email waits for you on a panel that shows all of it: recipients, subject, the whole text, every attachment. It leaves only after Touch ID. Limits and trusted recipients are in Security.")
+                    HStack(spacing: 6) {
+                        Text("Apps can attach only files you put in Downloads › Postern › Outbox.")
+                        Button("Show Outbox") { model.showOutbox() }
+                            .buttonStyle(.link)
+                    }
+                }
             }
-            UpcomingSection(title: "Delete", symbol: "trash",
-                            tools: ["Move to Trash", "Delete forever"],
-                            note: "Each deletion will need Touch ID.")
+            Section {
+                ForEach(ToolID.allCases.filter { $0.tier == .delete }, id: \.self) { tool in
+                    ToolRow(tool: tool, model: model)
+                }
+            } header: {
+                Label("Delete", systemImage: "trash")
+            } footer: {
+                Text("Each deletion waits for you on a panel that lists every message, and happens only after Touch ID.")
+            }
         }
         .formStyle(.grouped)
     }

@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import PosternCompose
 import PosternModel
@@ -42,9 +43,70 @@ public enum ApprovalIntent: Sendable, Equatable {
     case saveAsDraft
 }
 
+/// One message a deletion request would move to Trash or erase, as the panel lists it.
+public struct DeletionItem: Sendable, Equatable {
+    public let id: MessageID
+    public let mailbox: String
+    public let from: String
+    public let subject: String
+    public let date: Date?
+
+    public init(id: MessageID, mailbox: String, from: String, subject: String, date: Date?) {
+        self.id = id
+        self.mailbox = mailbox
+        self.from = from
+        self.subject = subject
+        self.date = date
+    }
+}
+
+/// Moving messages to Trash, or erasing them from Trash for good.
+public struct DeletionRequest: Sendable, Identifiable {
+    public let id = UUID()
+    public let tool: String
+    public let client: String
+    public let items: [DeletionItem]
+    public let permanent: Bool
+    /// Binds the approval to these exact messages.
+    public let digest: String
+
+    public init(tool: String, client: String, items: [DeletionItem], permanent: Bool) {
+        self.tool = tool
+        self.client = client
+        self.items = items
+        self.permanent = permanent
+        self.digest = Self.digest(items.map(\.id), permanent: permanent)
+    }
+
+    static func digest(_ ids: [MessageID], permanent: Bool) -> String {
+        let text = (permanent ? "erase:" : "trash:") + ids.map(\.opaque).joined(separator: ",")
+        return SHA256.hash(data: Data(text.utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+}
+
+/// A deletion the user approved. Only `ApprovalDesk` makes one; the Bridge layer deletes nothing else.
+public struct ApprovedDeletion: Sendable {
+    public let ids: [MessageID]
+    public let permanent: Bool
+
+    init(_ request: DeletionRequest) {
+        ids = request.items.map(\.id)
+        permanent = request.permanent
+    }
+}
+
+public enum DeletionOutcome: Sendable {
+    case approved(ApprovedDeletion)
+    case rejected(reason: String?)
+    case expired
+    case notAuthenticated
+}
+
 /// Shows a request and returns the person's choice. It is cancelled when the request expires.
 public protocol ApprovalPresenter: Sendable {
     func present(_ request: ApprovalRequest, deadline: Date) async -> ApprovalIntent
+    /// `.send` means "delete"; `.saveAsDraft` is not offered.
+    func presentDeletion(_ request: DeletionRequest, deadline: Date) async -> ApprovalIntent
 }
 
 /// Proof that the person at the Mac is the user (Touch ID or Apple Watch, the password only if allowed).
@@ -98,19 +160,8 @@ public actor ApprovalDesk {
         await acquire()
         defer { release() }
         guard request.digest == request.message.digest else { return .rejected(reason: "The message changed.") }
-        let deadline = Date().addingTimeInterval(Double(timeout.components.seconds))
         let presenter = self.presenter
-        let timeout = self.timeout
-        let intent: ApprovalIntent? = await withTaskGroup(of: ApprovalIntent?.self) { group in
-            group.addTask { await presenter.present(request, deadline: deadline) }
-            group.addTask {
-                try? await Task.sleep(for: timeout)
-                return nil
-            }
-            let first = await group.next() ?? nil
-            group.cancelAll()
-            return first
-        }
+        let intent = await choice { deadline in await presenter.present(request, deadline: deadline) }
         switch intent {
         case .send?:
             let count = request.message.envelopeRecipients.count
@@ -125,6 +176,47 @@ public actor ApprovalDesk {
             return .saveAsDraft(request.message)
         case nil:
             return .expired
+        }
+    }
+
+    public func reviewDeletion(_ request: DeletionRequest) async -> DeletionOutcome {
+        await acquire()
+        defer { release() }
+        guard !request.items.isEmpty,
+              request.digest == DeletionRequest.digest(request.items.map(\.id), permanent: request.permanent) else {
+            return .rejected(reason: "Nothing to delete.")
+        }
+        let presenter = self.presenter
+        let intent = await choice { deadline in await presenter.presentDeletion(request, deadline: deadline) }
+        switch intent {
+        case .send?:
+            let count = request.items.count
+            let what = count == 1 ? "1 email" : "\(count) emails"
+            let reason = request.permanent ? "erase \(what) for good" : "move \(what) to Trash"
+            guard await authenticator.confirm(reason: reason) else { return .notAuthenticated }
+            return .approved(ApprovedDeletion(request))
+        case .reject(let reason)?:
+            return .rejected(reason: reason)
+        case .saveAsDraft?:
+            return .rejected(reason: nil)
+        case nil:
+            return .expired
+        }
+    }
+
+    /// The person's choice, or nil when the request expired first.
+    private func choice(_ present: @escaping @Sendable (Date) async -> ApprovalIntent) async -> ApprovalIntent? {
+        let deadline = Date().addingTimeInterval(Double(timeout.components.seconds))
+        let timeout = self.timeout
+        return await withTaskGroup(of: ApprovalIntent?.self) { group in
+            group.addTask { await present(deadline) }
+            group.addTask {
+                try? await Task.sleep(for: timeout)
+                return nil
+            }
+            let first = await group.next() ?? nil
+            group.cancelAll()
+            return first
         }
     }
 

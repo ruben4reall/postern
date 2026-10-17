@@ -109,9 +109,15 @@ extension IMAPConnection {
 extension IMAPConnection {
     /// Saves a message as a draft (APPEND with `\Draft \Seen`). Returns its UID in Drafts when Bridge reports it.
     public func appendDraft(_ bytes: Data, to drafts: BridgeMailbox) async throws -> (validity: UInt32, uid: UInt32)? {
+        try await append(bytes, to: drafts, flags: [.draft, .seen])
+    }
+
+    /// APPEND a message to a mailbox. Returns its UID when Bridge reports it (APPENDUID).
+    public func append(_ bytes: Data, to mailbox: BridgeMailbox, flags: [Flag]) async throws -> (validity: UInt32, uid: UInt32)? {
+        let drafts = mailbox
         let parts: [CommandStreamPart] = [
             .append(.beginMessage(message: AppendMessage(
-                options: AppendOptions(flagList: [.draft, .seen]), data: AppendData(byteCount: bytes.count)
+                options: AppendOptions(flagList: flags), data: AppendData(byteCount: bytes.count)
             ))),
             .append(.messageBytes(ByteBuffer(bytes: bytes))),
             .append(.endMessage),
@@ -129,6 +135,12 @@ extension IMAPConnection {
     /// Removes drafts from Drafts: flagged deleted, then expunged by UID so no other message is touched.
     /// Only ever called on the Drafts mailbox, which must be selected.
     public func deleteDrafts(uids: [UInt32]) async throws {
+        try await expunge(uids: uids)
+    }
+
+    /// Flags these UIDs of the selected mailbox deleted and expunges exactly them (UIDPLUS). Used for Drafts and for
+    /// approved erasure in Trash and Spam only.
+    func expunge(uids: [UInt32]) async throws {
         guard let set = Self.uidSet(uids) else { return }
         let flagged = try await sendCommand(.uidStore(.set(set), [], .flags(.add(silent: true, list: [.deleted]))))
         guard flagged.isOK else { throw BridgeError.commandFailed(flagged.tagged.state.text) }

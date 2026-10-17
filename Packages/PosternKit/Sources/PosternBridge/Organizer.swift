@@ -1,6 +1,7 @@
 import Foundation
 import NIOCore
 import NIOIMAP
+import PosternApproval
 import PosternModel
 
 /// What a change did, message by message, and whether Postern saw the result when it read Bridge again.
@@ -65,17 +66,37 @@ public struct Organizer: Sendable {
 
     // MARK: Moving
 
+    ///
+    /// Bridge erases a message for good when it is moved into Trash from a view Bridge has not updated yet while
+    /// it is already in Trash (seen with Bridge 3.27 on a message sent to yourself, which is one message shown in
+    /// Inbox and in Sent). So a message is never moved where its Message-ID already is, each message moves once per
+    /// call, and a message without a Message-ID never moves to Trash, since that check can't be made for it.
     public func move(_ ids: [PosternModel.MessageID], to destination: BridgeMailbox) async throws -> OrganizeResult {
         var result = OrganizeResult()
         let located = try await locate(ids, into: &result)
         let destinationStatus = try await connection.examine(destination)
+        let present = try await messageIDsPresent(in: destination, among: located.compactMap(\.messageID))
+        let toTrash = destination.display == "Trash"
+        var moving = Set<String>()
         var bySource: [BridgeMailbox: [(PosternModel.MessageID, UInt32, String?)]] = [:]
         for item in located {
             if item.folder == destination {
                 result.done.append(PosternModel.MessageID(mailbox: destination.raw, uidValidity: destinationStatus.uidValidity, uid: item.uid))
-            } else {
-                bySource[item.folder, default: []].append((item.id, item.uid, item.messageID))
+                continue
             }
+            guard let messageID = item.messageID else {
+                if toTrash {
+                    result.failed.append(.init(id: item.id, reason: "This message has no Message-ID, so Postern can't make sure moving it is safe."))
+                } else {
+                    bySource[item.folder, default: []].append((item.id, item.uid, nil))
+                }
+                continue
+            }
+            guard !present.contains(messageID), moving.insert(messageID).inserted else {
+                result.failed.append(.init(id: item.id, reason: "Already in \(destination.display)."))
+                continue
+            }
+            bySource[item.folder, default: []].append((item.id, item.uid, messageID))
         }
         for (source, items) in bySource {
             _ = try await connection.select(source)
@@ -90,11 +111,19 @@ public struct Organizer: Sendable {
         }
         // Read back: every moved message must now be in the destination.
         _ = try await connection.examine(destination)
-        for item in located where item.folder != destination {
-            guard let messageID = item.messageID else { continue }
+        for messageID in moving {
             if try await connection.uids(withMessageID: messageID).isEmpty { result.verified = false }
         }
         return result
+    }
+
+    /// The Message-IDs among `messageIDs` that `mailbox` already shows.
+    private func messageIDsPresent(in mailbox: BridgeMailbox, among messageIDs: [String]) async throws -> Set<String> {
+        guard let key = SearchKeyBuilder.messageIDs(Array(Set(messageIDs))) else { return [] }
+        _ = try await connection.examine(mailbox)
+        let uids = try await connection.uidSearch(key)
+        guard !uids.isEmpty else { return [] }
+        return Set(try await connection.messageIDs(uids).values)
     }
 
     // MARK: Labels
@@ -161,6 +190,38 @@ public struct Organizer: Sendable {
         let status = try await connection.examine(item.folder)
         guard let uid = try await connection.uids(withMessageID: messageID).first else { return nil }
         return PosternModel.MessageID(mailbox: item.folder.raw, uidValidity: status.uidValidity, uid: uid)
+    }
+
+    // MARK: Deleting
+
+    /// Moves approved messages to Trash, from the folder they really live in. Proton removes their labels.
+    public func trash(_ approved: ApprovedDeletion) async throws -> OrganizeResult {
+        guard !approved.permanent else { throw BridgeError.commandFailed("This approval erases; it does not trash.") }
+        return try await move(approved.ids, to: try await connection.mailbox(named: "Trash"))
+    }
+
+    /// Erases approved messages for good. Only messages already in Trash or Spam qualify.
+    public func erase(_ approved: ApprovedDeletion) async throws -> OrganizeResult {
+        guard approved.permanent else { throw BridgeError.commandFailed("This approval trashes; it does not erase.") }
+        var result = OrganizeResult()
+        for (mailbox, group) in try await groups(approved.ids, into: &result) {
+            guard mailbox.display == "Trash" || mailbox.display == "Spam" else {
+                result.failed += group.map { .init(id: $0, reason: "Only messages in Trash or Spam can be erased.") }
+                continue
+            }
+            let status = try await connection.select(mailbox)
+            let (valid, stale) = group.partitioned { $0.uidValidity == status.uidValidity }
+            result.failed += stale.map { .init(id: $0, reason: "Out of date: search again.") }
+            guard !valid.isEmpty else { continue }
+            let messageIDs = try await connection.messageIDs(valid.map(\.uid))
+            try await connection.expunge(uids: valid.map(\.uid))
+            result.done += valid
+            for id in valid {
+                guard let messageID = messageIDs[id.uid] else { continue }
+                if !(try await connection.uids(withMessageID: messageID)).isEmpty { result.verified = false }
+            }
+        }
+        return result
     }
 
     public func create(folder components: [String]) async throws -> BridgeMailbox {

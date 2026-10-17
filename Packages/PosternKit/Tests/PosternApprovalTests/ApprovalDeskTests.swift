@@ -11,10 +11,16 @@ final class ScriptedPresenter: ApprovalPresenter, @unchecked Sendable {
     var showing = 0
     var maxShowing = 0
     var shown: [UUID] = []
+    var deletions: [DeletionRequest] = []
 
     init(_ intent: ApprovalIntent?, delay: Duration = .milliseconds(20)) {
         self.intent = intent
         self.delay = delay
+    }
+
+    func presentDeletion(_ request: DeletionRequest, deadline: Date) async -> ApprovalIntent {
+        lock.withLock { deletions.append(request) }
+        return intent ?? .reject(reason: nil)
     }
 
     func present(_ request: ApprovalRequest, deadline: Date) async -> ApprovalIntent {
@@ -88,5 +94,27 @@ struct FixedAuthenticator: Authenticating {
         #expect(await desk.approveTrusted(request, trusted: ["anna@example.com"]) != nil)
         #expect(await desk.approveTrusted(request, trusted: ["other@example.com"]) == nil)
         #expect(await desk.approveTrusted(request, trusted: []) == nil)
+    }
+}
+
+@Suite struct DeletionApprovalTests {
+    let item = DeletionItem(id: MessageID(mailbox: "INBOX", uidValidity: 1, uid: 4), mailbox: "INBOX", from: "a@b.c", subject: "Hi", date: nil)
+
+    @Test func deletesOnlyAfterTheChoiceAndTouchID() async throws {
+        let request = DeletionRequest(tool: "trash_messages", client: "Claude Code", items: [item], permanent: false)
+        let yes = ApprovalDesk(presenter: ScriptedPresenter(.send), authenticator: FixedAuthenticator(answer: true))
+        guard case .approved(let approved) = await yes.reviewDeletion(request) else { Issue.record("not approved"); return }
+        #expect(approved.ids == [item.id] && !approved.permanent)
+        let noTouchID = ApprovalDesk(presenter: ScriptedPresenter(.send), authenticator: FixedAuthenticator(answer: false))
+        guard case .notAuthenticated = await noTouchID.reviewDeletion(request) else { Issue.record("expected notAuthenticated"); return }
+        let rejected = ApprovalDesk(presenter: ScriptedPresenter(.reject(reason: "No")), authenticator: FixedAuthenticator(answer: true))
+        guard case .rejected = await rejected.reviewDeletion(request) else { Issue.record("expected rejection"); return }
+    }
+
+    @Test func anEmptyRequestIsNeverApproved() async {
+        let desk = ApprovalDesk(presenter: ScriptedPresenter(.send), authenticator: FixedAuthenticator(answer: true))
+        guard case .rejected = await desk.reviewDeletion(DeletionRequest(tool: "trash_messages", client: "x", items: [], permanent: false)) else {
+            Issue.record("expected rejection"); return
+        }
     }
 }

@@ -22,6 +22,11 @@ public enum ToolCatalog {
         "description": "Addresses such as anna@example.com or Anna <anna@example.com>.",
     ])
 
+    static let outbox: Value = .object([
+        "type": "array", "items": .object(["type": "string"]), "maxItems": 20,
+        "description": "File names in the Postern outbox folder (~/Downloads/Postern/Outbox). Nothing else can be attached.",
+    ])
+
     static let ids: Value = .object([
         "type": "array", "items": .object(["type": "string"]), "minItems": 1, "maxItems": 100,
         "description": "Message ids from search_messages, get_thread or a previous change. At most 100.",
@@ -139,6 +144,7 @@ public enum ToolCatalog {
                 inputSchema: schema([
                     "to": recipients, "cc": recipients, "bcc": recipients,
                     "subject": .object(["type": "string"]), "body": .object(["type": "string", "description": "Plain text."]),
+                    "attachments": outbox,
                 ], required: ["to", "subject", "body"]),
                 annotations: draftAnnotations
             )
@@ -171,6 +177,7 @@ public enum ToolCatalog {
                 inputSchema: schema([
                     "to": recipients, "cc": recipients, "bcc": recipients,
                     "subject": .object(["type": "string"]), "body": .object(["type": "string", "description": "Plain text."]),
+                    "attachments": outbox,
                 ], required: ["to", "subject", "body"]),
                 annotations: sendAnnotations, _meta: askEveryTime
             )
@@ -188,10 +195,11 @@ public enum ToolCatalog {
         case .forwardMessage:
             Tool(
                 name: id.rawValue, title: "Forward",
-                description: "Forwards a message's text with a note. Attachments are not forwarded yet. Approved by the user on Postern's panel.",
+                description: "Forwards a message with a note, attachments included. Approved by the user on Postern's panel.",
                 inputSchema: schema([
                     "id": .object(["type": "string", "description": "Message id to forward."]),
                     "to": recipients, "note": .object(["type": "string", "description": "Optional text above the forwarded message."]),
+                    "include_attachments": .object(["type": "boolean", "description": "Default true."]),
                 ], required: ["id", "to"]),
                 annotations: sendAnnotations, _meta: askEveryTime
             )
@@ -201,6 +209,32 @@ public enum ToolCatalog {
                 description: "Sends a draft as it is, after the user approves it on Postern's panel, then removes it from Drafts.",
                 inputSchema: schema(["id": .object(["type": "string", "description": "Draft id."])], required: ["id"]),
                 annotations: sendAnnotations, _meta: askEveryTime
+            )
+        case .saveAttachment:
+            Tool(
+                name: id.rawValue, title: "Save an attachment",
+                description: "Saves one attachment of a message to ~/Downloads/Postern. The file is marked as downloaded, so macOS checks it before it opens. No other folder can be chosen.",
+                inputSchema: schema([
+                    "message_id": .object(["type": "string", "description": "Message id from search_messages."]),
+                    "index": .object(["type": "integer", "minimum": 1, "description": "Attachment number from get_message."]),
+                ], required: ["message_id", "index"]),
+                annotations: Tool.Annotations(readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: true)
+            )
+        case .trashMessages:
+            Tool(
+                name: id.rawValue, title: "Move to Trash",
+                description: "Moves messages to Trash after the user approves on Postern's panel with Touch ID. They can be moved back with move_messages until Trash is emptied.",
+                inputSchema: schema(["ids": ids], required: ["ids"]),
+                annotations: Tool.Annotations(readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false),
+                _meta: askEveryTime
+            )
+        case .deletePermanently:
+            Tool(
+                name: id.rawValue, title: "Erase for good",
+                description: "Erases messages that are already in Trash or Spam, after the user approves on Postern's panel with Touch ID. This cannot be undone.",
+                inputSchema: schema(["ids": ids], required: ["ids"]),
+                annotations: Tool.Annotations(readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false),
+                _meta: askEveryTime
             )
         }
     }
