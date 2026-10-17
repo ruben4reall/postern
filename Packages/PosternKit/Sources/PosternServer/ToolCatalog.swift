@@ -9,6 +9,12 @@ public enum ToolCatalog {
     }
 
     static let readAnnotations = Tool.Annotations(readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: true)
+    static let organizeAnnotations = Tool.Annotations(readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false)
+
+    static let ids: Value = .object([
+        "type": "array", "items": .object(["type": "string"]), "minItems": 1, "maxItems": 100,
+        "description": "Message ids from search_messages, get_thread or a previous change. At most 100.",
+    ])
 
     static func definition(_ id: ToolID) -> Tool {
         switch id {
@@ -60,6 +66,60 @@ public enum ToolCatalog {
                 description: "Lists the messages of the conversation a message belongs to, oldest first, across mailboxes.",
                 inputSchema: schema(["id": .object(["type": "string", "description": "Message id from search_messages."])], required: ["id"]),
                 annotations: readAnnotations
+            )
+        case .markRead, .markUnread:
+            Tool(
+                name: id.rawValue, title: id == .markRead ? "Mark as read" : "Mark as unread",
+                description: "Marks messages as \(id == .markRead ? "read" : "unread"). Postern reads Bridge again to confirm.",
+                inputSchema: schema(["ids": ids], required: ["ids"]), annotations: organizeAnnotations
+            )
+        case .setStarred:
+            Tool(
+                name: id.rawValue, title: "Star or unstar",
+                description: "Stars messages, or removes the star with starred false.",
+                inputSchema: schema(["ids": ids, "starred": .object(["type": "boolean", "description": "Default true."])], required: ["ids"]),
+                annotations: organizeAnnotations
+            )
+        case .moveMessages:
+            Tool(
+                name: id.rawValue, title: "Move messages",
+                description: """
+                Moves messages to Inbox, Archive or a folder under Folders/. Labels stay as they are. Trash and Spam \
+                are not destinations here. Returns the ids the messages have in their new folder.
+                """,
+                inputSchema: schema([
+                    "ids": ids,
+                    "destination": .object(["type": "string", "description": "INBOX, Archive, or a Folders/ name from list_mailboxes."]),
+                ], required: ["ids", "destination"]),
+                annotations: organizeAnnotations
+            )
+        case .archiveMessages:
+            Tool(
+                name: id.rawValue, title: "Archive messages",
+                description: "Moves messages to Archive. Labels stay as they are. Returns their new ids.",
+                inputSchema: schema(["ids": ids], required: ["ids"]), annotations: organizeAnnotations
+            )
+        case .addLabel, .removeLabel:
+            Tool(
+                name: id.rawValue, title: id == .addLabel ? "Add a label" : "Remove a label",
+                description: id == .addLabel
+                    ? "Adds a label to messages. They stay in their folder."
+                    : "Removes a label from messages. They stay in their folder.",
+                inputSchema: schema([
+                    "ids": ids,
+                    "label": .object(["type": "string", "description": "Label name, with or without Labels/."]),
+                ], required: ["ids", "label"]),
+                annotations: organizeAnnotations
+            )
+        case .createMailbox:
+            Tool(
+                name: id.rawValue, title: "Create a folder or label",
+                description: "Creates a folder (use / to nest it) or a label.",
+                inputSchema: schema([
+                    "kind": .object(["type": "string", "enum": ["folder", "label"]]),
+                    "name": .object(["type": "string", "description": "Up to 100 characters."]),
+                ], required: ["kind", "name"]),
+                annotations: Tool.Annotations(readOnlyHint: false, destructiveHint: false, idempotentHint: false, openWorldHint: false)
             )
         }
     }

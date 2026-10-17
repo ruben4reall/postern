@@ -19,22 +19,11 @@ public struct OrganizeResult: Sendable, Equatable {
     public init() {}
 }
 
-/// What each Bridge mailbox is, following how Bridge maps Proton:
-/// a message lives in exactly one folder, carries any number of labels, and appears in virtual views.
+/// Bridge's mailbox roles, from `MailboxNames`.
 public enum MailboxRole {
-    static let systemFolders: Set<String> = ["INBOX", "Archive", "Sent", "Drafts", "Trash", "Spam"]
-
-    /// Where a message actually lives.
-    public static func isFolder(_ display: String) -> Bool {
-        systemFolders.contains(display) || display.hasPrefix("Folders/")
-    }
-
-    public static func isLabel(_ display: String) -> Bool { display.hasPrefix("Labels/") && display.count > 7 }
-
-    /// Where `move_messages` may send mail. Trash and Spam belong to the delete tools; Sent and Drafts are Proton's.
-    public static func isMoveDestination(_ display: String) -> Bool {
-        display == "INBOX" || display == "Archive" || (display.hasPrefix("Folders/") && display.count > 8)
-    }
+    public static func isFolder(_ display: String) -> Bool { MailboxNames.isFolder(display) }
+    public static func isLabel(_ display: String) -> Bool { MailboxNames.isLabel(display) }
+    public static func isMoveDestination(_ display: String) -> Bool { MailboxNames.isMoveDestination(display) }
 }
 
 /// Organizes mail through Bridge without side effects on labels.

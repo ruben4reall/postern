@@ -37,6 +37,33 @@ final class FakeBackend: MailBackend, @unchecked Sendable {
 
     func displayName(ofRawMailbox raw: String) async throws -> String { raw }
 
+    var changes: [String] = []
+
+    func setFlag(_ flag: MessageFlag, on: Bool, ids: [MessageID]) async throws -> ChangeReport {
+        lock.withLock { changes.append("flag \(flag.rawValue) \(on) \(ids.count)") }
+        return ChangeReport(done: ids, failed: [], verified: true)
+    }
+
+    func move(_ ids: [MessageID], to mailbox: String) async throws -> ChangeReport {
+        lock.withLock { changes.append("move \(mailbox) \(ids.count)") }
+        return ChangeReport(done: ids.map { MessageID(mailbox: mailbox, uidValidity: 1, uid: $0.uid + 100) }, failed: [], verified: true)
+    }
+
+    func addLabel(_ ids: [MessageID], label: String) async throws -> ChangeReport {
+        lock.withLock { changes.append("add \(label)") }
+        return ChangeReport(done: ids, failed: [], verified: false)
+    }
+
+    func removeLabel(_ ids: [MessageID], label: String) async throws -> ChangeReport {
+        lock.withLock { changes.append("remove \(label)") }
+        return ChangeReport(done: ids, failed: [], verified: true)
+    }
+
+    func createMailbox(_ name: String) async throws -> MailboxInfo {
+        lock.withLock { changes.append("create \(name)") }
+        return MailboxInfo(name: name, kind: name.hasPrefix("Labels/") ? .label : .folder, total: 0, unread: 0)
+    }
+
     private func summary(_ id: MessageID) -> MessageSummary {
         MessageSummary(id: id, date: nil, from: [Address(name: nil, email: "a@b.c")], to: [], cc: [], subject: "S",
                        unread: true, starred: false, answered: false, size: 10, attachmentCount: 0,
@@ -160,5 +187,88 @@ final class Reports: @unchecked Sendable {
             ToolCallReport(tool: "get_message", outcome: "ok", items: 1),
             ToolCallReport(tool: "get_message", outcome: "invalid_argument", items: nil),
         ])
+    }
+
+    var organizePolicy: Policy {
+        Policy(enabledTools: Set(ToolID.allCases), hiddenMailboxes: ["Folders/Secret"])
+    }
+
+    @Test func organizeToolsAppearOnlyWhenEnabled() async throws {
+        let (readOnly, _) = try await connect(policy: .readOnly)
+        #expect(try await readOnly.listTools().tools.count == 4)
+        let (all, _) = try await connect(policy: organizePolicy)
+        let tools = try await all.listTools().tools
+        #expect(tools.count == 12)
+        let move = try #require(tools.first { $0.name == "move_messages" })
+        #expect(move.annotations.readOnlyHint == false && move.annotations.destructiveHint == false)
+    }
+
+    @Test func movesAndReportsTheNewIDs() async throws {
+        let backend = FakeBackend()
+        let reports = Reports()
+        let (client, _) = try await connect(policy: organizePolicy, backend: backend, reports: reports)
+        let (content, isError) = try await client.callTool(
+            name: "move_messages", arguments: ["ids": .array([.string(backend.inbox.opaque)]), "destination": .string("Archive")]
+        )
+        #expect(isError != true)
+        #expect(text(content).contains("Moved 1 message(s) to Archive."))
+        #expect(text(content).contains(MessageID(mailbox: "Archive", uidValidity: 1, uid: 110).opaque))
+        #expect(backend.lock.withLock { backend.changes } == ["move Archive 1"])
+        #expect(reports.all.last == ToolCallReport(tool: "move_messages", outcome: "ok", items: 1))
+    }
+
+    @Test(arguments: ["Trash", "Spam", "Sent", "Labels/Work", "All Mail", "Folders/"])
+    func refusesDestinationsThatAreNotFolders(_ destination: String) async throws {
+        let backend = FakeBackend()
+        let (client, _) = try await connect(policy: organizePolicy, backend: backend)
+        let (content, isError) = try await client.callTool(
+            name: "move_messages", arguments: ["ids": .array([.string(backend.inbox.opaque)]), "destination": .string(destination)]
+        )
+        #expect(isError == true)
+        #expect(text(content).hasPrefix("invalid_argument"))
+        #expect(backend.lock.withLock { backend.changes }.isEmpty)
+    }
+
+    @Test func refusesHiddenMailboxesOnEitherSide() async throws {
+        let backend = FakeBackend()
+        let (client, _) = try await connect(policy: organizePolicy, backend: backend)
+        let (into, intoError) = try await client.callTool(
+            name: "move_messages", arguments: ["ids": .array([.string(backend.inbox.opaque)]), "destination": .string("Folders/Secret")]
+        )
+        #expect(intoError == true && text(into).hasPrefix("scope_hidden"))
+        let (from, fromError) = try await client.callTool(name: "mark_read", arguments: ["ids": .array([.string(backend.secret.opaque)])])
+        #expect(fromError == true && text(from).hasPrefix("scope_hidden"))
+        #expect(backend.lock.withLock { backend.changes }.isEmpty)
+    }
+
+    @Test func limitsAndValidatesIDs() async throws {
+        let backend = FakeBackend()
+        let (client, _) = try await connect(policy: organizePolicy, backend: backend)
+        let many = Value.array((0..<101).map { .string(MessageID(mailbox: "INBOX", uidValidity: 1, uid: UInt32($0)).opaque) })
+        let (tooMany, error1) = try await client.callTool(name: "mark_read", arguments: ["ids": many])
+        #expect(error1 == true && text(tooMany).contains("At most 100"))
+        let (bad, error2) = try await client.callTool(name: "mark_read", arguments: ["ids": .array([.string("nope")])])
+        #expect(error2 == true && text(bad).hasPrefix("invalid_argument"))
+    }
+
+    @Test func normalizesLabelsAndSaysWhenBridgeHasNotCaughtUp() async throws {
+        let backend = FakeBackend()
+        let (client, _) = try await connect(policy: organizePolicy, backend: backend)
+        let (content, _) = try await client.callTool(
+            name: "add_label", arguments: ["ids": .array([.string(backend.inbox.opaque)]), "label": .string("Work")]
+        )
+        #expect(backend.lock.withLock { backend.changes } == ["add Labels/Work"])
+        #expect(text(content).contains("could not see every change yet"))
+    }
+
+    @Test func validatesNewMailboxNames() async throws {
+        let backend = FakeBackend()
+        let (client, _) = try await connect(policy: organizePolicy, backend: backend)
+        let (ok, okError) = try await client.callTool(name: "create_mailbox", arguments: ["kind": .string("folder"), "name": .string("Clients/2026")])
+        #expect(okError != true && text(ok) == "Created Folders/Clients/2026.")
+        for (kind, name) in [("label", "A/B"), ("folder", "a//b"), ("folder", "bad\u{202E}name"), ("box", "x")] {
+            let (_, isError) = try await client.callTool(name: "create_mailbox", arguments: ["kind": .string(kind), "name": .string(name)])
+            #expect(isError == true)
+        }
     }
 }
