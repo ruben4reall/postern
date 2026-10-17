@@ -6,7 +6,7 @@ out=${1:?output folder}
 mkdir -p "$out"
 binary="build/Build/Products/Debug/Postern.app/Contents/MacOS/Postern"
 for appearance in light dark; do
-  for pane in overview tools mailboxes clients activity security; do
+  for pane in welcome overview tools mailboxes clients activity security; do
     ids=$(mktemp)
     "$binary" --hold-control-window "$pane" "$appearance" > "$ids" 2>/dev/null &
     for i in {1..30}; do [ -s "$ids" ] && break; sleep 0.3; done

@@ -3,6 +3,9 @@ import Foundation
 /// Names and checks shared by the three processes.
 enum PosternXPC {
     static let coreMachService = "D8HG34L8XK.ch.rubencatalao.postern.core"
+    /// The app's window service. Opening Postern from the Finder or the Dock starts a second copy, which asks the copy
+    /// launchd runs to show its window and quits, so there is only ever one Postern.
+    static let appMachService = "D8HG34L8XK.ch.rubencatalao.postern.app"
     static let parserService = "ch.rubencatalao.postern.parser"
     /// Every XPC peer must be signed by Postern's team, in both directions.
     static let teamRequirement = "anchor apple generic and certificate leaf[subject.OU] = \"D8HG34L8XK\""
@@ -13,6 +16,13 @@ enum PosternXPC {
     func hello(clientName: String, reply: @escaping @Sendable (Bool) -> Void)
     /// One JSON-RPC message from the MCP client, as read on the relay's stdin.
     func deliver(_ message: Data)
+}
+
+/// Exported by the core app to a copy of itself the user opened.
+@objc protocol AppXPC {
+    /// The core's process id, so the opener can hand it the focus.
+    func processIdentifier(reply: @escaping @Sendable (Int32) -> Void)
+    func showWindow(reply: @escaping @Sendable (Bool) -> Void)
 }
 
 /// Exported by the relay back to the core.

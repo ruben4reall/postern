@@ -43,6 +43,13 @@ final class ControlModel {
     }
 
     var pane: Pane = .overview
+    /// The setup sheet, over the main window.
+    var showingSetup = false {
+        didSet { if showingSetup && setup == nil { setup = OnboardingModel { [weak self] in self?.finishSetup() } } }
+    }
+    private(set) var setup: OnboardingModel?
+    /// This copy runs on its own because the background agent is turned off: apps can't connect.
+    var backgroundServiceOff = false
     var policy: Policy = .initial
     var configured = false
     var connectedApps: [String] = []
@@ -57,11 +64,41 @@ final class ControlModel {
 
     /// Snapshots and previews fill the model by hand and never touch the system.
     let isLive: Bool
-    var openSetup: () -> Void = {}
 
     init(live: Bool = true) {
         isLive = live
     }
+
+    func openSetup() { showingSetup = true }
+
+    func finishSetup() {
+        showingSetup = false
+        setup = nil
+        CoreState.shared.reload()
+        refresh()
+        Task { await loadMailboxes() }
+    }
+
+    func cancelSetup() {
+        showingSetup = false
+        setup = nil
+    }
+
+    // MARK: Counts for the sidebar
+
+    var activityToday: Int {
+        let start = Calendar.current.startOfDay(for: Date())
+        return activity.filter { $0.date >= start }.count
+    }
+
+    var visibleMailboxCount: Int? {
+        guard mailboxState == .loaded else { return nil }
+        return mailboxes.filter { !policy.isHidden($0.name) }.count
+    }
+
+    var appsConnectedCount: Int { Set(connectedApps).count }
+
+    func enabledCount(_ tier: Tier) -> Int { policy.enabledTools.filter { $0.tier == tier }.count }
 
     // MARK: Loading
 
@@ -119,6 +156,14 @@ final class ControlModel {
         }
         CoreState.shared.reloadPolicy()
         refresh()
+    }
+
+    /// Turns a whole tier on or off at once: one Touch ID for all of it.
+    func setTier(_ tier: Tier, enabled: Bool) async {
+        let tools = ToolID.allCases.filter { $0.tier == tier }
+        await update("let your apps \(TierCopy.for(tier).verb)") { policy in
+            if enabled { policy.enabledTools.formUnion(tools) } else { policy.enabledTools.subtract(tools) }
+        }
     }
 
     func setTool(_ tool: ToolID, enabled: Bool) async {
@@ -198,6 +243,29 @@ final class ControlModel {
     func addProfile() {
         guard isLive, ClientConnector.addProfile() != nil else { return }
         refresh()
+    }
+}
+
+/// How each tier is described: a name, a symbol and a color that stay the same everywhere.
+struct TierCopy {
+    let title: String
+    let verb: String
+    let symbol: String
+    let summary: String
+
+    static func `for`(_ tier: Tier) -> TierCopy {
+        switch tier {
+        case .read: TierCopy(title: "Read", verb: "read your mail", symbol: "envelope.open",
+                             summary: "List, search and read. Every message is cleaned first.")
+        case .organize: TierCopy(title: "Organize", verb: "organize your mail", symbol: "folder",
+                                 summary: "Flags, folders, labels. Never to Trash or Spam.")
+        case .draft: TierCopy(title: "Drafts", verb: "write drafts", symbol: "square.and.pencil",
+                              summary: "Write and change drafts. Nothing is sent.")
+        case .send: TierCopy(title: "Send", verb: "send email", symbol: "paperplane",
+                             summary: "Every email waits for you on a panel, and leaves only after Touch ID.")
+        case .delete: TierCopy(title: "Delete", verb: "delete mail", symbol: "trash",
+                               summary: "Each deletion lists every message and needs Touch ID.")
+        }
     }
 }
 
