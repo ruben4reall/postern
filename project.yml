@@ -97,6 +97,8 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ch.rubencatalao.postern.mcp
         PRODUCT_NAME: postern-mcp
+        # Shipped inside Postern.app (Contents/Helpers), never installed on its own: an archive must hold the app only.
+        SKIP_INSTALL: YES
   PosternParser:
     type: xpc-service
     platform: macOS
@@ -107,6 +109,7 @@ targets:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: ch.rubencatalao.postern.parser
         PRODUCT_NAME: PosternParser
+        SKIP_INSTALL: YES
     info:
       path: ParserService/Info.plist
       properties:
