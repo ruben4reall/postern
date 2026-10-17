@@ -3,8 +3,11 @@ import ServiceManagement
 
 // `Postern --register-agent` registers the launch agent and exits, for scripts that install a build.
 if CommandLine.arguments.contains("--register-agent") {
+    // A new build may change the plist: register again from scratch.
     let agent = SMAppService.agent(plistName: "ch.rubencatalao.postern.core.plist")
-    do { try agent.register() } catch { print("register failed: \(error)") }
+    try? agent.unregister()
+    UserDefaults.standard.removeObject(forKey: AppHandoff.agentVersionKey)
+    AppHandoff.registerAgent()
     print("agent status: \(agent.status.rawValue)")
     exit(0)
 }
@@ -41,8 +44,15 @@ if CommandLine.arguments.contains("--snapshot-setup") {
 }
 #endif
 
-let delegate = AppDelegate()
+let launchedByAgent = ProcessInfo.processInfo.environment["POSTERN_AGENT"] == "1"
 let application = NSApplication.shared
-application.delegate = delegate
 application.setActivationPolicy(.accessory)
+if !launchedByAgent {
+    // Opened by the user: make sure the background agent is registered, then let it show the window. If it can't run
+    // (turned off in Login Items), this copy shows the window itself and says so.
+    AppHandoff.registerAgent()
+    if MainActor.assumeIsolated({ AppHandoff.handOver() }) { exit(0) }
+}
+let delegate = AppDelegate(launchedByAgent: launchedByAgent)
+application.delegate = delegate
 application.run()
