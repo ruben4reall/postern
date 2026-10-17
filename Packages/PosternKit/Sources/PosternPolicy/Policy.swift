@@ -11,16 +11,31 @@ public struct Policy: Codable, Sendable, Equatable {
     public var pauseWhenLocked: Bool
     /// Accept the Mac's password when Touch ID or an Apple Watch is not available.
     public var allowPasswordFallback: Bool
+    /// Sends whose every recipient is here skip the approval panel. Empty by default.
+    public var trustedRecipients: Set<String>
+    /// When not empty, nobody else can receive mail through Postern.
+    public var allowedRecipients: Set<String>
+    public var sendsPerHour: Int
+    public var sendsPerDay: Int
+
+    public static let defaultSendsPerHour = 10
+    public static let defaultSendsPerDay = 30
 
     public init(
         enabledTools: Set<ToolID>, hiddenMailboxes: Set<String> = [], paused: Bool = false,
-        pauseWhenLocked: Bool = false, allowPasswordFallback: Bool = false
+        pauseWhenLocked: Bool = false, allowPasswordFallback: Bool = false, trustedRecipients: Set<String> = [],
+        allowedRecipients: Set<String> = [], sendsPerHour: Int = Policy.defaultSendsPerHour,
+        sendsPerDay: Int = Policy.defaultSendsPerDay
     ) {
         self.enabledTools = enabledTools
         self.hiddenMailboxes = hiddenMailboxes
         self.paused = paused
         self.pauseWhenLocked = pauseWhenLocked
         self.allowPasswordFallback = allowPasswordFallback
+        self.trustedRecipients = Set(trustedRecipients.map { $0.lowercased() })
+        self.allowedRecipients = Set(allowedRecipients.map { $0.lowercased() })
+        self.sendsPerHour = sendsPerHour
+        self.sendsPerDay = sendsPerDay
     }
 
     /// Fields added after the first release decode with their safe default, so an older policy still loads.
@@ -31,6 +46,15 @@ public struct Policy: Codable, Sendable, Equatable {
         paused = try container.decodeIfPresent(Bool.self, forKey: .paused) ?? false
         pauseWhenLocked = try container.decodeIfPresent(Bool.self, forKey: .pauseWhenLocked) ?? false
         allowPasswordFallback = try container.decodeIfPresent(Bool.self, forKey: .allowPasswordFallback) ?? false
+        trustedRecipients = try container.decodeIfPresent(Set<String>.self, forKey: .trustedRecipients) ?? []
+        allowedRecipients = try container.decodeIfPresent(Set<String>.self, forKey: .allowedRecipients) ?? []
+        sendsPerHour = try container.decodeIfPresent(Int.self, forKey: .sendsPerHour) ?? Self.defaultSendsPerHour
+        sendsPerDay = try container.decodeIfPresent(Int.self, forKey: .sendsPerDay) ?? Self.defaultSendsPerDay
+    }
+
+    /// Whether this address may receive mail through Postern.
+    public func mayReceive(_ email: String) -> Bool {
+        allowedRecipients.isEmpty || allowedRecipients.contains(email.lowercased())
     }
 
     /// Nothing is allowed until the user turns tools on.
@@ -57,6 +81,11 @@ public struct Policy: Codable, Sendable, Equatable {
         if old.paused && !paused { return true }
         if old.pauseWhenLocked && !pauseWhenLocked { return true }
         if allowPasswordFallback && !old.allowPasswordFallback { return true }
+        if !trustedRecipients.isSubset(of: old.trustedRecipients) { return true }
+        if !old.allowedRecipients.isEmpty && (allowedRecipients.isEmpty || !allowedRecipients.isSubset(of: old.allowedRecipients)) {
+            return true
+        }
+        if sendsPerHour > old.sendsPerHour || sendsPerDay > old.sendsPerDay { return true }
         return false
     }
 }

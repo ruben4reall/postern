@@ -109,7 +109,7 @@ private struct OverviewPane: View {
     private var summary: String {
         if !model.configured { return "Run the setup to connect Postern to Proton Mail Bridge." }
         if model.policy.paused { return "Apps see no tool and every call is refused. Resuming asks for Touch ID." }
-        return "Apps can only use the tools you turned on. Nothing can be sent or deleted."
+        return "Apps can only use the tools you turned on. Nothing is sent without your approval."
     }
 
     private var appsText: String {
@@ -144,12 +144,24 @@ private struct ToolsPane: View {
             } footer: {
                 Text("Changes how your mail is sorted, never what it says. Postern moves a message from the folder it really lives in, so its labels are never lost, and reads Bridge again to confirm each change.")
             }
-            UpcomingSection(title: "Drafts", symbol: "square.and.pencil",
-                            tools: ["Write drafts", "Edit and delete drafts"],
-                            note: "Drafts wait in Proton until you send them yourself.")
-            UpcomingSection(title: "Send", symbol: "paperplane",
-                            tools: ["Send", "Reply", "Forward"],
-                            note: "Every message will wait for you on a Touch ID screen that shows all of it.")
+            Section {
+                ForEach(ToolID.allCases.filter { $0.tier == .draft }, id: \.self) { tool in
+                    ToolRow(tool: tool, model: model)
+                }
+            } header: {
+                Label("Drafts", systemImage: "square.and.pencil")
+            } footer: {
+                Text("Drafts wait in Proton until someone sends them: you, or an app with your approval.")
+            }
+            Section {
+                ForEach(ToolID.allCases.filter { $0.tier == .send }, id: \.self) { tool in
+                    ToolRow(tool: tool, model: model)
+                }
+            } header: {
+                Label("Send", systemImage: "paperplane")
+            } footer: {
+                Text("Every email waits for you on a panel that shows all of it: recipients, subject, the whole text. It leaves only after Touch ID. Limits and trusted recipients are in Security.")
+            }
             UpcomingSection(title: "Delete", symbol: "trash",
                             tools: ["Move to Trash", "Delete forever"],
                             note: "Each deletion will need Touch ID.")
@@ -462,6 +474,7 @@ private struct SecurityPane: View {
             } header: {
                 Text("Approvals")
             }
+            SendingSection(model: model)
             Section {
                 Toggle(isOn: Binding(
                     get: { model.policy.pauseWhenLocked },
@@ -500,5 +513,90 @@ private struct SecurityPane: View {
 
     private func modeText(_ mode: TLSMode) -> String {
         mode == .startTLS ? "encrypted with STARTTLS" : "encrypted from the first byte"
+    }
+}
+
+// MARK: Sending settings
+
+private struct SendingSection: View {
+    @Bindable var model: ControlModel
+    @State private var newTrusted = ""
+    @State private var newAllowed = ""
+
+    var body: some View {
+        Section {
+            Stepper(value: Binding(get: { model.policy.sendsPerHour },
+                                   set: { value in Task { await model.setLimits(perHour: value, perDay: model.policy.sendsPerDay) } }),
+                    in: 1...100) {
+                LabeledContent("At most per hour", value: "\(model.policy.sendsPerHour) emails")
+            }
+            Stepper(value: Binding(get: { model.policy.sendsPerDay },
+                                   set: { value in Task { await model.setLimits(perHour: model.policy.sendsPerHour, perDay: value) } }),
+                    in: 1...500) {
+                LabeledContent("At most per day", value: "\(model.policy.sendsPerDay) emails")
+            }
+        } header: {
+            Text("Sending")
+        } footer: {
+            Text("Raising a limit asks for Touch ID. Apps hear that the limit is reached; nothing is sent.")
+        }
+        Section {
+            AddressList(addresses: model.policy.trustedRecipients.sorted(), empty: "Nobody. Every email shows the approval panel.") { email in
+                Task { await model.untrust(email) }
+            }
+            HStack {
+                TextField("Add an address you trust", text: $newTrusted).onSubmit(addTrusted)
+                Button("Trust…", action: addTrusted).disabled(newTrusted.isEmpty)
+            }
+        } header: {
+            Text("Trusted recipients")
+        } footer: {
+            Text("Emails whose every recipient is trusted leave without the panel, such as notes to yourself. Adding someone asks for Touch ID.")
+        }
+        Section {
+            AddressList(addresses: model.policy.allowedRecipients.sorted(), empty: "Anyone. Add addresses to send only to them.") { email in
+                Task { await model.disallow(email) }
+            }
+            HStack {
+                TextField("Add an address", text: $newAllowed).onSubmit(addAllowed)
+                Button("Allow…", action: addAllowed).disabled(newAllowed.isEmpty)
+            }
+        } header: {
+            Text("Only send to")
+        } footer: {
+            Text("When this list is not empty, apps cannot write to anyone else, even with your approval.")
+        }
+    }
+
+    private func addTrusted() {
+        let email = newTrusted
+        newTrusted = ""
+        Task { await model.trust(email) }
+    }
+
+    private func addAllowed() {
+        let email = newAllowed
+        newAllowed = ""
+        Task { await model.allow(email) }
+    }
+}
+
+private struct AddressList: View {
+    let addresses: [String]
+    let empty: String
+    let remove: (String) -> Void
+
+    var body: some View {
+        if addresses.isEmpty {
+            Text(empty).foregroundStyle(.secondary)
+        } else {
+            ForEach(addresses, id: \.self) { email in
+                HStack {
+                    Text(email)
+                    Spacer()
+                    Button("Remove") { remove(email) }.buttonStyle(.borderless)
+                }
+            }
+        }
     }
 }

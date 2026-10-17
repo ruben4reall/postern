@@ -66,6 +66,10 @@ targets:
         product: PosternAudit
       - package: PosternKit
         product: PosternClients
+      - package: PosternKit
+        product: PosternCompose
+      - package: PosternKit
+        product: PosternApproval
       - target: postern-mcp
         link: false
         embed: true

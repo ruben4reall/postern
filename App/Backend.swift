@@ -1,6 +1,9 @@
 import Foundation
+import NIOCore
 import OSLog
+import PosternApproval
 import PosternBridge
+import PosternCompose
 import PosternModel
 import PosternServer
 
@@ -37,6 +40,11 @@ struct LiveBackend: MailBackend {
         try await current().removeLabel(ids, label: label)
     }
     func createMailbox(_ name: String) async throws -> MailboxInfo { try await current().createMailbox(name) }
+    func ownAddress() async throws -> Address { try await current().ownAddress() }
+    func hasSentTo(_ email: String) async throws -> Bool { try await current().hasSentTo(email) }
+    func saveDraft(_ message: OutgoingMessage) async throws -> MessageID { try await current().saveDraft(message) }
+    func deleteDraft(_ id: MessageID) async throws { try await current().deleteDraft(id) }
+    func send(_ message: ApprovedMessage) async throws { try await current().send(message) }
 }
 
 /// The mailbox over Bridge, with every message body decoded in the sandboxed parser service.
@@ -46,10 +54,14 @@ final class BridgeBackend: MailBackend, Sendable {
     static let maxThreadMessages = 20
 
     private let client: BridgeClient
+    private let sender: SMTPClient
+    private let account: Address
     private let parser = ParserClient()
 
-    init(client: BridgeClient) {
-        self.client = client
+    init(endpoint: BridgeEndpoint, pin: CertificatePin, credentials: BridgeCredentials) {
+        self.client = BridgeClient(endpoint: endpoint, pin: pin, credentials: credentials)
+        self.sender = SMTPClient(endpoint: endpoint, pin: pin, credentials: credentials)
+        self.account = Address(name: nil, email: credentials.username)
     }
 
     func shutdown() async { await client.shutdown() }
@@ -166,6 +178,51 @@ final class BridgeBackend: MailBackend, Sendable {
                 return MailboxInfo(name: created.display, kind: Self.kind(of: created.display), total: 0, unread: 0)
             }
         }
+    }
+
+    // MARK: Drafts and sending
+
+    func ownAddress() async throws -> Address { account }
+
+    func hasSentTo(_ email: String) async throws -> Bool {
+        try await bridge {
+            try await self.client.withConnection { connection in
+                _ = try await connection.examine(try await connection.mailbox(named: "Sent"))
+                return !(try await connection.uidSearch(.to(ByteBuffer(string: email)))).isEmpty
+            }
+        }
+    }
+
+    func saveDraft(_ message: OutgoingMessage) async throws -> MessageID {
+        try await bridge {
+            try await self.client.withConnection { connection in
+                let drafts = try await connection.mailbox(named: "Drafts")
+                if let appended = try await connection.appendDraft(message.rfc822(includeBcc: true), to: drafts) {
+                    return MessageID(mailbox: drafts.raw, uidValidity: appended.validity, uid: appended.uid)
+                }
+                let status = try await connection.examine(drafts)
+                guard let uid = try await connection.uids(withMessageID: message.messageID).first else {
+                    throw BridgeError.mailboxNotFound("the new draft")
+                }
+                return MessageID(mailbox: drafts.raw, uidValidity: status.uidValidity, uid: uid)
+            }
+        }
+    }
+
+    func deleteDraft(_ id: MessageID) async throws {
+        try await bridge {
+            try await self.client.withConnection { connection in
+                let drafts = try await connection.mailbox(named: "Drafts")
+                guard id.mailbox == drafts.raw else { throw BridgeError.mailboxNotFound("draft") }
+                let status = try await connection.select(drafts)
+                guard status.uidValidity == id.uidValidity else { throw BridgeError.staleUIDValidity }
+                try await connection.deleteDrafts(uids: [id.uid])
+            }
+        }
+    }
+
+    func send(_ message: ApprovedMessage) async throws {
+        try await bridge { try await self.sender.send(message) }
     }
 
     static func report(_ result: OrganizeResult) -> ChangeReport {

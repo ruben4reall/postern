@@ -75,3 +75,31 @@ import PosternVault
         #expect(!policy.paused && !policy.allowPasswordFallback)
     }
 }
+
+@Suite struct SendingPolicyTests {
+    @Test func trustingSomeoneOrRaisingLimitsNeedsTheUser() {
+        let base = Policy(enabledTools: [])
+        var trusted = base
+        trusted.trustedRecipients = ["me@example.ch"]
+        #expect(trusted.addsPower(over: base))
+        var faster = base
+        faster.sendsPerHour = 20
+        #expect(faster.addsPower(over: base))
+        var slower = base
+        slower.sendsPerDay = 5
+        #expect(!slower.addsPower(over: base))
+    }
+
+    @Test func restrictingRecipientsIsFreeWideningIsNot() {
+        let open = Policy(enabledTools: [])
+        var restricted = open
+        restricted.allowedRecipients = ["anna@example.com"]
+        #expect(!restricted.addsPower(over: open))
+        #expect(open.addsPower(over: restricted))
+        var wider = restricted
+        wider.allowedRecipients.insert("bob@example.com")
+        #expect(wider.addsPower(over: restricted))
+        #expect(restricted.mayReceive("ANNA@example.com") && !restricted.mayReceive("bob@example.com"))
+        #expect(open.mayReceive("anyone@example.com"))
+    }
+}

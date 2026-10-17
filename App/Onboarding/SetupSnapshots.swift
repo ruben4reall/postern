@@ -1,6 +1,8 @@
 #if DEBUG
 import AppKit
+import PosternApproval
 import PosternAudit
+import PosternCompose
 import PosternBridge
 import PosternClients
 import PosternModel
@@ -51,6 +53,37 @@ enum SetupSnapshots {
         RunLoop.main.run(until: Date().addingTimeInterval(seconds))
     }
 
+    /// The approval panel with a sample reply, kept outside every display for `screencapture -l`.
+    static func holdApprovalPanel(dark: Bool, seconds: Double) {
+        _ = NSApplication.shared
+        NSApp.setActivationPolicy(.accessory)
+        let message = try! OutgoingMessage.make(
+            from: Address(name: nil, email: "ruben@example.ch"),
+            to: [Address(name: "Billing", email: "billing@pay-studio.example")],
+            cc: [Address(name: nil, email: "team@studio.example")],
+            subject: "Re: Invoice for September",
+            body: "Hello Anna,\n\nThanks for the invoice. The transfer will leave on Monday.\n\nBest,\nRuben",
+            quoted: "On Fri 17 Oct 2026, Anna Keller <anna@studio.example> wrote:\n> Please find the invoice attached.\n> Payment details changed, use the new account below.",
+            inReplyTo: "<abc@studio.example>"
+        )
+        let request = ApprovalRequest(
+            tool: "reply_to_message", client: "Claude Code", message: message,
+            badges: ["billing@pay-studio.example": [.replyToDiffers, .firstContact, .cameFromEmail], "team@studio.example": []],
+            context: "Reply to Anna Keller <anna@studio.example>: Invoice for September"
+        )
+        let view = ApprovalView(request: request, deadline: Date().addingTimeInterval(97)) { _ in }
+        let window = NSWindow(contentViewController: NSHostingController(rootView: view))
+        window.styleMask = [.titled, .closable, .fullSizeContentView]
+        window.titlebarAppearsTransparent = true
+        window.title = "Approve Email"
+        window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+        window.setFrameOrigin(NSPoint(x: -6000, y: -6000))
+        window.orderFrontRegardless()
+        print(window.windowNumber)
+        fflush(stdout)
+        RunLoop.main.run(until: Date().addingTimeInterval(seconds))
+    }
+
     static func sampleModel(pane: ControlModel.Pane) -> ControlModel {
         let pin = CertificatePin(sha256Hex: "7F2193528AB83E4142D113FCB7C8623A64EB7066AFBBC3650BF1F1A010547168")
         let home = ClientConnector.realHome
@@ -59,8 +92,9 @@ enum SetupSnapshots {
                 let model = ControlModel(live: false)
                 model.pane = pane
                 model.configured = true
-                model.policy = Policy(enabledTools: [.listMailboxes, .searchMessages, .getMessage],
-                                      hiddenMailboxes: ["Folders/Health"], pauseWhenLocked: true)
+                model.policy = Policy(enabledTools: [.listMailboxes, .searchMessages, .getMessage, .markRead, .archiveMessages, .createDraft, .sendMessage, .replyToMessage],
+                                      hiddenMailboxes: ["Folders/Health"], pauseWhenLocked: true,
+                                      trustedRecipients: ["ruben@example.ch"])
                 model.connectedApps = ["Claude Code", "Claude Code", "Codex"]
                 model.pin = pin
                 model.endpoint = BridgeEndpoint(imap: BridgePort(port: 1143, mode: .startTLS), smtp: BridgePort(port: 1025, mode: .implicit))

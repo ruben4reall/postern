@@ -140,6 +140,37 @@ final class ControlModel {
         await update("stop pausing Postern when the screen locks") { $0.pauseWhenLocked = value }
     }
 
+    func setLimits(perHour: Int, perDay: Int) async {
+        await update("let your apps send more emails") { policy in
+            policy.sendsPerHour = max(1, min(perHour, 100))
+            policy.sendsPerDay = max(policy.sendsPerHour, min(perDay, 500))
+        }
+    }
+
+    func trust(_ email: String) async {
+        let address = email.trimmingCharacters(in: .whitespaces).lowercased()
+        guard Self.looksLikeAnAddress(address) else { notice = "\(email) is not an email address."; return }
+        await update("send to \(address) without asking") { $0.trustedRecipients.insert(address) }
+    }
+
+    func untrust(_ email: String) async {
+        await update("") { $0.trustedRecipients.remove(email) }
+    }
+
+    func allow(_ email: String) async {
+        let address = email.trimmingCharacters(in: .whitespaces).lowercased()
+        guard Self.looksLikeAnAddress(address) else { notice = "\(email) is not an email address."; return }
+        await update("let your apps send to \(address)") { $0.allowedRecipients.insert(address) }
+    }
+
+    func disallow(_ email: String) async {
+        await update("let your apps send to anyone") { $0.allowedRecipients.remove(email) }
+    }
+
+    static func looksLikeAnAddress(_ text: String) -> Bool {
+        text.wholeMatch(of: #/[^@\s]+@[^@\s]+\.[A-Za-z]{2,}/#) != nil
+    }
+
     func setPasswordFallback(_ value: Bool) async {
         await update("allow your Mac password for Postern") { $0.allowPasswordFallback = value }
     }
@@ -220,6 +251,34 @@ struct ToolCopy {
             ToolCopy(title: "Create folders and labels", verb: "create folders and labels",
                      allows: "Create a new folder or label.",
                      risk: "New folders and labels appear in Proton on all your devices.")
+        case .createDraft:
+            ToolCopy(title: "Write drafts", verb: "write drafts",
+                     allows: "Save drafts in Drafts. Nothing is sent.",
+                     risk: "Drafts sync to Proton on all your devices.")
+        case .updateDraft:
+            ToolCopy(title: "Change drafts", verb: "change drafts",
+                     allows: "Rewrite a draft's recipients, subject or text.",
+                     risk: "It can change a draft you wrote yourself.")
+        case .deleteDraft:
+            ToolCopy(title: "Delete drafts", verb: "delete drafts",
+                     allows: "Delete a draft from Drafts. Claude Code also asks you each time.",
+                     risk: "A deleted draft is gone for good.")
+        case .sendMessage:
+            ToolCopy(title: "Send new emails", verb: "send emails",
+                     allows: "Write and send an email. Each one waits for you on the approval panel.",
+                     risk: "Once you approve, it leaves for good.")
+        case .replyToMessage:
+            ToolCopy(title: "Reply", verb: "reply to your mail",
+                     allows: "Answer a message, quoting it. Each reply waits for your approval.",
+                     risk: "Replies can go to a Reply-To address; the panel shows when it differs.")
+        case .forwardMessage:
+            ToolCopy(title: "Forward", verb: "forward your mail",
+                     allows: "Forward a message's text to someone. Each one waits for your approval.",
+                     risk: "The forwarded text leaves your mailbox.")
+        case .sendDraft:
+            ToolCopy(title: "Send drafts", verb: "send drafts",
+                     allows: "Send a draft as it is, after your approval, then remove it from Drafts.",
+                     risk: "Once you approve, it leaves for good.")
         }
     }
 }

@@ -141,6 +141,7 @@ public struct SanitizedHeaders: Codable, Sendable, Hashable {
     public var replyTo: [Address]
     public var to: [Address]
     public var cc: [Address]
+    public var bcc: [Address]
     public var date: Date?
     public var subject: String
     public var messageID: String?
@@ -149,7 +150,8 @@ public struct SanitizedHeaders: Codable, Sendable, Hashable {
     public var listUnsubscribe: [String]
 
     public init(
-        from: [Address] = [], replyTo: [Address] = [], to: [Address] = [], cc: [Address] = [], date: Date? = nil,
+        from: [Address] = [], replyTo: [Address] = [], to: [Address] = [], cc: [Address] = [], bcc: [Address] = [],
+        date: Date? = nil,
         subject: String = "", messageID: String? = nil, inReplyTo: String? = nil, references: [String] = [],
         listUnsubscribe: [String] = []
     ) {
@@ -157,6 +159,7 @@ public struct SanitizedHeaders: Codable, Sendable, Hashable {
         self.replyTo = replyTo
         self.to = to
         self.cc = cc
+        self.bcc = bcc
         self.date = date
         self.subject = subject
         self.messageID = messageID
