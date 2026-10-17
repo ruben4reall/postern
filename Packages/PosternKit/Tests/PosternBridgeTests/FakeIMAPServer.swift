@@ -40,14 +40,16 @@ final class FakeIMAPServer: @unchecked Sendable {
     private var channel: (any Channel)?
     let certificate: TestCertificate
     let behavior: Behavior
+    let store: FakeMailStore
 
     var plainLines: [String] { lock.withLock { _plainLines } }
     var tlsLines: [String] { lock.withLock { _tlsLines } }
     var port: Int { channel?.localAddress?.port ?? 0 }
 
-    init(behavior: Behavior = .normal) throws {
+    init(behavior: Behavior = .normal, store: FakeMailStore = FakeMailStore()) throws {
         certificate = try TestCertificate.make()
         self.behavior = behavior
+        self.store = store
     }
 
     func start() async throws {
@@ -72,6 +74,7 @@ final class FakeIMAPServer: @unchecked Sendable {
         let server: FakeIMAPServer
         var buffer = ""
         var encrypted = false
+        var selected = ""
 
         init(server: FakeIMAPServer) { self.server = server }
 
@@ -110,11 +113,87 @@ final class FakeIMAPServer: @unchecked Sendable {
                 encrypted = true
             case "LOGIN":
                 send(context, "\(tag) OK LOGIN completed")
+            case "LIST":
+                for name in server.store.mailboxNames {
+                    let attributes = name == "Folders" || name == "Labels" ? "\\Noselect" : "\\HasNoChildren"
+                    send(context, "* LIST (\(attributes)) \"/\" \"\(name)\"")
+                }
+                send(context, "\(tag) OK LIST completed")
+            case "EXAMINE", "SELECT":
+                selected = Self.quoted(parts[2]).first ?? parts[2]
+                server.store.record("\(parts[1].uppercased()) \(selected)")
+                send(context, "* \(server.store.members(of: selected).count) EXISTS")
+                send(context, "* OK [UIDVALIDITY 1] UIDs valid")
+                send(context, "\(tag) OK completed")
+            case "CREATE":
+                let name = Self.quoted(parts[2]).first ?? parts[2]
+                server.store.record("CREATE \(name)")
+                server.store.addMailbox(name)
+                send(context, "\(tag) OK CREATE completed")
+            case "UID":
+                handleUID(tag: tag, line: parts[2], context)
             case "LOGOUT":
                 send(context, "* BYE")
                 send(context, "\(tag) OK LOGOUT completed")
             default:
                 send(context, "\(tag) BAD unknown")
+            }
+        }
+
+        private func handleUID(tag: String, line: String, _ context: ChannelHandlerContext) {
+            let words = line.split(separator: " ", maxSplits: 2).map(String.init)
+            let store = server.store
+            switch words[0].uppercased() {
+            case "SEARCH":
+                let ids = Self.quoted(line)
+                let members = store.members(of: selected).filter { ids.isEmpty || ids.contains(store.messages[$0].messageID) }
+                send(context, "* SEARCH " + members.map { String(store.uid(of: $0, in: selected)) }.joined(separator: " "))
+                send(context, "\(tag) OK SEARCH completed")
+            case "FETCH":
+                for (sequence, uid) in Self.uids(words[1]).enumerated() {
+                    guard let index = store.index(ofUID: uid, in: selected) else { continue }
+                    let message = store.messages[index]
+                    let flags = message.flags.sorted().joined(separator: " ")
+                    send(context, "* \(sequence + 1) FETCH (UID \(uid) FLAGS (\(flags)) ENVELOPE (NIL NIL NIL NIL NIL NIL NIL NIL NIL \"\(message.messageID)\"))")
+                }
+                send(context, "\(tag) OK FETCH completed")
+            case "STORE":
+                store.record("STORE \(selected) \(words[1]) \(words[2])")
+                let on = words[2].hasPrefix("+")
+                let flag = words[2].contains("Seen") ? "\\Seen" : "\\Flagged"
+                for uid in Self.uids(words[1]) {
+                    if let index = store.index(ofUID: uid, in: selected) { store.setFlag(flag, on: on, index: index) }
+                }
+                send(context, "\(tag) OK STORE completed")
+            case "MOVE":
+                let destination = Self.quoted(words[2]).first ?? words[2]
+                store.record("MOVE \(selected) -> \(destination)")
+                var sources: [UInt32] = []
+                var targets: [UInt32] = []
+                for uid in Self.uids(words[1]) {
+                    guard let index = store.index(ofUID: uid, in: selected) else { continue }
+                    sources.append(uid)
+                    targets.append(store.move(index: index, from: selected, to: destination))
+                }
+                if !sources.isEmpty {
+                    let list = { (values: [UInt32]) in values.map(String.init).joined(separator: ",") }
+                    send(context, "* OK [COPYUID 1 \(list(sources)) \(list(targets))] Moved")
+                }
+                send(context, "\(tag) OK MOVE completed")
+            default:
+                send(context, "\(tag) BAD unknown")
+            }
+        }
+
+        static func quoted(_ text: String) -> [String] {
+            text.matches(of: #/"([^"]*)"/#).map { String($0.1) }.filter { $0.lowercased() != "message-id" }
+        }
+
+        static func uids(_ text: String) -> [UInt32] {
+            text.split(separator: ",").flatMap { part -> [UInt32] in
+                let bounds = part.split(separator: ":").compactMap { UInt32($0) }
+                guard let first = bounds.first else { return [] }
+                return Array(first...(bounds.last ?? first))
             }
         }
 
