@@ -2,9 +2,13 @@ node_modules/
 .next/
 dist/
 build/
+.build/
+.swiftpm/
+DerivedData/
+*.xcodeproj/
 .DS_Store
 
-# secrets : jamais versionnes
+# secrets: never versioned
 .env
 .env.*
 !.env.example
