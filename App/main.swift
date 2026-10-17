@@ -18,6 +18,11 @@ if let index = CommandLine.arguments.firstIndex(of: "--hold-control-window"), in
     }
     exit(0)
 }
+if let index = CommandLine.arguments.firstIndex(of: "--hold-approval-panel"), index + 1 < CommandLine.arguments.count {
+    let dark = CommandLine.arguments[index + 1] == "dark"
+    MainActor.assumeIsolated { SetupSnapshots.holdApprovalPanel(dark: dark, seconds: 6) }
+    exit(0)
+}
 if CommandLine.arguments.contains("--snapshot-setup") {
     MainActor.assumeIsolated { SetupSnapshots.write() }
     exit(0)

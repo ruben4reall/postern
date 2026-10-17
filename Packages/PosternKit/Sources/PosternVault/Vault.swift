@@ -9,6 +9,8 @@ public enum VaultKey: String, CaseIterable, Sendable {
     case policy
     /// Hash of the activity log's last line, so edits to the log file are detected.
     case activityHead = "activity-head"
+    /// When the last sends happened, for the hourly and daily limits.
+    case sendLedger = "send-ledger"
 }
 
 public enum VaultError: Error, Equatable, Sendable {
