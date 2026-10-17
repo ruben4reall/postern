@@ -94,8 +94,8 @@ The full threat model is in [docs/threat-model.md](docs/threat-model.md).
 
 You need macOS 26 or later and [Proton Mail Bridge](https://proton.me/mail/bridge), signed in, on the same Mac.
 
-1. Download `Postern.dmg` from the [latest release](https://github.com/ruben4reall/postern/releases/latest). It is
-   signed with a Developer ID and notarized by Apple.
+1. Download the disk image from the [latest release](https://github.com/ruben4reall/postern/releases/latest). It
+   is signed with a Developer ID and notarized by Apple; its SHA-256 is listed next to it.
 2. Drag Postern to Applications and open it.
 
 Postern adds a background item that starts it when an app connects, even with its window closed. You can see it in
