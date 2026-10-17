@@ -1,4 +1,5 @@
 import Foundation
+import OSLog
 import PosternBridge
 import PosternModel
 import PosternServer
@@ -27,6 +28,7 @@ struct LiveBackend: MailBackend {
 
 /// The mailbox over Bridge, with every message body decoded in the sandboxed parser service.
 final class BridgeBackend: MailBackend, Sendable {
+    static let log = Logger(subsystem: "ch.rubencatalao.postern", category: "bridge")
     static let maxMessageBytes = 25_000_000
     static let maxThreadMessages = 20
 
@@ -70,7 +72,10 @@ final class BridgeBackend: MailBackend, Sendable {
 
     func message(_ id: MessageID, maxChars: Int) async throws -> SanitizedMessage {
         let raw = try await rawMessage(id)
-        return try await parser.sanitize(raw, maxChars: maxChars)
+        let message = try await parser.sanitize(raw, maxChars: maxChars)
+        // Server names that wrote Authentication-Results headers: hostnames only, never content.
+        Self.log.info("Sender verdict \(message.verdict.level.rawValue, privacy: .public), authserv ids \(message.verdict.authservIDsSeen.joined(separator: ","), privacy: .public), forged \(message.verdict.forgedHeaderSeen, privacy: .public)")
+        return message
     }
 
     func thread(_ id: MessageID) async throws -> [MessageSummary] {
@@ -117,6 +122,8 @@ final class BridgeBackend: MailBackend, Sendable {
         do {
             return try await operation()
         } catch let error as BridgeError {
+            // The exact Bridge failure, for diagnosis. It never contains a secret or message content.
+            Self.log.error("Bridge operation failed: \(String(describing: error), privacy: .public)")
             throw Self.translate(error)
         }
     }

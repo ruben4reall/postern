@@ -4,11 +4,13 @@ import PosternText
 
 /// Decides how far the sender of a message can be trusted, from what Proton recorded on delivery.
 ///
-/// Only `Authentication-Results` headers that carry Proton's identity and sit above the first `Received` header
-/// count: a receiving server prepends its results, so anything below was already in the message when it arrived
-/// and may have been written by the sender.
+/// Bridge rebuilds the header block, so position proves nothing: on real messages, Proton's own `Received` comes
+/// first, then the sender's `Received` headers, then one `Authentication-Results` header per method (dmarc, spf, arc,
+/// dkim) written by Proton, and Bridge's `X-Pm-*` headers last. Proton writes each method exactly once, so a second
+/// header for the same method under Proton's name can only have come from the sender: the message is then treated as
+/// failed and the forgery reported.
 public struct SenderVerdictEngine: Sendable {
-    /// Confirmed on a real message in lot 1; kept in one place so a correction is one line.
+    /// Confirmed on real messages served by Bridge 03.27.01 (17.10.2026).
     public static let authservID = "mail.protonmail.ch"
 
     public init() {}
@@ -16,15 +18,13 @@ public struct SenderVerdictEngine: Sendable {
     public func verdict(headers: [HeaderField], from: [Address]) -> SenderVerdict {
         var reasons: [String] = []
         var seenIDs: [String] = []
-        var forged = false
         var results: [String: [String]] = [:]
-        var reachedReceived = false
+        var headersPerMethod: [String: Int] = [:]
         var externalHop = false
 
         for field in headers {
             let name = field.name.lowercased()
             if name == "received" {
-                reachedReceived = true
                 if Self.isExternalHop(field.value) { externalHop = true }
                 continue
             }
@@ -32,12 +32,10 @@ public struct SenderVerdictEngine: Sendable {
             let parsed = Self.parseAuthenticationResults(field.value)
             if !seenIDs.contains(parsed.id) { seenIDs.append(parsed.id) }
             guard parsed.id == Self.authservID else { continue }
-            if reachedReceived {
-                forged = true
-                continue
-            }
+            for method in Set(parsed.results.map(\.0)) { headersPerMethod[method, default: 0] += 1 }
             for (method, result) in parsed.results { results[method, default: []].append(result) }
         }
+        let forged = headersPerMethod.values.contains { $0 > 1 }
 
         func best(_ method: String) -> String? {
             guard let values = results[method] else { return nil }
@@ -47,12 +45,16 @@ public struct SenderVerdictEngine: Sendable {
         let spf = best("spf")
         let dkim = best("dkim")
         let dmarc = best("dmarc")
-        let origin = headers.first { $0.name.lowercased() == "x-pm-origin" }?.value.lowercased()
+        // Bridge appends its X-Pm headers after the message's own: the last one is Bridge's.
+        let origin = headers.last { $0.name.lowercased() == "x-pm-origin" }?.value.lowercased()
+            .trimmingCharacters(in: .whitespaces)
 
         if forged { reasons.append("An Authentication-Results header claiming Proton was written by the sender.") }
 
         let level: SenderVerdict.Level
-        if origin == "internal" && !externalHop {
+        if forged {
+            level = .failed
+        } else if origin == "internal" && !externalHop {
             level = .internal
         } else if dmarc == "pass" {
             level = .verified

@@ -68,6 +68,7 @@ let package = Package(
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
                 .product(name: "NIOIMAP", package: "swift-nio-imap"),
+                .product(name: "NIOEmbedded", package: "swift-nio"),
             ]
         ),
         .testTarget(name: "PosternPolicyTests", dependencies: ["PosternPolicy", "PosternVault"]),

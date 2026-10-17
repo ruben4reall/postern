@@ -113,7 +113,7 @@ public actor IMAPConnection {
 
     public func mailboxes(refresh: Bool = false) async throws -> [BridgeMailbox] {
         if !refresh, !mailboxCache.isEmpty { return Array(mailboxCache.values) }
-        let reply = try await send(.list(nil, reference: MailboxName(ByteBuffer()), .pattern([ByteBuffer(string: "*")])))
+        let reply = try await send(Self.listAllCommand)
         guard reply.isOK else { throw BridgeError.commandFailed(reply.tagged.state.text) }
         var found: [String: BridgeMailbox] = [:]
         for case .untagged(.mailboxData(.list(let info))) in reply.responses {
@@ -236,6 +236,9 @@ public actor IMAPConnection {
         defer { timer.cancel() }
         return try await promise.futureResult.get()
     }
+
+    /// `LIST "" "*"`. The `.pattern` form writes `("*")`, an RFC 5258 extension that Bridge rejects.
+    static let listAllCommand = Command.list(nil, reference: MailboxName(ByteBuffer()), .mailbox(ByteBuffer(string: "*")))
 
     static func uidSet(_ uids: [UInt32]) -> MessageIdentifierSetNonEmpty<UID>? {
         let ranges = uids.map { MessageIdentifierRange<UID>(UID(rawValue: $0)...UID(rawValue: $0)) }
