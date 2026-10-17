@@ -1,0 +1,10 @@
+node_modules/
+.next/
+dist/
+build/
+.DS_Store
+
+# secrets : jamais versionnes
+.env
+.env.*
+!.env.example
