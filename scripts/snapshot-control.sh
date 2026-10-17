@@ -16,4 +16,13 @@ for appearance in light dark; do
     rm -f "$ids"
   done
 done
+for appearance in light dark; do
+  ids=$(mktemp)
+  "$binary" --hold-approval-panel "$appearance" > "$ids" 2>/dev/null &
+  for i in {1..30}; do [ -s "$ids" ] && break; sleep 0.3; done
+  sleep 1.5
+  screencapture -l "$(head -1 "$ids")" -o -x "$out/approval-$appearance.png"
+  wait
+  rm -f "$ids"
+done
 ls "$out"

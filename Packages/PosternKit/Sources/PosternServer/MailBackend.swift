@@ -1,4 +1,6 @@
 import Foundation
+import PosternApproval
+import PosternCompose
 import PosternModel
 
 /// The mailbox as the MCP tools see it. The app implements it over Bridge and the parser service.
@@ -17,6 +19,24 @@ public protocol MailBackend: Sendable {
     func addLabel(_ ids: [MessageID], label: String) async throws -> ChangeReport
     func removeLabel(_ ids: [MessageID], label: String) async throws -> ChangeReport
     func createMailbox(_ name: String) async throws -> MailboxInfo
+
+    // Drafts and sending.
+    /// The address mail is sent from: the Bridge account.
+    func ownAddress() async throws -> Address
+    /// Whether Sent holds a message to this address.
+    func hasSentTo(_ email: String) async throws -> Bool
+    /// Saves a draft in Drafts and returns its id.
+    func saveDraft(_ message: OutgoingMessage) async throws -> MessageID
+    /// Deletes one message of the Drafts mailbox.
+    func deleteDraft(_ id: MessageID) async throws
+    /// Sends an approved message through Bridge.
+    func send(_ message: ApprovedMessage) async throws
+}
+
+/// Where recent sends are counted, out of the client's reach.
+public protocol SendLedger: Sendable {
+    func recentSends() -> [Date]
+    func recordSend(at date: Date)
 }
 
 public enum MessageFlag: String, Sendable {

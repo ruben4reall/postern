@@ -67,6 +67,15 @@ final class FakeMailStore: @unchecked Sendable {
         }
     }
 
+    /// Removes a message for good. Indexes of later messages shift, so UID maps are rebuilt for them.
+    func remove(index: Int) {
+        lock.withLock {
+            messages[index].folder = "(removed)"
+            messages[index].labels = []
+            messages[index].flags = []
+        }
+    }
+
     func setFlag(_ flag: String, on: Bool, index: Int) {
         lock.withLock {
             if on { messages[index].flags.insert(flag) } else { messages[index].flags.remove(flag) }

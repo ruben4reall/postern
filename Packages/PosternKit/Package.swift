@@ -15,6 +15,8 @@ let package = Package(
         .library(name: "PosternServer", targets: ["PosternServer"]),
         .library(name: "PosternAudit", targets: ["PosternAudit"]),
         .library(name: "PosternClients", targets: ["PosternClients"]),
+        .library(name: "PosternCompose", targets: ["PosternCompose"]),
+        .library(name: "PosternApproval", targets: ["PosternApproval"]),
     ],
     dependencies: [
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", exact: "0.12.1"),
@@ -38,7 +40,7 @@ let package = Package(
         .target(
             name: "PosternBridge",
             dependencies: [
-                "PosternModel", "PosternText",
+                "PosternModel", "PosternText", "PosternCompose", "PosternApproval",
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
@@ -54,7 +56,7 @@ let package = Package(
         .target(
             name: "PosternServer",
             dependencies: [
-                "PosternModel", "PosternText", "PosternPolicy",
+                "PosternModel", "PosternText", "PosternPolicy", "PosternCompose", "PosternApproval",
                 .product(name: "MCP", package: "swift-sdk"),
                 .product(name: "Logging", package: "swift-log"),
             ]
@@ -63,6 +65,12 @@ let package = Package(
         .target(name: "PosternAudit"),
         // Adds Postern to the configuration files of MCP clients. No I/O: callers read and write the files.
         .target(name: "PosternClients"),
+        // Outgoing mail: validation, rendering, and the digest an approval binds to.
+        .target(name: "PosternCompose", dependencies: ["PosternModel", "PosternText"]),
+        // The only producer of an ApprovedMessage: the user saw everything and proved it was them.
+        .target(name: "PosternApproval", dependencies: ["PosternCompose", "PosternModel"]),
+        .testTarget(name: "PosternComposeTests", dependencies: ["PosternCompose"]),
+        .testTarget(name: "PosternApprovalTests", dependencies: ["PosternApproval", "PosternCompose", "PosternModel"]),
         .testTarget(name: "PosternAuditTests", dependencies: ["PosternAudit"]),
         .testTarget(name: "PosternClientsTests", dependencies: ["PosternClients"]),
         .testTarget(name: "PosternModelTests", dependencies: ["PosternModel"]),
@@ -71,7 +79,7 @@ let package = Package(
         .testTarget(
             name: "PosternBridgeTests",
             dependencies: [
-                "PosternBridge",
+                "PosternBridge", "PosternCompose", "PosternApproval",
                 .product(name: "NIOCore", package: "swift-nio"),
                 .product(name: "NIOPosix", package: "swift-nio"),
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
@@ -80,7 +88,7 @@ let package = Package(
             ]
         ),
         .testTarget(name: "PosternPolicyTests", dependencies: ["PosternPolicy", "PosternVault"]),
-        .testTarget(name: "PosternServerTests", dependencies: ["PosternServer", .product(name: "MCP", package: "swift-sdk")]),
+        .testTarget(name: "PosternServerTests", dependencies: ["PosternServer", "PosternApproval", "PosternCompose", .product(name: "MCP", package: "swift-sdk")]),
     ],
     swiftLanguageModes: [.v6]
 )

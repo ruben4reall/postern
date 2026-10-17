@@ -1,5 +1,6 @@
 import Foundation
 import MCP
+import PosternApproval
 import PosternModel
 import PosternPolicy
 
@@ -14,18 +15,27 @@ public actor Session {
     private let policy: @Sendable () -> Policy
     private let readiness: @Sendable () -> PosternError?
     private let onCall: @Sendable (ToolCallReport) -> Void
+    private let desk: ApprovalDesk?
+    private let ledger: (any SendLedger)?
+    private let clientName: @Sendable () -> String
+    private let provenance = Provenance()
 
     /// - Parameter readiness: returns why Postern cannot serve yet (not configured, paused), or nil when it can.
     public init(
         transport: any Transport, backend: any MailBackend, version: String,
         policy: @escaping @Sendable () -> Policy, readiness: @escaping @Sendable () -> PosternError? = { nil },
-        onCall: @escaping @Sendable (ToolCallReport) -> Void = { _ in }
+        onCall: @escaping @Sendable (ToolCallReport) -> Void = { _ in },
+        desk: ApprovalDesk? = nil, ledger: (any SendLedger)? = nil,
+        clientName: @escaping @Sendable () -> String = { "MCP client" }
     ) {
         self.transport = transport
         self.backend = backend
         self.policy = policy
         self.readiness = readiness
         self.onCall = onCall
+        self.desk = desk
+        self.ledger = ledger
+        self.clientName = clientName
         self.server = Server(
             name: Self.serverName, version: version, title: "Postern",
             instructions: ServerInstructions.text,
@@ -38,12 +48,13 @@ public actor Session {
         let readiness = self.readiness
         let backend = self.backend
         let onCall = self.onCall
+        let context = SendContext(desk: desk, ledger: ledger, provenance: provenance, clientName: clientName)
         await server.withMethodHandler(ListTools.self) { _ in
             guard readiness() == nil, !policy().paused else { return ListTools.Result(tools: []) }
             return ListTools.Result(tools: ToolCatalog.tools(for: policy()))
         }
         await server.withMethodHandler(CallTool.self) { parameters in
-            let result = await Self.call(parameters, backend: backend, policy: policy(), readiness: readiness())
+            let result = await Self.call(parameters, backend: backend, policy: policy(), readiness: readiness(), send: context)
             onCall(ToolCallReport(tool: parameters.name, result: result))
             return result
         }
@@ -59,8 +70,16 @@ public actor Session {
         try? await server.notify(ToolListChangedNotification.message())
     }
 
+    struct SendContext: Sendable {
+        let desk: ApprovalDesk?
+        let ledger: (any SendLedger)?
+        let provenance: Provenance
+        let clientName: @Sendable () -> String
+    }
+
     static func call(
-        _ parameters: CallTool.Parameters, backend: any MailBackend, policy: Policy, readiness: PosternError?
+        _ parameters: CallTool.Parameters, backend: any MailBackend, policy: Policy, readiness: PosternError?,
+        send: SendContext
     ) async -> CallTool.Result {
         do {
             if let readiness { throw readiness }
@@ -73,9 +92,19 @@ public actor Session {
             }
             let arguments = parameters.arguments ?? [:]
             switch tool.tier {
-            case .read: return try await ReadTools(backend: backend, policy: policy).call(tool, arguments)
-            case .organize: return try await OrganizeTools(backend: backend, policy: policy).call(tool, arguments)
-            case .draft, .send, .delete:
+            case .read:
+                return try await ReadTools(backend: backend, policy: policy, provenance: send.provenance).call(tool, arguments)
+            case .organize:
+                return try await OrganizeTools(backend: backend, policy: policy).call(tool, arguments)
+            case .draft, .send:
+                guard let desk = send.desk, let ledger = send.ledger else {
+                    throw PosternError(.policyDisabled, "\(tool.rawValue) is not available here.")
+                }
+                return try await SendTools(
+                    backend: backend, policy: policy, desk: desk, ledger: ledger, provenance: send.provenance,
+                    client: send.clientName()
+                ).call(tool, arguments)
+            case .delete:
                 throw PosternError(.policyDisabled, "\(tool.rawValue) is not available in this version.")
             }
         } catch let error as PosternError {

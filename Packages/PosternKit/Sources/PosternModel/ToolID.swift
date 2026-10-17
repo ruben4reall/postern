@@ -17,12 +17,21 @@ public enum ToolID: String, Codable, Sendable, CaseIterable {
     case addLabel = "add_label"
     case removeLabel = "remove_label"
     case createMailbox = "create_mailbox"
+    case createDraft = "create_draft"
+    case updateDraft = "update_draft"
+    case deleteDraft = "delete_draft"
+    case sendMessage = "send_message"
+    case replyToMessage = "reply_to_message"
+    case forwardMessage = "forward_message"
+    case sendDraft = "send_draft"
 
     public var tier: Tier {
         switch self {
         case .listMailboxes, .searchMessages, .getMessage, .getThread: .read
         case .markRead, .markUnread, .setStarred, .moveMessages, .archiveMessages, .addLabel, .removeLabel,
              .createMailbox: .organize
+        case .createDraft, .updateDraft, .deleteDraft: .draft
+        case .sendMessage, .replyToMessage, .forwardMessage, .sendDraft: .send
         }
     }
 }

@@ -3,6 +3,8 @@ import MCP
 import Testing
 import PosternModel
 import PosternPolicy
+import PosternCompose
+@testable import PosternApproval
 @testable import PosternServer
 
 final class FakeBackend: MailBackend, @unchecked Sendable {
@@ -23,7 +25,8 @@ final class FakeBackend: MailBackend, @unchecked Sendable {
     }
 
     func message(_ id: MessageID, maxChars: Int) async throws -> SanitizedMessage {
-        SanitizedMessage(
+        if id.mailbox == "INBOX" && id.uid == 77 { return lock.withLock { original } }
+        return SanitizedMessage(
             headers: SanitizedHeaders(from: [Address(name: "Eve", email: "eve@evil.example")], subject: "Hi"),
             body: body, bodyTruncated: false, bodyWasHTML: false, hiddenElementsRemoved: 2, imagesOmitted: 0,
             links: [], attachments: [],
@@ -58,6 +61,28 @@ final class FakeBackend: MailBackend, @unchecked Sendable {
         lock.withLock { changes.append("remove \(label)") }
         return ChangeReport(done: ids, failed: [], verified: true)
     }
+
+    var sent: [OutgoingMessage] = []
+    var drafts: [OutgoingMessage] = []
+    var deletedDrafts: [MessageID] = []
+    var contacted: Set<String> = ["known@example.com"]
+    var original = SanitizedMessage(
+        headers: SanitizedHeaders(from: [Address(name: "Anna", email: "anna@example.com")], replyTo: [Address(name: nil, email: "elsewhere@evil.example")],
+                                  to: [Address(name: nil, email: "me@example.ch"), Address(name: nil, email: "colleague@example.com")],
+                                  subject: "Invoice", messageID: "<orig@example.com>"),
+        body: "Please pay to iban@evil.example today.", bodyTruncated: false, bodyWasHTML: false, hiddenElementsRemoved: 0,
+        imagesOmitted: 0, links: [], attachments: [],
+        verdict: SenderVerdict(level: .verified, spf: nil, dkim: nil, dmarc: nil, origin: nil, reasons: [], forgedHeaderSeen: false, authservIDsSeen: [])
+    )
+
+    func ownAddress() async throws -> Address { Address(name: "Me", email: "me@example.ch") }
+    func hasSentTo(_ email: String) async throws -> Bool { lock.withLock { contacted.contains(email) } }
+    func saveDraft(_ message: OutgoingMessage) async throws -> MessageID {
+        lock.withLock { drafts.append(message) }
+        return MessageID(mailbox: "Drafts", uidValidity: 1, uid: UInt32(drafts.count))
+    }
+    func deleteDraft(_ id: MessageID) async throws { lock.withLock { deletedDrafts.append(id) } }
+    func send(_ message: ApprovedMessage) async throws { lock.withLock { sent.append(message.message) } }
 
     func createMailbox(_ name: String) async throws -> MailboxInfo {
         lock.withLock { changes.append("create \(name)") }
@@ -190,7 +215,7 @@ final class Reports: @unchecked Sendable {
     }
 
     var organizePolicy: Policy {
-        Policy(enabledTools: Set(ToolID.allCases), hiddenMailboxes: ["Folders/Secret"])
+        Policy(enabledTools: Set(ToolID.allCases.filter { $0.tier == .read || $0.tier == .organize }), hiddenMailboxes: ["Folders/Secret"])
     }
 
     @Test func organizeToolsAppearOnlyWhenEnabled() async throws {
@@ -270,5 +295,170 @@ final class Reports: @unchecked Sendable {
             let (_, isError) = try await client.callTool(name: "create_mailbox", arguments: ["kind": .string(kind), "name": .string(name)])
             #expect(isError == true)
         }
+    }
+
+}
+
+final class CapturingPresenter: ApprovalPresenter, @unchecked Sendable {
+    let intent: ApprovalIntent?
+    let lock = NSLock()
+    var requests: [ApprovalRequest] = []
+
+    init(_ intent: ApprovalIntent?) { self.intent = intent }
+
+    func present(_ request: ApprovalRequest, deadline: Date) async -> ApprovalIntent {
+        lock.withLock { requests.append(request) }
+        guard let intent else {
+            while !Task.isCancelled { try? await Task.sleep(for: .milliseconds(10)) }
+            return .reject(reason: nil)
+        }
+        return intent
+    }
+}
+
+struct AlwaysAuthenticated: Authenticating {
+    func confirm(reason: String) async -> Bool { true }
+}
+
+final class MemoryLedger: SendLedger, @unchecked Sendable {
+    let lock = NSLock()
+    var dates: [Date] = []
+    func recentSends() -> [Date] { lock.withLock { dates } }
+    func recordSend(at date: Date) { lock.withLock { dates.append(date) } }
+}
+
+@Suite struct SendToolTests {
+    let everything = Policy(enabledTools: Set(ToolID.allCases))
+
+    func connect(
+        policy: Policy? = nil, intent: ApprovalIntent? = .send, backend: FakeBackend = FakeBackend(),
+        ledger: MemoryLedger = MemoryLedger(), timeout: Duration = .seconds(5)
+    ) async throws -> (Client, CapturingPresenter) {
+        let presenter = CapturingPresenter(intent)
+        let desk = ApprovalDesk(presenter: presenter, authenticator: AlwaysAuthenticated(), timeout: timeout)
+        let (clientTransport, serverTransport) = await InMemoryTransport.createConnectedPair()
+        let chosen = policy ?? everything
+        let session = Session(transport: serverTransport, backend: backend, version: "test", policy: { chosen },
+                              desk: desk, ledger: ledger, clientName: { "Claude Code" })
+        try await session.start()
+        let client = Client(name: "test", version: "1")
+        _ = try await client.connect(transport: clientTransport)
+        return (client, presenter)
+    }
+
+    func text(_ content: [Tool.Content]) -> String {
+        content.compactMap { if case .text(let text, _, _) = $0 { text } else { nil } }.joined()
+    }
+
+    func send(_ client: Client, to: String = "known@example.com", subject: String = "Hi") async throws -> (String, Bool?) {
+        let (content, isError) = try await client.callTool(
+            name: "send_message", arguments: ["to": .array([.string(to)]), "subject": .string(subject), "body": .string("Hello")]
+        )
+        return (text(content), isError)
+    }
+
+    @Test func sendToolsAskEveryTimeInClaudeCode() async throws {
+        let (client, _) = try await connect()
+        let tools = try await client.listTools().tools
+        #expect(tools.count == ToolID.allCases.count)
+        for name in ["send_message", "reply_to_message", "forward_message", "send_draft", "delete_draft"] {
+            let tool = try #require(tools.first { $0.name == name })
+            #expect(tool._meta?["anthropic/requiresUserInteraction"] == .bool(true))
+        }
+        #expect(tools.first { $0.name == "send_message" }?.annotations.destructiveHint == true)
+    }
+
+    @Test func sendsOnlyWhatTheUserApproved() async throws {
+        let backend = FakeBackend()
+        let ledger = MemoryLedger()
+        let (client, presenter) = try await connect(backend: backend, ledger: ledger)
+        let (output, isError) = try await send(client)
+        #expect(isError != true && output.contains("approved it with Touch ID"))
+        let shown = try #require(presenter.lock.withLock { presenter.requests.first })
+        let sent = try #require(backend.lock.withLock { backend.sent.first })
+        #expect(sent.digest == shown.digest)
+        #expect(shown.client == "Claude Code")
+        #expect(ledger.recentSends().count == 1)
+    }
+
+    @Test func rejectionExpiryAndDraftSendNothing() async throws {
+        for (intent, code) in [(ApprovalIntent.reject(reason: "Not now"), "approval_rejected"), (nil, "approval_timeout")] {
+            let backend = FakeBackend()
+            let (client, _) = try await connect(intent: intent, backend: backend, timeout: .milliseconds(200))
+            let (output, isError) = try await send(client)
+            #expect(isError == true && output.hasPrefix(code))
+            #expect(backend.lock.withLock { backend.sent }.isEmpty)
+        }
+        let backend = FakeBackend()
+        let (client, _) = try await connect(intent: .saveAsDraft, backend: backend)
+        let (output, isError) = try await send(client)
+        #expect(isError != true && output.contains("draft"))
+        #expect(backend.lock.withLock { backend.sent }.isEmpty && backend.lock.withLock { backend.drafts }.count == 1)
+    }
+
+    @Test func trustedRecipientsSkipThePanel() async throws {
+        let backend = FakeBackend()
+        var policy = everything
+        policy.trustedRecipients = ["known@example.com"]
+        let (client, presenter) = try await connect(policy: policy, intent: .reject(reason: nil), backend: backend)
+        let (output, _) = try await send(client)
+        #expect(output.contains("trusted list"))
+        #expect(presenter.lock.withLock { presenter.requests }.isEmpty)
+        #expect(backend.lock.withLock { backend.sent }.count == 1)
+    }
+
+    @Test func allowedListAndQuotaRefuseBeforeAnyPanel() async throws {
+        var restricted = everything
+        restricted.allowedRecipients = ["known@example.com"]
+        let (client, presenter) = try await connect(policy: restricted)
+        let (output, isError) = try await send(client, to: "stranger@example.net")
+        #expect(isError == true && output.hasPrefix("recipient_not_allowed"))
+        #expect(presenter.lock.withLock { presenter.requests }.isEmpty)
+
+        let ledger = MemoryLedger()
+        for _ in 0..<10 { ledger.recordSend(at: Date()) }
+        let (busy, busyPresenter) = try await connect(ledger: ledger)
+        let (quota, quotaError) = try await send(busy)
+        #expect(quotaError == true && quota.hasPrefix("quota_exceeded"))
+        #expect(busyPresenter.lock.withLock { busyPresenter.requests }.isEmpty)
+    }
+
+    @Test func badgesAnAddressThatCameFromAnEmail() async throws {
+        let (client, presenter) = try await connect()
+        _ = try await client.callTool(name: "get_message", arguments: ["id": .string(MessageID(mailbox: "INBOX", uidValidity: 1, uid: 77).opaque)])
+        _ = try await send(client, to: "iban@evil.example")
+        let request = try #require(presenter.lock.withLock { presenter.requests.first })
+        #expect(request.badges["iban@evil.example"] == [.firstContact, .cameFromEmail])
+    }
+
+    @Test func replyGoesToReplyToAndSaysItDiffers() async throws {
+        let backend = FakeBackend()
+        let (client, presenter) = try await connect(backend: backend)
+        let original = MessageID(mailbox: "INBOX", uidValidity: 1, uid: 77)
+        _ = try await client.callTool(name: "reply_to_message", arguments: ["id": .string(original.opaque), "body": .string("Will do"), "reply_all": .bool(true)])
+        let request = try #require(presenter.lock.withLock { presenter.requests.first })
+        #expect(request.message.to.map(\.email) == ["elsewhere@evil.example"])
+        #expect(request.message.cc.map(\.email) == ["colleague@example.com"])
+        #expect(request.message.subject == "Re: Invoice")
+        #expect(request.message.inReplyTo == "<orig@example.com>")
+        #expect(request.message.quoted?.contains("> Please pay") == true)
+        #expect(request.badges["elsewhere@evil.example"]?.contains(.replyToDiffers) == true)
+    }
+
+    @Test func refusesLineBreaksInTheSubject() async throws {
+        let (client, presenter) = try await connect()
+        let (output, isError) = try await send(client, subject: "Hi\r\nBcc: x@evil.example")
+        #expect(isError == true && output.hasPrefix("invalid_argument"))
+        #expect(presenter.lock.withLock { presenter.requests }.isEmpty)
+    }
+
+    @Test func draftsAreSavedAndSentDraftsRemoved() async throws {
+        let backend = FakeBackend()
+        let (client, _) = try await connect(backend: backend)
+        let (created, _) = try await client.callTool(name: "create_draft", arguments: ["to": .array([.string("known@example.com")]), "subject": .string("Later"), "body": .string("Draft")])
+        #expect(text(created).contains("Saved a draft"))
+        #expect(backend.lock.withLock { backend.drafts }.count == 1 && backend.lock.withLock { backend.sent }.isEmpty)
+        let (notDraft, isError) = try await client.callTool(name: "delete_draft", arguments: ["id": .string(MessageID(mailbox: "INBOX", uidValidity: 1, uid: 1).opaque)])
+        #expect(isError == true && text(notDraft).hasPrefix("invalid_argument"))
     }
 }

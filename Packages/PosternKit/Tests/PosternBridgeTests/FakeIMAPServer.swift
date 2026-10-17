@@ -82,15 +82,46 @@ final class FakeIMAPServer: @unchecked Sendable {
             send(context, "* OK [CAPABILITY AUTH=PLAIN IMAP4rev1 STARTTLS] Fake Bridge ready")
         }
 
+        var bytes: [UInt8] = []
+        var literalRemaining = 0
+        var literal: [UInt8] = []
+        var appendTag: String?
+        var appendMailbox = ""
+
         func channelRead(context: ChannelHandlerContext, data: NIOAny) {
-            var bytes = unwrapInboundIn(data)
-            buffer += bytes.readString(length: bytes.readableBytes) ?? ""
-            while let range = buffer.range(of: "\r\n") {
-                let line = String(buffer[..<range.lowerBound])
-                buffer.removeSubrange(..<range.upperBound)
+            var incoming = unwrapInboundIn(data)
+            bytes += incoming.readBytes(length: incoming.readableBytes) ?? []
+            while true {
+                if literalRemaining > 0 {
+                    guard !bytes.isEmpty else { return }
+                    let take = min(literalRemaining, bytes.count)
+                    literal += bytes.prefix(take)
+                    bytes.removeFirst(take)
+                    literalRemaining -= take
+                    continue
+                }
+                guard let end = bytes.indices.first(where: { $0 + 1 < bytes.count && bytes[$0] == 13 && bytes[$0 + 1] == 10 }) else { return }
+                let line = String(decoding: bytes[..<end], as: UTF8.self)
+                bytes.removeFirst(end + 2)
+                if let tag = appendTag {
+                    appendTag = nil
+                    finishAppend(tag: tag, context)
+                    continue
+                }
                 server.record(line, encrypted: encrypted)
                 handle(line, context)
             }
+        }
+
+        private func finishAppend(tag: String, _ context: ChannelHandlerContext) {
+            let text = String(decoding: literal, as: UTF8.self)
+            let messageID = text.firstMatch(of: #/Message-ID: (<[^>]+>)/#).map { String($0.1) } ?? "<none>"
+            server.store.record("APPEND \(appendMailbox) \(messageID)")
+            server.store.add(messageID, folder: appendMailbox, flags: ["\\Draft", "\\Seen"])
+            let index = server.store.messages.count - 1
+            let uid = server.store.uid(of: index, in: appendMailbox)
+            literal = []
+            send(context, "\(tag) OK [APPENDUID 1 \(uid)] APPEND completed")
         }
 
         private func handle(_ line: String, _ context: ChannelHandlerContext) {
@@ -125,6 +156,11 @@ final class FakeIMAPServer: @unchecked Sendable {
                 send(context, "* \(server.store.members(of: selected).count) EXISTS")
                 send(context, "* OK [UIDVALIDITY 1] UIDs valid")
                 send(context, "\(tag) OK completed")
+            case "APPEND":
+                appendMailbox = Self.quoted(parts[2]).first ?? "Drafts"
+                literalRemaining = Int(parts[2].firstMatch(of: #/\{(\d+)\}$/#).map { String($0.1) } ?? "0") ?? 0
+                appendTag = tag
+                send(context, "+ Ready for literal data")
             case "CREATE":
                 let name = Self.quoted(parts[2]).first ?? parts[2]
                 server.store.record("CREATE \(name)")
@@ -160,7 +196,7 @@ final class FakeIMAPServer: @unchecked Sendable {
             case "STORE":
                 store.record("STORE \(selected) \(words[1]) \(words[2])")
                 let on = words[2].hasPrefix("+")
-                let flag = words[2].contains("Seen") ? "\\Seen" : "\\Flagged"
+                let flag = words[2].contains("Seen") ? "\\Seen" : words[2].contains("Deleted") ? "\\Deleted" : "\\Flagged"
                 for uid in Self.uids(words[1]) {
                     if let index = store.index(ofUID: uid, in: selected) { store.setFlag(flag, on: on, index: index) }
                 }
@@ -180,6 +216,14 @@ final class FakeIMAPServer: @unchecked Sendable {
                     send(context, "* OK [COPYUID 1 \(list(sources)) \(list(targets))] Moved")
                 }
                 send(context, "\(tag) OK MOVE completed")
+            case "EXPUNGE":
+                store.record("EXPUNGE \(selected) \(words[1])")
+                for uid in Self.uids(words[1]) {
+                    if let index = store.index(ofUID: uid, in: selected), store.messages[index].flags.contains("\\Deleted") {
+                        store.remove(index: index)
+                    }
+                }
+                send(context, "\(tag) OK EXPUNGE completed")
             default:
                 send(context, "\(tag) BAD unknown")
             }

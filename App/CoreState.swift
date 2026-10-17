@@ -1,4 +1,5 @@
 import Foundation
+import PosternApproval
 import PosternAudit
 import PosternBridge
 import PosternModel
@@ -12,8 +13,11 @@ final class CoreState: @unchecked Sendable {
     static let accessGroup = "D8HG34L8XK.ch.rubencatalao.postern"
     static let activityRetention: TimeInterval = 90 * 24 * 3600
 
-    let vault: any SecretStore = KeychainVault(accessGroup: CoreState.accessGroup)
+    let vault: any SecretStore
     let activity: ActivityLog
+    let ledger: KeychainLedger
+    /// One desk for the whole app: one approval panel at a time, whatever the client.
+    let desk = ApprovalDesk(presenter: PanelPresenter(), authenticator: PolicyAuthenticator())
     private let lock = NSLock()
     private var _policy: Policy = .initial
     private var _backend: BridgeBackend?
@@ -22,6 +26,9 @@ final class CoreState: @unchecked Sendable {
     var onChange: (@Sendable () -> Void)?
 
     private init() {
+        let vault = KeychainVault(accessGroup: CoreState.accessGroup)
+        self.vault = vault
+        ledger = KeychainLedger(vault: vault)
         let support = FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
         activity = ActivityLog(
             fileURL: support.appendingPathComponent("Postern/activity.jsonl"), head: VaultHeadStore(vault: vault)
@@ -43,7 +50,7 @@ final class CoreState: @unchecked Sendable {
         if let endpoint = try? vault.read(.bridgeEndpoint, as: BridgeEndpoint.self),
            let pin = try? vault.read(.certificatePin, as: CertificatePin.self),
            let credentials = try? vault.read(.bridgeCredentials, as: BridgeCredentials.self) {
-            backend = BridgeBackend(client: BridgeClient(endpoint: endpoint, pin: pin, credentials: credentials))
+            backend = BridgeBackend(endpoint: endpoint, pin: pin, credentials: credentials)
         }
         let previous = lock.withLock { () -> BridgeBackend? in
             let old = _backend
@@ -97,4 +104,32 @@ struct VaultHeadStore: HeadStore {
 
     func load() -> String? { try? vault.read(.activityHead, as: String.self) }
     func save(_ hash: String) { try? vault.write(hash, for: .activityHead) }
+}
+
+/// Recent send times in the Keychain, so a client cannot reset the limits by touching a file.
+final class KeychainLedger: SendLedger, @unchecked Sendable {
+    private let vault: any SecretStore
+    private let lock = NSLock()
+
+    init(vault: any SecretStore) {
+        self.vault = vault
+    }
+
+    func recentSends() -> [Date] {
+        lock.withLock { ((try? vault.read(.sendLedger, as: [Date].self)) ?? []).filter { Date().timeIntervalSince($0) < 86_400 } }
+    }
+
+    func recordSend(at date: Date) {
+        lock.withLock {
+            let kept = ((try? vault.read(.sendLedger, as: [Date].self)) ?? []).filter { date.timeIntervalSince($0) < 86_400 }
+            try? vault.write(kept + [date], for: .sendLedger)
+        }
+    }
+}
+
+/// Touch ID or an Apple Watch; the Mac password only when the user allowed it.
+struct PolicyAuthenticator: Authenticating {
+    func confirm(reason: String) async -> Bool {
+        await Authenticator.confirm(reason, allowPassword: CoreState.shared.policy.allowPasswordFallback) == .confirmed
+    }
 }
