@@ -109,7 +109,7 @@ private struct OverviewPane: View {
     private var summary: String {
         if !model.configured { return "Run the setup to connect Postern to Proton Mail Bridge." }
         if model.policy.paused { return "Apps see no tool and every call is refused. Resuming asks for Touch ID." }
-        return "Apps can only use the tools you turned on. Nothing can be sent, moved or deleted."
+        return "Apps can only use the tools you turned on. Nothing can be sent or deleted."
     }
 
     private var appsText: String {
@@ -135,9 +135,15 @@ private struct ToolsPane: View {
             } footer: {
                 Text("Turning a tool on asks for Touch ID. Turning it off is immediate, and connected apps see the change at once.")
             }
-            UpcomingSection(title: "Organize", symbol: "folder",
-                            tools: ["Mark as read or unread", "Star", "Move and archive", "Add and remove labels"],
-                            note: "Changes how your mail is sorted, never what it says.")
+            Section {
+                ForEach(ToolID.allCases.filter { $0.tier == .organize }, id: \.self) { tool in
+                    ToolRow(tool: tool, model: model)
+                }
+            } header: {
+                Label("Organize", systemImage: "folder")
+            } footer: {
+                Text("Changes how your mail is sorted, never what it says. Postern moves a message from the folder it really lives in, so its labels are never lost, and reads Bridge again to confirm each change.")
+            }
             UpcomingSection(title: "Drafts", symbol: "square.and.pencil",
                             tools: ["Write drafts", "Edit and delete drafts"],
                             note: "Drafts wait in Proton until you send them yourself.")
