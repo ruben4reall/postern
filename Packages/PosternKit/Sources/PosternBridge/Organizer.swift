@@ -106,16 +106,14 @@ public struct Organizer: Sendable {
         for (folder, items) in Dictionary(grouping: located, by: \.folder) {
             _ = try await connection.select(folder)
             _ = try await connection.move(uids: items.map(\.uid), to: label)
-            result.done += items.map(\.id)
         }
-        // Read back: in the label, and still in its folder.
+        // Read back: in the label, and still in its folder, under the id the folder gives it now.
         for item in located {
-            guard let messageID = item.messageID else { continue }
             _ = try await connection.examine(label)
-            let inLabel = try await connection.uids(withMessageID: messageID)
-            _ = try await connection.examine(item.folder)
-            let inFolder = try await connection.uids(withMessageID: messageID)
-            if inLabel.isEmpty || inFolder.isEmpty { result.verified = false }
+            let inLabel = try await uids(of: item)
+            let current = try await currentID(of: item)
+            result.done.append(current ?? item.id)
+            if inLabel.isEmpty || current == nil { result.verified = false }
         }
         return result
     }
@@ -126,10 +124,11 @@ public struct Organizer: Sendable {
         let located = try await locate(ids, into: &result)
         _ = try await connection.examine(label)
         var inLabel: [(item: Located, labelUID: UInt32)] = []
+        var notLabelled: [Located] = []
         for item in located {
             guard let messageID = item.messageID,
                   let uid = try await connection.uids(withMessageID: messageID).first else {
-                result.done.append(item.id)
+                notLabelled.append(item)
                 continue
             }
             inLabel.append((item, uid))
@@ -137,18 +136,31 @@ public struct Organizer: Sendable {
         for (folder, entries) in Dictionary(grouping: inLabel, by: \.item.folder) {
             _ = try await connection.select(label)
             _ = try await connection.move(uids: entries.map(\.labelUID), to: folder)
-            result.done += entries.map(\.item.id)
         }
-        // Read back: gone from the label, still in its folder.
-        for entry in inLabel {
-            guard let messageID = entry.item.messageID else { continue }
+        // Read back: gone from the label, still in its folder. Bridge gives the message a new UID in its folder,
+        // so the id returned is the one the folder uses now.
+        for item in inLabel.map(\.item) + notLabelled {
             _ = try await connection.examine(label)
-            let stillLabelled = try await connection.uids(withMessageID: messageID)
-            _ = try await connection.examine(entry.item.folder)
-            let inFolder = try await connection.uids(withMessageID: messageID)
-            if !stillLabelled.isEmpty || inFolder.isEmpty { result.verified = false }
+            let stillLabelled = try await uids(of: item)
+            let current = try await currentID(of: item)
+            result.done.append(current ?? item.id)
+            if !stillLabelled.isEmpty || current == nil { result.verified = false }
         }
         return result
+    }
+
+    /// UIDs of the item's message in the mailbox examined last.
+    private func uids(of item: Located) async throws -> [UInt32] {
+        guard let messageID = item.messageID else { return [] }
+        return try await connection.uids(withMessageID: messageID)
+    }
+
+    /// The id that finds the message in its folder right now, or nil when the folder no longer shows it.
+    private func currentID(of item: Located) async throws -> PosternModel.MessageID? {
+        guard let messageID = item.messageID else { return nil }
+        let status = try await connection.examine(item.folder)
+        guard let uid = try await connection.uids(withMessageID: messageID).first else { return nil }
+        return PosternModel.MessageID(mailbox: item.folder.raw, uidValidity: status.uidValidity, uid: uid)
     }
 
     public func create(folder components: [String]) async throws -> BridgeMailbox {

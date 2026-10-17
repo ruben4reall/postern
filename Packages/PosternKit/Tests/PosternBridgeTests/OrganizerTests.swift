@@ -85,6 +85,20 @@ import PosternModel
         #expect(store.allCommands.contains("MOVE Labels/Work -> Archive"))
     }
 
+    @Test func idsReturnedAfterLabelChangesStillFindTheMessage() async throws {
+        let store = FakeMailStore()
+        store.add("<a@x>", folder: "INBOX", labels: ["Labels/Work"])
+        let (organizer, connection, server) = try await session(store)
+        defer { Task { await connection.close(); await server.stop() } }
+        let removed = try await organizer.removeLabel([id(store, "<a@x>", in: "INBOX")], label: try await mailbox(connection, "Labels/Work"))
+        let current = try #require(removed.done.first)
+        #expect(current.mailbox == "INBOX")
+        #expect(store.index(ofUID: current.uid, in: "INBOX") != nil)
+        let added = try await organizer.addLabel([current], label: try await mailbox(connection, "Labels/Work"))
+        let again = try #require(added.done.first)
+        #expect(store.index(ofUID: again.uid, in: "INBOX") != nil)
+    }
+
     @Test func refusesAnOutOfDateID() async throws {
         let store = FakeMailStore()
         store.add("<a@x>", folder: "INBOX")

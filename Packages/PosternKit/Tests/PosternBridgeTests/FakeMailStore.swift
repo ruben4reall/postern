@@ -83,6 +83,8 @@ final class FakeMailStore: @unchecked Sendable {
             } else {
                 messages[index].folder = destination
             }
+            // Like Bridge, a message moved into a mailbox gets a new UID there, even if it was already visible in it.
+            uids[destination]?[index] = nil
             return uidLocked(index, destination)
         }
     }
