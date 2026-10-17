@@ -129,6 +129,12 @@ extension IMAPConnection {
     /// Removes drafts from Drafts: flagged deleted, then expunged by UID so no other message is touched.
     /// Only ever called on the Drafts mailbox, which must be selected.
     public func deleteDrafts(uids: [UInt32]) async throws {
+        try await expunge(uids: uids)
+    }
+
+    /// Flags these UIDs of the selected mailbox deleted and expunges exactly them (UIDPLUS). Used for Drafts and for
+    /// approved erasure in Trash and Spam only.
+    func expunge(uids: [UInt32]) async throws {
         guard let set = Self.uidSet(uids) else { return }
         let flagged = try await sendCommand(.uidStore(.set(set), [], .flags(.add(silent: true, list: [.deleted]))))
         guard flagged.isOK else { throw BridgeError.commandFailed(flagged.tagged.state.text) }

@@ -92,6 +92,8 @@ public actor Session {
             }
             let arguments = parameters.arguments ?? [:]
             switch tool.tier {
+            case .read where tool == .saveAttachment:
+                return try await AttachmentTools(backend: backend, policy: policy).save(arguments)
             case .read:
                 return try await ReadTools(backend: backend, policy: policy, provenance: send.provenance).call(tool, arguments)
             case .organize:
@@ -105,7 +107,8 @@ public actor Session {
                     client: send.clientName()
                 ).call(tool, arguments)
             case .delete:
-                throw PosternError(.policyDisabled, "\(tool.rawValue) is not available in this version.")
+                guard let desk = send.desk else { throw PosternError(.policyDisabled, "\(tool.rawValue) is not available here.") }
+                return try await DeleteTools(backend: backend, policy: policy, desk: desk, client: send.clientName()).call(tool, arguments)
             }
         } catch let error as PosternError {
             return failure(error)

@@ -87,6 +87,8 @@ final class FakeMailStore: @unchecked Sendable {
         lock.withLock {
             let isLabel = { (name: String) in name.hasPrefix("Labels/") }
             if isLabel(source) { messages[index].labels.remove(source) }
+            // Bridge removes every label from a message added to Trash.
+            if destination == "Trash" { messages[index].labels = [] }
             if isLabel(destination) {
                 messages[index].labels.insert(destination)
             } else {

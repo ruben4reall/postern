@@ -1,6 +1,7 @@
 import Foundation
 import NIOCore
 import NIOIMAP
+import PosternApproval
 import PosternModel
 
 /// What a change did, message by message, and whether Postern saw the result when it read Bridge again.
@@ -161,6 +162,38 @@ public struct Organizer: Sendable {
         let status = try await connection.examine(item.folder)
         guard let uid = try await connection.uids(withMessageID: messageID).first else { return nil }
         return PosternModel.MessageID(mailbox: item.folder.raw, uidValidity: status.uidValidity, uid: uid)
+    }
+
+    // MARK: Deleting
+
+    /// Moves approved messages to Trash, from the folder they really live in. Proton removes their labels.
+    public func trash(_ approved: ApprovedDeletion) async throws -> OrganizeResult {
+        guard !approved.permanent else { throw BridgeError.commandFailed("This approval erases; it does not trash.") }
+        return try await move(approved.ids, to: try await connection.mailbox(named: "Trash"))
+    }
+
+    /// Erases approved messages for good. Only messages already in Trash or Spam qualify.
+    public func erase(_ approved: ApprovedDeletion) async throws -> OrganizeResult {
+        guard approved.permanent else { throw BridgeError.commandFailed("This approval trashes; it does not erase.") }
+        var result = OrganizeResult()
+        for (mailbox, group) in try await groups(approved.ids, into: &result) {
+            guard mailbox.display == "Trash" || mailbox.display == "Spam" else {
+                result.failed += group.map { .init(id: $0, reason: "Only messages in Trash or Spam can be erased.") }
+                continue
+            }
+            let status = try await connection.select(mailbox)
+            let (valid, stale) = group.partitioned { $0.uidValidity == status.uidValidity }
+            result.failed += stale.map { .init(id: $0, reason: "Out of date: search again.") }
+            guard !valid.isEmpty else { continue }
+            let messageIDs = try await connection.messageIDs(valid.map(\.uid))
+            try await connection.expunge(uids: valid.map(\.uid))
+            result.done += valid
+            for id in valid {
+                guard let messageID = messageIDs[id.uid] else { continue }
+                if !(try await connection.uids(withMessageID: messageID)).isEmpty { result.verified = false }
+            }
+        }
+        return result
     }
 
     public func create(folder components: [String]) async throws -> BridgeMailbox {

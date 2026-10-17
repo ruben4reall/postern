@@ -1,5 +1,6 @@
 import CryptoKit
 import Foundation
+import UniformTypeIdentifiers
 import PosternModel
 import PosternText
 
@@ -10,6 +11,30 @@ public enum ComposeError: Error, Equatable, Sendable {
     /// A line break in a header field: it would add headers the user never saw.
     case headerInjection
     case tooLong
+    case invalidFileName(String)
+}
+
+/// A file attached to an outgoing message. Its bytes are part of the digest the user approves.
+public struct OutgoingAttachment: Codable, Sendable, Equatable {
+    public let filename: String
+    public let mimeType: String
+    public let data: Data
+
+    public var sha256: String { SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined() }
+
+    /// Refuses names that could escape a folder or hide something: path separators, line breaks, invisible
+    /// characters, leading dots.
+    public static func make(filename: String, data: Data, mimeType: String? = nil) throws -> OutgoingAttachment {
+        let name = UnicodeCleaner.clean(filename, keepNewlines: false).trimmingCharacters(in: .whitespaces)
+        guard !name.isEmpty, name == filename.trimmingCharacters(in: .whitespaces), !name.hasPrefix("."),
+              name.count <= 200, !name.contains(where: { "/\\:".contains($0) }),
+              !OutgoingMessage.hasLineBreak(filename) else {
+            throw ComposeError.invalidFileName(filename)
+        }
+        let type = mimeType ?? UTType(filenameExtension: (name as NSString).pathExtension)?.preferredMIMEType
+            ?? "application/octet-stream"
+        return OutgoingAttachment(filename: name, mimeType: type, data: data)
+    }
 }
 
 /// A message about to leave, in its final form. It is rendered from this value alone, so the digest an approval
@@ -26,23 +51,27 @@ public struct OutgoingMessage: Codable, Sendable, Equatable {
     public var quoted: String?
     public var inReplyTo: String?
     public var references: [String]
+    public var attachments: [OutgoingAttachment]
     public let messageID: String
     public let date: Date
 
     public static let maxRecipients = 50
     public static let maxBodyCharacters = 200_000
+    public static let maxAttachmentBytes = 20_000_000
 
     /// Validates and cleans what a client asked for. Invisible characters are removed here, so the approval panel
     /// shows exactly the text that leaves.
     public static func make(
         from: Address, to: [Address], cc: [Address] = [], bcc: [Address] = [], subject: String, body: String,
-        quoted: String? = nil, inReplyTo: String? = nil, references: [String] = []
+        quoted: String? = nil, inReplyTo: String? = nil, references: [String] = [],
+        attachments: [OutgoingAttachment] = []
     ) throws -> OutgoingMessage {
         let all = to + cc + bcc
         guard !all.isEmpty else { throw ComposeError.noRecipient }
         guard all.count <= maxRecipients else { throw ComposeError.tooManyRecipients }
         guard !hasLineBreak(subject) else { throw ComposeError.headerInjection }
         guard body.count + (quoted?.count ?? 0) <= maxBodyCharacters else { throw ComposeError.tooLong }
+        guard attachments.reduce(0, { $0 + $1.data.count }) <= maxAttachmentBytes else { throw ComposeError.tooLong }
         let clean = { (list: [Address]) in try list.map(cleanAddress) }
         let sender = try cleanAddress(from)
         let domain = sender.email.split(separator: "@").last.map(String.init) ?? "postern.invalid"
@@ -51,7 +80,7 @@ public struct OutgoingMessage: Codable, Sendable, Equatable {
             subject: UnicodeCleaner.clean(subject, keepNewlines: false),
             body: UnicodeCleaner.clean(body), quoted: quoted.map { UnicodeCleaner.clean($0) },
             inReplyTo: try inReplyTo.map(cleanMessageID), references: try references.map(cleanMessageID),
-            messageID: "<\(UUID().uuidString.lowercased())@\(domain)>", date: Date()
+            attachments: attachments, messageID: "<\(UUID().uuidString.lowercased())@\(domain)>", date: Date()
         )
     }
 
@@ -85,8 +114,27 @@ public struct OutgoingMessage: Codable, Sendable, Equatable {
         headers.append("Message-ID: " + messageID)
         if let inReplyTo { headers.append("In-Reply-To: " + inReplyTo) }
         if !references.isEmpty { headers.append("References: " + references.joined(separator: " ")) }
-        headers += ["MIME-Version: 1.0", "Content-Type: text/plain; charset=utf-8", "Content-Transfer-Encoding: quoted-printable"]
-        let text = headers.joined(separator: "\r\n") + "\r\n\r\n" + QuotedPrintable.encode(fullText) + "\r\n"
+        headers.append("MIME-Version: 1.0")
+        let textPart = "Content-Type: text/plain; charset=utf-8\r\nContent-Transfer-Encoding: quoted-printable\r\n\r\n"
+            + QuotedPrintable.encode(fullText) + "\r\n"
+        guard !attachments.isEmpty else {
+            return Data((headers.joined(separator: "\r\n") + "\r\n" + textPart).utf8)
+        }
+        // The boundary derives from the Message-ID, so the same message always renders to the same bytes.
+        let boundary = "postern-" + SHA256.hash(data: Data(messageID.utf8)).prefix(12).map { String(format: "%02x", $0) }.joined()
+        headers.append("Content-Type: multipart/mixed; boundary=\"\(boundary)\"")
+        var text = headers.joined(separator: "\r\n") + "\r\n\r\n--\(boundary)\r\n" + textPart
+        for attachment in attachments {
+            let ascii = Self.asciiFileName(attachment.filename)
+            let encoded = attachment.filename.addingPercentEncoding(withAllowedCharacters: Self.attributeCharacters) ?? ascii
+            text += "--\(boundary)\r\n"
+            text += "Content-Type: \(attachment.mimeType); name=\"\(ascii)\"\r\n"
+            text += "Content-Disposition: attachment; filename=\"\(ascii)\"; filename*=utf-8''\(encoded)\r\n"
+            text += "Content-Transfer-Encoding: base64\r\n\r\n"
+            text += attachment.data.base64EncodedString(options: [.lineLength76Characters, .endLineWithCarriageReturn, .endLineWithLineFeed])
+            text += "\r\n"
+        }
+        text += "--\(boundary)--\r\n"
         return Data(text.utf8)
     }
 
@@ -113,6 +161,13 @@ public struct OutgoingMessage: Codable, Sendable, Equatable {
     }
 
     // MARK: Encoding
+
+    /// RFC 2231 attribute characters: everything else is percent-encoded.
+    static let attributeCharacters = CharacterSet(charactersIn: "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789!#$&+-.^_`|~")
+
+    static func asciiFileName(_ name: String) -> String {
+        String(name.unicodeScalars.filter { $0.isASCII && $0.value >= 32 && $0 != "\"" && $0 != "\\" }.map(Character.init))
+    }
 
     static func format(_ address: Address) -> String {
         guard let name = address.name else { return address.email }
