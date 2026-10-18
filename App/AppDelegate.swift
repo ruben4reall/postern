@@ -30,6 +30,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         }
         PosternFolders.prepare()
         control.updates = updates
+        updates.willRelaunch = { [weak self] in self?.closeModalsForUpdate() }
         CoreState.shared.reload()
         if launchedByAgent {
             listener.start()
@@ -117,6 +118,16 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// launch agent, or the copy running alone), replaces the app, and opens the new one, which registers the agent
     /// again if its plist changed and hands over to it (main.swift, AppHandoff).
     @objc func checkForUpdates() { updates.checkForUpdates() }
+
+    /// AppKit refuses to quit while a sheet or a modal panel is open: the setup, the question about automatic checks,
+    /// the folder picker of Connect. Sparkle's request to quit would beep and the update would wait. Close them first.
+    private func closeModalsForUpdate() {
+        if NSApp.modalWindow != nil { NSApp.abortModal() }
+        control.showingSetup = false
+        for window in NSApp.windows {
+            if let sheet = window.attachedSheet { window.endSheet(sheet) }
+        }
+    }
 
     @objc func openWebsite() { NSWorkspace.shared.open(Links.repository) }
     @objc func openSecurityPolicy() { NSWorkspace.shared.open(Links.securityPolicy) }
