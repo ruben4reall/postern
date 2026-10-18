@@ -3,8 +3,9 @@
 # Usage: dmgbuild -s scripts/dmg/settings.py -D app=<path to Postern.app> Postern <output.dmg>
 import os
 
+# dmgbuild runs this file with exec(): no __file__, only the -D values in `defines`. Paths are relative to the
+# repository root, where scripts/release.sh runs.
 application = defines["app"]  # noqa: F821 (provided by dmgbuild)
-here = os.path.dirname(os.path.abspath(__file__))
 
 format = "UDZO"
 compression_level = 9
@@ -12,7 +13,7 @@ filesystem = "HFS+"
 files = [application]
 symlinks = {"Applications": "/Applications"}
 icon = os.path.join(application, "Contents", "Resources", "Postern.icns")
-background = os.path.join(here, "background.tiff")
+background = defines.get("background", "scripts/dmg/background.tiff")  # noqa: F821
 window_rect = ((200, 140), (660, 420))
 default_view = "icon-view"
 show_toolbar = False
