@@ -7,10 +7,10 @@ options:
 settings:
   base:
     SWIFT_VERSION: "6.0"
-    MARKETING_VERSION: "0.1.0"
+    MARKETING_VERSION: "0.1.1"
     # The build number Sparkle compares to decide what is newer: a whole number, raised by one with every release
     # (0.1.0 shipped as 1). scripts/release.sh refuses a build number the appcast already has.
-    CURRENT_PROJECT_VERSION: "1"
+    CURRENT_PROJECT_VERSION: "2"
     DEVELOPMENT_TEAM: D8HG34L8XK
     CODE_SIGN_STYLE: Automatic
     ENABLE_HARDENED_RUNTIME: YES

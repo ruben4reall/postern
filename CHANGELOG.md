@@ -1,5 +1,18 @@
 # Changelog
 
+## 0.1.1 (2026-10-18)
+
+Postern now updates itself.
+
+- **Check for Updates** in the Postern menu and in the menu bar icon's menu. When a version is waiting, both items
+  name it.
+- **Automatic checks only if you say yes.** Postern asks once, over its window; Security › Updates changes it later.
+  Once a day, it reads the list of versions on getpostern.vercel.app and downloads updates from GitHub.
+- **Signed end to end.** The list of versions and every update are signed with Postern's own key (EdDSA), checked
+  before anything is opened, and nothing installs until you click Install and Relaunch.
+- **The only connection besides Bridge**, now named in the threat model with what it reveals: your IP address and
+  Postern's version, nothing else.
+
 ## 0.1.0 (2026-10-18)
 
 The first public version.
