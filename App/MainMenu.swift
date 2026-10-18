@@ -55,12 +55,15 @@ enum MainMenu {
         return main
     }
 
-    /// The app menu changes with the state: Pause or Resume, and the menu bar icon setting.
+    /// The app menu changes with the state: Pause or Resume, a waiting update, and the menu bar icon setting.
     static func refreshAppMenu(_ menu: NSMenu, delegate: AppDelegate) {
         menu.removeAllItems()
         let about = NSMenuItem(title: "About Postern", action: #selector(AppDelegate.openAbout), keyEquivalent: "")
         about.target = delegate
         menu.addItem(about)
+        let update = NSMenuItem(title: delegate.updates.menuTitle, action: #selector(AppDelegate.checkForUpdates), keyEquivalent: "")
+        update.target = delegate
+        menu.addItem(update)
         menu.addItem(.separator())
         if CoreState.shared.backend != nil {
             let paused = CoreState.shared.policy.paused

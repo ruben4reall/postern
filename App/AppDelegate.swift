@@ -13,6 +13,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     private var statusItem: NSStatusItem?
     private var mainWindow: NSWindow?
     private let control = ControlModel()
+    /// Started once launched, in the copy that keeps running: the copies that hand over and quit never check.
+    private(set) lazy var updates = Updates()
 
     static let showsMenuBarIconKey = "ShowsMenuBarIcon"
 
@@ -27,6 +29,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
             Task { @MainActor in self?.control.refresh() }
         }
         PosternFolders.prepare()
+        control.updates = updates
         CoreState.shared.reload()
         if launchedByAgent {
             listener.start()
@@ -69,7 +72,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.activate()
         mainWindow?.makeKeyAndOrderFront(nil)
         mainWindow?.orderFrontRegardless()
-        if !control.configured { control.showingSetup = true }
+        if !control.configured {
+            control.showingSetup = true
+        } else if !control.showingSetup, let window = mainWindow {
+            updates.askAboutAutomaticChecks(in: window)
+        }
     }
 
     func windowWillClose(_ notification: Notification) {
@@ -105,6 +112,11 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         )
         NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
     }
+
+    /// Sparkle downloads, checks the EdDSA signature, then waits for "Install and Relaunch". It quits this copy (the
+    /// launch agent, or the copy running alone), replaces the app, and opens the new one, which registers the agent
+    /// again if its plist changed and hands over to it (main.swift, AppHandoff).
+    @objc func checkForUpdates() { updates.checkForUpdates() }
 
     @objc func openWebsite() { NSWorkspace.shared.open(Links.repository) }
     @objc func openSecurityPolicy() { NSWorkspace.shared.open(Links.securityPolicy) }
@@ -179,8 +191,17 @@ extension AppDelegate: NSMenuDelegate {
         let open = NSMenuItem(title: state.backend == nil ? "Set Up Postern…" : "Open Postern", action: #selector(openMain), keyEquivalent: "")
         open.target = self
         menu.addItem(open)
+        let update = NSMenuItem(title: updates.menuTitle, action: #selector(checkForUpdates), keyEquivalent: "")
+        update.target = self
+        menu.addItem(update)
         menu.addItem(.separator())
         menu.addItem(NSMenuItem(title: "Quit Postern", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+    }
+}
+
+extension AppDelegate: NSMenuItemValidation {
+    func validateMenuItem(_ item: NSMenuItem) -> Bool {
+        item.action == #selector(checkForUpdates) ? updates.canCheck : true
     }
 }
 

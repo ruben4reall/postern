@@ -50,6 +50,8 @@ final class ControlModel {
     private(set) var setup: OnboardingModel?
     /// This copy runs on its own because the background agent is turned off: apps can't connect.
     var backgroundServiceOff = false
+    /// Sparkle, in the running app. Snapshots and previews have none.
+    var updates: Updates?
     var policy: Policy = .initial
     var configured = false
     var connectedApps: [String] = []

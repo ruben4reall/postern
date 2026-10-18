@@ -22,6 +22,11 @@
 		<string>/Library/Application Support/Claude/</string>
 		<string>/.codex/</string>
 	</array>
+	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
+	<array>
+		<string>ch.rubencatalao.postern-spks</string>
+		<string>ch.rubencatalao.postern-spki</string>
+	</array>
 	<key>keychain-access-groups</key>
 	<array>
 		<string>$(AppIdentifierPrefix)ch.rubencatalao.postern</string>

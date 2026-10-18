@@ -6,7 +6,9 @@ import ServiceManagement
 /// one policy in memory.
 enum AppHandoff {
     /// Raised whenever the launch agent's plist changes: launchd keeps the plist it read at registration, so a new
-    /// one (a new Mach service) only applies after registering again.
+    /// one (a new Mach service) only applies after registering again. Every copy opened from the Finder or the Dock
+    /// checks it, and so does the copy Sparkle opens after an update: the update quits the agent, and that copy
+    /// registers it again if needed before launchd starts the new one.
     static let agentVersion = 2
     static let agentVersionKey = "LaunchAgentVersion"
 
