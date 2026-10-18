@@ -54,6 +54,19 @@ second copy of the app; that copy asks the core, on the window service, to show 
 quits. So there is only ever one Postern: one policy in memory, one menu bar icon, one Dock icon while the window is
 open. If the background item is turned off in Login Items, the copy you opened shows the window itself and says so.
 
+launchd keeps the plist it read when the agent was registered. Whenever the plist changes, `AppHandoff.agentVersion`
+goes up, and the next copy opened from the Finder or the Dock registers the agent again before it hands over.
+
+### Updates
+
+Sparkle 2 runs in the core, the copy that stays. It reads the signed feed at
+`https://getpostern.vercel.app/appcast.xml`, once a day if you allowed it or when you choose Check for Updates, and
+downloads the disk image from GitHub Releases. It checks the image's EdDSA signature against `SUPublicEDKey` before
+opening it, then waits for "Install and Relaunch": updates never install silently. Postern is sandboxed, so Sparkle's
+installer launcher service, inside `Sparkle.framework`, does the install outside the sandbox. It quits the core,
+replaces the app and opens the new one; that copy is not the agent, so it registers the agent again if its plist
+changed and hands over to it, as above.
+
 ## The parser: `PosternParser.xpc`
 
 An XPC service embedded in the app, with App Sandbox and no other entitlement: it cannot open a connection, read

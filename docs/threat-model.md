@@ -29,7 +29,9 @@ reads Bridge's own window; a compromised Proton account.
 2. **The Postern app is trusted.** Signed, sandboxed, the only holder of secrets and policy.
 3. **The parser service's output is untrusted.** It is a jail for hostile input, with no rights at all.
 4. **Bridge is trusted** only after its pinned certificate is verified.
-5. **You are the only source of authority**, proven by Touch ID.
+5. **The update feed and the downloads are untrusted.** An update is installed only when its EdDSA signature matches
+   the key built into Postern.
+6. **You are the only source of authority**, proven by Touch ID.
 
 ## Principles
 
@@ -44,6 +46,7 @@ reads Bridge's own window; a compromised Proton account.
 | P7 | Least privilege per process | Hostile input is decoded in a sandbox with no network, no Keychain and no files. |
 | P8 | Nothing on disk that needn't be | No copy of mail, no cache. The activity log holds names of tools and counts only. |
 | P9 | Small and auditable | Few dependencies, pinned exactly. The relay is about eighty lines. |
+| P10 | Two destinations, both named | Postern connects to Bridge on the loopback address. The only other destination is the update check, off until you say yes. |
 
 ## Attacks and answers
 
@@ -90,9 +93,21 @@ reads Bridge's own window; a compromised Proton account.
 ### A4, the supply chain
 
 - Every dependency is pinned to an exact version and reviewed on update: the MCP Swift SDK, SwiftNIO, swift-nio-ssl,
-  swift-nio-imap, SwiftSoup and swift-log. SMTP and MIME are written in-house, so the most exposed code is ours and
-  tested.
+  swift-nio-imap, SwiftSoup, swift-log and Sparkle. SMTP and MIME are written in-house, so the most exposed code is
+  ours and tested.
 - Releases are signed with a Developer ID and notarized by Apple.
+- **A tampered update.** Updates go through Sparkle. The feed on `getpostern.vercel.app` is signed, and Postern
+  refuses a feed that is unsigned or altered. Each disk image on GitHub Releases must carry an EdDSA (Ed25519)
+  signature made with Postern's private key, checked against the public key inside Postern before the image is even
+  opened; the app inside must then be signed by the same Developer ID team. The private key lives in the maintainer's
+  Keychain, never in the repository or on a server, so taking over the website or the GitHub release is not enough
+  to ship code. Nothing installs without you: every update waits for "Install and Relaunch".
+- **What an update check reveals.** Your IP address and Postern's version, to Vercel (the feed) and to GitHub (the
+  download). No system profile, no identifier. Checks are off until you answer yes, in the window or in Security;
+  "Check for Updates…" works either way.
+- **The installer leaves the sandbox.** Sparkle's installer service, inside `Sparkle.framework`, replaces the app
+  from outside the sandbox. It runs only to install an update you approved, after the checks above. The app reaches
+  it through two Mach names allowed by its entitlements (`ch.rubencatalao.postern-spki` and `-spks`).
 
 ### A5, a crafted message
 
@@ -115,5 +130,6 @@ reads Bridge's own window; a compromised Proton account.
 | Bridge username and password | Data protection Keychain, Postern's access group | Postern |
 | Policy, pinned certificate, send counters, log chain head | Same | Postern |
 | Activity log (time, app, tool, result, count) | Postern's sandbox container | Postern, and you through the window |
+| Update settings, and a downloaded update until it is installed | Same | Postern |
 | Mail | Nowhere | |
 | Attachments an app saved | `~/Downloads/Postern`, marked as downloaded | You |

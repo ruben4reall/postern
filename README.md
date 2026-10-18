@@ -83,10 +83,12 @@ address appeared inside an email the app read, and when a reply would go to a di
 | A crafted message attacks the reader | Messages are decoded in a separate process with no network, no Keychain and no files. |
 | Another program talks to Postern | Every connection between Postern's processes checks that the other side is signed by Postern's developer. |
 | You step away from your Mac | Postern can pause itself when the screen locks. Resuming asks for Touch ID. |
+| A tampered update | Postern installs an update only when it is signed with Postern's private key (EdDSA), which never leaves the maintainer's Mac, and the update list itself is signed. Nothing installs without you. |
 
 Postern keeps no copy of your mail. Its activity log records which app called which tool and when, never what your
-mail says; each entry is chained to the one before it, so an edited or deleted entry shows. Postern sends nothing
-anywhere except to Bridge on your Mac: no analytics, no telemetry, no update pings.
+mail says; each entry is chained to the one before it, so an edited or deleted entry shows. Postern talks to Bridge
+on your Mac, and to one other place only if you allow it: the update check, once a day, which reads a signed list of
+versions on getpostern.vercel.app and downloads updates from GitHub. No analytics, no telemetry.
 
 The full threat model is in [docs/threat-model.md](docs/threat-model.md).
 
@@ -97,6 +99,9 @@ You need macOS 26 or later and [Proton Mail Bridge](https://proton.me/mail/bridg
 1. Download the disk image from the [latest release](https://github.com/ruben4reall/postern/releases/latest). It
    is signed with a Developer ID and notarized by Apple; its SHA-256 is listed next to it.
 2. Drag Postern to Applications and open it.
+
+Postern updates itself: choose Check for Updates in the Postern menu, or let it check once a day (it asks you the
+first time). Each update shows what changed and waits for your click.
 
 Or with [Homebrew](https://brew.sh):
 

@@ -48,8 +48,8 @@ let launchedByAgent = ProcessInfo.processInfo.environment["POSTERN_AGENT"] == "1
 let application = NSApplication.shared
 application.setActivationPolicy(.accessory)
 if !launchedByAgent {
-    // Opened by the user: make sure the background agent is registered, then let it show the window. If it can't run
-    // (turned off in Login Items), this copy shows the window itself and says so.
+    // Opened by the user, or by Sparkle after an update: make sure the background agent is registered, then let it
+    // show the window. If it can't run (turned off in Login Items), this copy shows the window itself and says so.
     AppHandoff.registerAgent()
     if MainActor.assumeIsolated({ AppHandoff.handOver() }) { exit(0) }
 }

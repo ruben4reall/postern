@@ -145,6 +145,8 @@ enum SetupSnapshots {
                 model.connectedApps = ["Claude Code", "Claude Code", "Codex"]
                 model.pin = pin
                 model.endpoint = BridgeEndpoint(imap: BridgePort(port: 1143, mode: .startTLS), smtp: BridgePort(port: 1025, mode: .implicit))
+                // A debug build never starts Sparkle: the section shows, its controls stay off.
+                if pane == .security { model.updates = Updates() }
                 model.mailboxState = .loaded
                 model.mailboxes = [
                     MailboxInfo(name: "INBOX", kind: .system, total: 140, unread: 12),

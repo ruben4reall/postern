@@ -124,7 +124,8 @@ These come from the threat model. A pull request that breaks one will not be mer
    panel that times out means no.
 6. **Nothing about the mail on disk or in logs.** Log names of hosts and headers, codes and counts, never content,
    addresses or subjects. Mark anything else `privacy: .private`.
-7. **No new network destination.** Postern talks to Bridge on the loopback address and nowhere else.
+7. **No new network destination.** Postern talks to Bridge on the loopback address, and to the update feed and
+   GitHub Releases through Sparkle when the user allows it. Nowhere else.
 8. **Dependencies are pinned exactly**, and a new one needs a reason in the pull request.
 
 ## Adding a tool

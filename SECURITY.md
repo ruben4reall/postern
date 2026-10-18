@@ -33,6 +33,8 @@ Please give a reasonable time for a fix to ship before talking about the issue i
 - Hidden text or instructions that reach the client outside the untrusted envelope.
 - A forged sender that Postern reports as verified.
 - Crashes or memory bugs in the parser service from a crafted message.
+- An update that Postern installs without a valid EdDSA signature from Postern's key, or an update feed it accepts
+  unsigned.
 
 ## Out of scope
 

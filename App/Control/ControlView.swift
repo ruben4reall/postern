@@ -815,7 +815,7 @@ private struct SecurityPane: View {
         Form {
             Section {
                 PaneHero(symbol: "lock.shield", tint: .gray, title: "Security",
-                         text: "How you approve, how much apps may send, and the Bridge certificate Postern trusts. Anything that gives apps more power asks for Touch ID.")
+                         text: "How you approve, how much apps may send, the Bridge certificate Postern trusts, and updates. Anything that gives apps more power asks for Touch ID.")
             }
             Section {
                 Toggle(isOn: Binding(
@@ -865,12 +865,43 @@ private struct SecurityPane: View {
             } footer: {
                 Text("Postern only talks to the certificate you trusted, and always encrypts before it sends your Bridge password.")
             }
+            if let updates = model.updates { UpdatesSection(updates: updates) }
         }
         .formStyle(.grouped)
     }
 
     private func modeText(_ mode: TLSMode) -> String {
         mode == .startTLS ? "encrypted with STARTTLS" : "encrypted from the first byte"
+    }
+}
+
+// MARK: Updates
+
+private struct UpdatesSection: View {
+    let updates: Updates
+
+    var body: some View {
+        Section {
+            Toggle(isOn: Binding(
+                get: { updates.checksAutomatically },
+                set: { updates.setChecksAutomatically($0) }
+            )) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("Check for updates automatically")
+                    Text("Once a day. Nothing is installed without asking you.")
+                        .font(.callout).foregroundStyle(.secondary)
+                }
+            }
+            .toggleStyle(.switch)
+            .disabled(!updates.active)
+            LabeledContent("Version", value: Updates.currentVersion)
+            Button(updates.menuTitle) { updates.checkForUpdates() }
+                .disabled(!updates.canCheck)
+        } header: {
+            Text("Updates")
+        } footer: {
+            Text("Postern reads the list of versions on getpostern.vercel.app and downloads updates from GitHub. It installs only those signed by its developer. Apart from Bridge, this is the only connection Postern makes.")
+        }
     }
 }
 
