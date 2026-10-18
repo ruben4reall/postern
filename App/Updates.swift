@@ -19,6 +19,8 @@ final class Updates {
     /// A version a scheduled check found that nobody has looked at yet. Postern usually has no Dock icon, so its
     /// menus name it.
     private(set) var pendingVersion: String?
+    /// Called just before Sparkle quits Postern to install an update.
+    @ObservationIgnored var willRelaunch: (@MainActor () -> Void)?
 
     @ObservationIgnored private let delegate = SparkleDelegate()
     @ObservationIgnored private let controller: SPUStandardUpdaterController
@@ -32,6 +34,7 @@ final class Updates {
         active = true
         #endif
         delegate.pendingChanged = { [weak self] version in self?.pendingVersion = version }
+        delegate.willRelaunch = { [weak self] in self?.willRelaunch?() }
         let updater = controller.updater
         observations = [
             updater.observe(\.canCheckForUpdates) { [weak self] _, _ in
@@ -83,6 +86,8 @@ final class Updates {
         alert.addButton(withTitle: "Check Automatically")
         alert.addButton(withTitle: "Don't Check")
         alert.beginSheetModal(for: window) { [weak self] response in
+            // Closed by an update about to install: no answer yet, the question comes back next time.
+            guard response == .alertFirstButtonReturn || response == .alertSecondButtonReturn else { return }
             self?.setChecksAutomatically(response == .alertFirstButtonReturn)
         }
     }
@@ -98,8 +103,12 @@ final class Updates {
 @MainActor
 private final class SparkleDelegate: NSObject, SPUUpdaterDelegate, @preconcurrency SPUStandardUserDriverDelegate {
     var pendingChanged: ((String?) -> Void)?
+    var willRelaunch: (() -> Void)?
 
     func updaterShouldPromptForPermissionToCheck(forUpdates updater: SPUUpdater) -> Bool { false }
+
+    /// Called right before the installer asks Postern to quit.
+    func updaterWillRelaunchApplication(_ updater: SPUUpdater) { willRelaunch?() }
 
     /// The feed named in the Info.plist, and no other: Sparkle would also take one from the preferences, which any
     /// program running as you can write. The signatures would still hold, but there is no reason to ask elsewhere.
