@@ -1,0 +1,18 @@
+#!/bin/bash
+# The Homebrew cask renders for a release and stays valid Ruby.
+source "$(dirname "$0")/lib.sh"
+cd "$ROOT"
+SHA=$(printf 'postern' | shasum -a 256 | awk '{print $1}')
+render() { scripts/render-cask.sh 1.2.3 "$SHA" > "$TMP/postern.rb"; }
+check "the cask renders" render
+check "it names the version" grep -qF 'version "1.2.3"' "$TMP/postern.rb"
+check "it names the SHA-256" grep -qF "sha256 \"$SHA\"" "$TMP/postern.rb"
+check "it downloads the versioned disk image" grep -qF 'url "https://github.com/ruben4reall/postern/releases/download/v#{version}/Postern-#{version}.dmg"' "$TMP/postern.rb"
+check "it needs macOS 26" grep -qF 'depends_on macos: :tahoe' "$TMP/postern.rb"
+check "it leaves updates to Sparkle" grep -qF 'auto_updates true' "$TMP/postern.rb"
+check "it stops the launch agent on uninstall" grep -qF 'launchctl: "ch.rubencatalao.postern.core"' "$TMP/postern.rb"
+no_marker() { ! grep -q '@[A-Z0-9]*@' "$1"; }
+check "no template marker is left" no_marker "$TMP/postern.rb"
+check "it is valid Ruby" /usr/bin/ruby -c "$TMP/postern.rb"
+refuses "a malformed version" "not a version" scripts/render-cask.sh 1.2 "$SHA"
+refuses "a malformed SHA-256" "not a SHA-256" scripts/render-cask.sh 1.2.3 abc

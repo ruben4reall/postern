@@ -105,8 +105,15 @@ with two attachments, all put in Trash at the end. It never erases.
 ### Releases
 
 Maintainers build releases with `scripts/release.sh`: a Release archive signed with a Developer ID, notarized and
-stapled, packed in a disk image laid out by `dmgbuild` (no Finder window), with its SHA-256. Every release has a
-section in [CHANGELOG.md](CHANGELOG.md).
+stapled, packed in a disk image laid out by `dmgbuild` (no Finder window). It then runs `scripts/finish-release.sh`,
+which signs the disk image with Postern's EdDSA key (kept in the maintainer's Keychain, never in the repository), adds
+it to the signed update feed `site/appcast.xml`, and writes the release notes and the Homebrew cask. Nothing is
+published until `scripts/publish.sh` runs its three steps, `release`, `tap` and `site`, each on the maintainer's
+go-ahead.
+
+Every release raises `MARKETING_VERSION` and the build number `CURRENT_PROJECT_VERSION` (a whole number, the one
+Sparkle compares) in `project.yml`, and has a section in [CHANGELOG.md](CHANGELOG.md). `scripts/tests/run.sh` checks
+the release scripts without signing anything; CI runs it.
 
 ## Rules every change keeps
 
