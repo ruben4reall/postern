@@ -98,6 +98,12 @@ You need macOS 26 or later and [Proton Mail Bridge](https://proton.me/mail/bridg
    is signed with a Developer ID and notarized by Apple; its SHA-256 is listed next to it.
 2. Drag Postern to Applications and open it.
 
+Or with [Homebrew](https://brew.sh):
+
+```bash
+brew install --cask ruben4reall/tap/postern
+```
+
 Postern adds a background item that starts it when an app connects, even with its window closed. You can see it in
 System Settings › General › Login Items.
 
