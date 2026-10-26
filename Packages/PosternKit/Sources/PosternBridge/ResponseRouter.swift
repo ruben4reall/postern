@@ -33,10 +33,18 @@ final class ResponseRouter: ChannelInboundHandler, @unchecked Sendable {
         }
     }
 
-    func expect(tag: String, _ promise: EventLoopPromise<CommandResult>) {
-        if let failure { promise.fail(failure); return }
+    /// Whether the command may be written: a refused one has already failed its promise.
+    func expect(tag: String, _ promise: EventLoopPromise<CommandResult>) -> Bool {
+        if let failure { promise.fail(failure); return false }
+        // Replacing the command in flight would leave it waiting forever: its reply and its timeout both look
+        // for the pending tag. Refuse the newcomer instead.
+        if let pending {
+            promise.fail(BridgeError.commandFailed("\(tag) sent while \(pending.tag) was still waiting"))
+            return false
+        }
         pending = (tag, promise)
         collected = []
+        return true
     }
 
     func expectHandshake(_ promise: EventLoopPromise<Void>) {
