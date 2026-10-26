@@ -5,6 +5,10 @@ import PosternModel
 
 /// Keeps at most one IMAP session open, reopens it after a failure, and closes it after five idle minutes.
 /// Postern only talks to Bridge when a client asks: no polling, no IDLE.
+///
+/// The session is shared and stateful (the examined mailbox), so operations take turns on it, oldest first:
+/// clients call several tools at once, and two operations interleaving their commands would read or move
+/// messages in each other's mailbox.
 public actor BridgeClient {
     private let endpoint: BridgeEndpoint
     private let pin: CertificatePin
@@ -12,6 +16,8 @@ public actor BridgeClient {
     private var connection: IMAPConnection?
     private var lastUse = Date()
     private var idleTask: Task<Void, Never>?
+    private var busy = false
+    private var waiting: [CheckedContinuation<Void, Never>] = []
     public static let idleTimeout: Duration = .seconds(300)
 
     public init(endpoint: BridgeEndpoint, pin: CertificatePin, credentials: BridgeCredentials) {
@@ -21,8 +27,13 @@ public actor BridgeClient {
     }
 
     public func withConnection<T: Sendable>(_ body: (IMAPConnection) async throws -> T) async throws -> T {
+        await takeTurn()
         lastUse = Date()
-        defer { scheduleIdleClose() }
+        defer {
+            lastUse = Date()
+            scheduleIdleClose()
+            passTurn()
+        }
         do {
             return try await body(try await openConnection())
         } catch let error as BridgeError where error == .unreachable || error == .timeout {
@@ -60,7 +71,23 @@ public actor BridgeClient {
     }
 
     private func closeIfIdle() async {
-        if Date().timeIntervalSince(lastUse) >= 299 { await drop() }
+        guard !busy, Date().timeIntervalSince(lastUse) >= 299 else { return }
+        busy = true
+        await drop()
+        passTurn()
+    }
+
+    private func takeTurn() async {
+        guard busy else {
+            busy = true
+            return
+        }
+        await withCheckedContinuation { waiting.append($0) }
+    }
+
+    /// Hands the session to the oldest waiting operation, which stays marked busy.
+    private func passTurn() {
+        if waiting.isEmpty { busy = false } else { waiting.removeFirst().resume() }
     }
 }
 

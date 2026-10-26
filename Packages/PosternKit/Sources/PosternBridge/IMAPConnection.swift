@@ -201,7 +201,7 @@ public actor IMAPConnection {
         let promise = channel.eventLoop.makePromise(of: CommandResult.self)
         let all = [CommandStreamPart.append(.start(tag: tag, appendingTo: mailbox))] + parts
         channel.eventLoop.execute {
-            router.expect(tag: tag, promise)
+            guard router.expect(tag: tag, promise) else { return }
             for part in all { channel.write(IMAPClientHandler.Message.part(part), promise: nil) }
             channel.flush()
         }
@@ -222,7 +222,7 @@ public actor IMAPConnection {
         let promise = channel.eventLoop.makePromise(of: CommandResult.self)
         let part = CommandStreamPart.tagged(TaggedCommand(tag: tag, command: command))
         channel.eventLoop.execute {
-            router.expect(tag: tag, promise)
+            guard router.expect(tag: tag, promise) else { return }
             channel.writeAndFlush(IMAPClientHandler.Message.part(part), promise: nil)
         }
         let timer = channel.eventLoop.scheduleTask(in: timeout) { router.timeOut(tag: tag) }
