@@ -65,12 +65,19 @@ nobody else can be written to.
 | `reply_to_message` | `id`, `body`, `reply_all` (default `false`) | Replies above a quote of the original. Recipients come from the original. |
 | `forward_message` | `id`, `to`, `note`, `include_attachments` (default `true`) | Forwards a message with an optional note. |
 | `send_draft` | `id` | Sends a draft as it is, attachments included, then removes it from Drafts. |
+| `send_drafts` | `ids`: 1 to 50 draft ids | Sends several drafts after one panel and one Touch ID, then removes each one sent from Drafts. Returns the outcome for each id: `sent`, `skipped` (you unticked it), `refused` (with the reason, such as the limit) or `failed`. |
 
 Recipients are addresses such as `anna@example.com` or `Anna <anna@example.com>`, at most 50 in all.
 `attachments` are file names in `~/Downloads/Postern/Outbox`, at most 20 MB in all: put the files there first.
 Nothing else on your Mac can be attached.
 
 On the panel, you can also choose **Keep as Draft**: the email is saved in Drafts instead, and the client hears so.
+
+`send_drafts` shows every email on one panel instead: recipients and their warnings, subject, the start of the text and
+each attachment with its size. Untick the ones that should wait, then send the rest with one Touch ID. Each email is
+approved for its own exact bytes, as with `send_message`; they leave one by one, two seconds apart, and each one counts
+towards your limits. Drafts over the limit are not shown and stay in Drafts. You can raise the limits in Postern's
+window, up to 100 per hour and 500 per day, with Touch ID.
 
 ## Delete
 

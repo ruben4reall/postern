@@ -114,6 +114,10 @@ private struct OwnMessagesPresenter: ApprovalPresenter {
         return .send
     }
 
+    func presentBatch(_ request: BatchApprovalRequest, deadline: Date) async -> BatchIntent {
+        .reject(reason: "Not a self-test message.")
+    }
+
     func presentDeletion(_ request: DeletionRequest, deadline: Date) async -> ApprovalIntent {
         guard !request.permanent, request.items.allSatisfy({ $0.subject.hasSuffix(stamp) }) else {
             return .reject(reason: "Not a self-test message.")
