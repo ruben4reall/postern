@@ -26,6 +26,7 @@ final class FakeBackend: MailBackend, @unchecked Sendable {
 
     func message(_ id: MessageID, maxChars: Int) async throws -> SanitizedMessage {
         if id.mailbox == "INBOX" && id.uid == 77 { return lock.withLock { original } }
+        if id.mailbox == "Drafts", let draft = lock.withLock({ draft }) { return draft }
         return SanitizedMessage(
             headers: SanitizedHeaders(from: [Address(name: "Eve", email: "eve@evil.example")], subject: "Hi"),
             body: body, bodyTruncated: false, bodyWasHTML: false, hiddenElementsRemoved: 2, imagesOmitted: 0,
@@ -95,8 +96,12 @@ final class FakeBackend: MailBackend, @unchecked Sendable {
         guard let data = lock.withLock({ outbox[name] }) else { throw PosternError(.notFound, "\(name) is not in the outbox.") }
         return try OutgoingAttachment.make(filename: name, data: data)
     }
+    var draft: SanitizedMessage?
+    var draftFiles: [OutgoingAttachment] = []
+
     func attachments(of id: MessageID) async throws -> [OutgoingAttachment] {
-        [try OutgoingAttachment.make(filename: "invoice.pdf", data: Data("%PDF-invoice".utf8))]
+        if id.mailbox == "Drafts" { return lock.withLock { draftFiles } }
+        return [try OutgoingAttachment.make(filename: "invoice.pdf", data: Data("%PDF-invoice".utf8))]
     }
     func deletionItems(_ ids: [MessageID]) async throws -> [DeletionItem] {
         ids.map { DeletionItem(id: $0, mailbox: $0.mailbox, from: "a@b.c", subject: "S", date: nil) }
@@ -492,6 +497,52 @@ final class MemoryLedger: SendLedger, @unchecked Sendable {
         #expect(backend.lock.withLock { backend.drafts }.count == 1 && backend.lock.withLock { backend.sent }.isEmpty)
         let (notDraft, isError) = try await client.callTool(name: "delete_draft", arguments: ["id": .string(MessageID(mailbox: "INBOX", uidValidity: 1, uid: 1).opaque)])
         #expect(isError == true && text(notDraft).hasPrefix("invalid_argument"))
+    }
+
+    /// A job application saved as a draft: a letter, a CV and a certificate, the way Claude prepares them.
+    func applicationDraft(_ backend: FakeBackend) throws -> [OutgoingAttachment] {
+        let files = try ["Lettre.pdf", "CV.pdf", "Certificat.pdf"].map { name in
+            try OutgoingAttachment.make(filename: name, data: Data("%PDF-1.7\n".utf8) + Data((0..<200_000).map { _ in UInt8.random(in: 0...255) }))
+        }
+        backend.lock.withLock {
+            backend.draftFiles = files
+            backend.draft = SanitizedMessage(
+                headers: SanitizedHeaders(from: [Address(name: "Me", email: "me@example.ch")], to: [Address(name: nil, email: "known@example.com")],
+                                          subject: "Candidature"),
+                body: "Bonjour, voici ma candidature.", bodyTruncated: false, bodyWasHTML: false, hiddenElementsRemoved: 0, imagesOmitted: 0,
+                links: [], attachments: [],
+                verdict: SenderVerdict(level: .internal, spf: nil, dkim: nil, dmarc: nil, origin: nil, reasons: [], forgedHeaderSeen: false, authservIDsSeen: [])
+            )
+        }
+        return files
+    }
+
+    @Test func sendingADraftKeepsItsAttachmentsByteForByte() async throws {
+        let backend = FakeBackend()
+        let files = try applicationDraft(backend)
+        let (client, presenter) = try await connect(backend: backend)
+        let id = MessageID(mailbox: "Drafts", uidValidity: 1, uid: 5)
+        let (content, isError) = try await client.callTool(name: "send_draft", arguments: ["id": .string(id.opaque)])
+        #expect(isError != true, "\(text(content))")
+        let shown = try #require(presenter.lock.withLock { presenter.requests.first })
+        #expect(shown.message.attachments == files)
+        let sent = try #require(backend.lock.withLock { backend.sent.first })
+        #expect(sent.digest == shown.digest)
+        #expect(sent.attachments.map(\.data) == files.map(\.data))
+        #expect(sent.rfc822(includeBcc: false).count > files.map(\.data.count).reduce(0, +))
+        #expect(backend.lock.withLock { backend.deletedDrafts } == [id])
+    }
+
+    @Test func updatingADraftKeepsItsAttachmentsUnlessNewOnesAreGiven() async throws {
+        let backend = FakeBackend()
+        let files = try applicationDraft(backend)
+        let (client, _) = try await connect(backend: backend)
+        let id = MessageID(mailbox: "Drafts", uidValidity: 1, uid: 5).opaque
+        _ = try await client.callTool(name: "update_draft", arguments: ["id": .string(id), "subject": .string("Candidature, poste de vendeur")])
+        let kept = try #require(backend.lock.withLock { backend.drafts.last })
+        #expect(kept.subject == "Candidature, poste de vendeur" && kept.attachments == files)
+        _ = try await client.callTool(name: "update_draft", arguments: ["id": .string(id), "attachments": .array([.string("contract.pdf")])])
+        #expect(backend.lock.withLock { backend.drafts.last }?.attachments.map(\.filename) == ["contract.pdf"])
     }
 }
 
