@@ -151,11 +151,12 @@ public enum ToolCatalog {
         case .updateDraft:
             Tool(
                 name: id.rawValue, title: "Change a draft",
-                description: "Replaces fields of a draft; fields left out keep their value. Returns the draft's new id.",
+                description: "Replaces fields of a draft; fields left out keep their value, attachments included. Returns the draft's new id.",
                 inputSchema: schema([
                     "id": .object(["type": "string", "description": "Draft id."]),
                     "to": recipients, "cc": recipients, "bcc": recipients,
                     "subject": .object(["type": "string"]), "body": .object(["type": "string"]),
+                    "attachments": outbox,
                 ], required: ["id"]),
                 annotations: draftAnnotations
             )
@@ -206,7 +207,7 @@ public enum ToolCatalog {
         case .sendDraft:
             Tool(
                 name: id.rawValue, title: "Send a draft",
-                description: "Sends a draft as it is, after the user approves it on Postern's panel, then removes it from Drafts.",
+                description: "Sends a draft as it is, attachments included, after the user approves it on Postern's panel, then removes it from Drafts.",
                 inputSchema: schema(["id": .object(["type": "string", "description": "Draft id."])], required: ["id"]),
                 annotations: sendAnnotations, _meta: askEveryTime
             )
