@@ -24,6 +24,7 @@ public enum ToolID: String, Codable, Sendable, CaseIterable {
     case replyToMessage = "reply_to_message"
     case forwardMessage = "forward_message"
     case sendDraft = "send_draft"
+    case sendDrafts = "send_drafts"
     case saveAttachment = "save_attachment"
     case trashMessages = "trash_messages"
     case deletePermanently = "delete_permanently"
@@ -34,7 +35,7 @@ public enum ToolID: String, Codable, Sendable, CaseIterable {
         case .markRead, .markUnread, .setStarred, .moveMessages, .archiveMessages, .addLabel, .removeLabel,
              .createMailbox: .organize
         case .createDraft, .updateDraft, .deleteDraft: .draft
-        case .sendMessage, .replyToMessage, .forwardMessage, .sendDraft: .send
+        case .sendMessage, .replyToMessage, .forwardMessage, .sendDraft, .sendDrafts: .send
         case .trashMessages, .deletePermanently: .delete
         }
     }

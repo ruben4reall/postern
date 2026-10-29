@@ -43,6 +43,35 @@ public enum ApprovalIntent: Sendable, Equatable {
     case saveAsDraft
 }
 
+/// Several emails reviewed on one panel and approved with one Touch ID. Each keeps its own request, and so its own
+/// digest: approving the batch approves those exact messages, never others.
+public struct BatchApprovalRequest: Sendable, Identifiable {
+    public let id = UUID()
+    public let tool: String
+    public let client: String
+    public let items: [ApprovalRequest]
+
+    public init(tool: String, client: String, items: [ApprovalRequest]) {
+        self.tool = tool
+        self.client = client
+        self.items = items
+    }
+}
+
+/// What the person chose on a batch panel: the emails left ticked, by request id, or none of them.
+public enum BatchIntent: Sendable, Equatable {
+    case send(Set<UUID>)
+    case reject(reason: String?)
+}
+
+public enum BatchOutcome: Sendable {
+    /// The approved emails, keyed by the id of their request. The ones the person unticked are absent.
+    case approved([UUID: ApprovedMessage])
+    case rejected(reason: String?)
+    case expired
+    case notAuthenticated
+}
+
 /// One message a deletion request would move to Trash or erase, as the panel lists it.
 public struct DeletionItem: Sendable, Equatable {
     public let id: MessageID
@@ -107,6 +136,7 @@ public protocol ApprovalPresenter: Sendable {
     func present(_ request: ApprovalRequest, deadline: Date) async -> ApprovalIntent
     /// `.send` means "delete"; `.saveAsDraft` is not offered.
     func presentDeletion(_ request: DeletionRequest, deadline: Date) async -> ApprovalIntent
+    func presentBatch(_ request: BatchApprovalRequest, deadline: Date) async -> BatchIntent
 }
 
 /// Proof that the person at the Mac is the user (Touch ID or Apple Watch, the password only if allowed).
@@ -147,13 +177,19 @@ public actor ApprovalDesk {
     private let presenter: any ApprovalPresenter
     private let authenticator: any Authenticating
     private let timeout: Duration
+    /// Reading fifty emails takes longer than reading one.
+    private let batchTimeout: Duration
     private var busy = false
     private var waiting: [CheckedContinuation<Void, Never>] = []
 
-    public init(presenter: any ApprovalPresenter, authenticator: any Authenticating, timeout: Duration = .seconds(120)) {
+    public init(
+        presenter: any ApprovalPresenter, authenticator: any Authenticating, timeout: Duration = .seconds(120),
+        batchTimeout: Duration = .seconds(900)
+    ) {
         self.presenter = presenter
         self.authenticator = authenticator
         self.timeout = timeout
+        self.batchTimeout = batchTimeout
     }
 
     public func review(_ request: ApprovalRequest) async -> ApprovalOutcome {
@@ -204,11 +240,36 @@ public actor ApprovalDesk {
         }
     }
 
+    /// Shows every email on one panel; one Touch ID approves the ones left ticked, each bound to its own digest.
+    public func reviewBatch(_ request: BatchApprovalRequest) async -> BatchOutcome {
+        await acquire()
+        defer { release() }
+        guard !request.items.isEmpty, request.items.allSatisfy({ $0.digest == $0.message.digest }) else {
+            return .rejected(reason: "The messages changed.")
+        }
+        let presenter = self.presenter
+        let intent = await choice(within: batchTimeout) { deadline in await presenter.presentBatch(request, deadline: deadline) }
+        switch intent {
+        case .send(let chosen)?:
+            let approved = request.items.filter { chosen.contains($0.id) }
+            guard !approved.isEmpty else { return .rejected(reason: nil) }
+            let reason = approved.count == 1 ? "send 1 email" : "send \(approved.count) emails"
+            guard await authenticator.confirm(reason: reason) else { return .notAuthenticated }
+            return .approved(Dictionary(uniqueKeysWithValues: approved.map { ($0.id, ApprovedMessage($0.message)) }))
+        case .reject(let reason)?:
+            return .rejected(reason: reason)
+        case nil:
+            return .expired
+        }
+    }
+
     /// The person's choice, or nil when the request expired first.
-    private func choice(_ present: @escaping @Sendable (Date) async -> ApprovalIntent) async -> ApprovalIntent? {
+    private func choice<Intent: Sendable>(
+        within limit: Duration? = nil, _ present: @escaping @Sendable (Date) async -> Intent
+    ) async -> Intent? {
+        let timeout = limit ?? self.timeout
         let deadline = Date().addingTimeInterval(Double(timeout.components.seconds))
-        let timeout = self.timeout
-        return await withTaskGroup(of: ApprovalIntent?.self) { group in
+        return await withTaskGroup(of: Intent?.self) { group in
             group.addTask { await present(deadline) }
             group.addTask {
                 try? await Task.sleep(for: timeout)

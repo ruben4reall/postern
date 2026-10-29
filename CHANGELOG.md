@@ -5,6 +5,10 @@
 - **Drafts keep their attachments when they are sent.** `send_draft` sent the text of a draft without its
   attachments, and `update_draft` dropped them too. Both now carry them, the panel lists them, and the bytes that
   leave are the ones you approved. If you sent drafts with attachments through 0.1.1, check your Sent folder.
+- **Send a batch of drafts with one Touch ID.** `send_drafts` takes up to 50 drafts and shows them all on one panel:
+  recipients, warnings, subject, the start of the text, attachments and their size. Untick any that should wait, and
+  one Touch ID sends the rest, one by one. Each email is still approved for its exact bytes, and your hourly and daily
+  limits still count each one. The tool is off until you turn it on.
 - **`update_draft` takes `attachments`** to replace a draft's files; without it, they stay.
 - **Calls made at the same time no longer hang.** Two apps, or one app calling two tools at once, could leave a call
   waiting until the client gave up. Postern now runs them one after the other on its Bridge session.

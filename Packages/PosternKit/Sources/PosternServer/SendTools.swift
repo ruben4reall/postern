@@ -13,8 +13,11 @@ struct SendTools {
     let ledger: any SendLedger
     let provenance: Provenance
     let client: String
+    /// The pause between two emails of a batch, so they leave at a person's pace rather than in a burst.
+    var batchSpacing: Duration = .seconds(2)
 
     static let quoteLimit = 20_000
+    static let batchLimit = 50
 
     func call(_ tool: ToolID, _ arguments: [String: Value]) async throws -> CallTool.Result {
         switch tool {
@@ -50,6 +53,8 @@ struct SendTools {
                 try? await backend.deleteDraft(id)
             }
             return outcome
+        case .sendDrafts:
+            return try await sendDrafts(arguments)
         default:
             throw PosternError(.invalidArgument, "\(tool.rawValue) is not a draft or send tool.")
         }
@@ -117,32 +122,92 @@ struct SendTools {
         return try await deliver(message, tool: .forwardMessage, context: "Forward of \(sender): \(headers.subject)", extra: [:])
     }
 
+    // MARK: Drafts sent together
+
+    /// One panel and one Touch ID for up to fifty drafts; each approved email stays bound to its own digest, and the
+    /// limits count each one.
+    private func sendDrafts(_ arguments: [String: Value]) async throws -> CallTool.Result {
+        guard case .array(let list)? = arguments["ids"], (1...Self.batchLimit).contains(list.count) else {
+            throw PosternError(.invalidArgument, "ids is a list of 1 to \(Self.batchLimit) draft ids.")
+        }
+        var ids: [MessageID] = []
+        for value in list {
+            let id = try await draftID(value)
+            if !ids.contains(id) { ids.append(id) }
+        }
+        var outcomes: [MessageID: (status: String, detail: String)] = [:]
+        var pending: [(id: MessageID, request: ApprovalRequest)] = []
+        var room = remainingSends()
+        for id in ids {
+            do {
+                let draft = try await backend.message(id, maxChars: OutgoingMessage.maxBodyCharacters)
+                let message = try await compose([:], base: draft, baseFiles: try await backend.attachments(of: id))
+                try checkRecipients(message)
+                guard room > 0 else { throw PosternError(.quotaExceeded, "The sending limit the user set is reached; this draft stays in Drafts.") }
+                room -= 1
+                pending.append((id, try await approvalRequest(message, tool: .sendDrafts, context: "A draft saved in Drafts", extra: [:])))
+            } catch let error as PosternError {
+                outcomes[id] = ("refused", "\(error.code.rawValue): \(error.message)")
+            } catch {
+                outcomes[id] = ("refused", "\(error)")
+            }
+        }
+        if !pending.isEmpty {
+            let batch = BatchApprovalRequest(tool: ToolID.sendDrafts.rawValue, client: client, items: pending.map(\.request))
+            switch await desk.reviewBatch(batch) {
+            case .approved(let approved):
+                var first = true
+                for (id, request) in pending {
+                    guard let message = approved[request.id] else {
+                        outcomes[id] = ("skipped", "The user left this email out; the draft stays in Drafts.")
+                        continue
+                    }
+                    if !first { try? await Task.sleep(for: batchSpacing) }
+                    first = false
+                    do {
+                        try await backend.send(message)
+                        ledger.recordSend(at: Date())
+                        try? await backend.deleteDraft(id)
+                        outcomes[id] = ("sent", "Sent to \(message.recipients.joined(separator: ", ")).")
+                    } catch let error as PosternError {
+                        outcomes[id] = ("failed", "\(error.code.rawValue): \(error.message)")
+                    } catch {
+                        outcomes[id] = ("failed", "\(error)")
+                    }
+                }
+            case .rejected(let reason):
+                throw PosternError(.approvalRejected, "The user rejected these emails, so nothing was sent" + (reason.map { ": \($0)" } ?? "."))
+            case .notAuthenticated:
+                throw PosternError(.approvalRejected, "The user did not confirm with Touch ID, so nothing was sent.")
+            case .expired:
+                throw PosternError(.approvalTimeout, "The user did not answer in time, so nothing was sent.")
+            }
+        }
+        let sent = ids.filter { outcomes[$0]?.status == "sent" }.count
+        let lines = ids.map { id in "\(id.opaque): \(outcomes[id]?.status ?? "refused"). \(outcomes[id]?.detail ?? "")" }
+        let summary = sent == 0
+            ? "Nothing was sent."
+            : "The user approved the batch with Touch ID; \(sent) of \(ids.count) emails were sent."
+        return result(([summary] + lines).joined(separator: "\n"), [
+            "sent": .int(sent),
+            "results": .array(ids.map { id in
+                .object(["id": .string(id.opaque), "status": .string(outcomes[id]?.status ?? "refused"),
+                         "detail": .string(outcomes[id]?.detail ?? "")])
+            }),
+        ])
+    }
+
     // MARK: The send pipeline
 
     /// Checks the recipients and the quota, then asks the desk; only an approved message reaches Bridge.
     private func deliver(
         _ message: OutgoingMessage, tool: ToolID, context: String?, extra: [String: [ApprovalBadge]]
     ) async throws -> CallTool.Result {
-        let refused = message.envelopeRecipients.filter { !policy.mayReceive($0) }
-        guard refused.isEmpty else {
-            throw PosternError(.recipientNotAllowed, "The user only allows mail to their approved recipients; \(refused.joined(separator: ", ")) is not one of them.")
-        }
-        let now = Date()
-        let sends = ledger.recentSends()
-        guard sends.filter({ now.timeIntervalSince($0) < 3600 }).count < policy.sendsPerHour,
-              sends.filter({ now.timeIntervalSince($0) < 86_400 }).count < policy.sendsPerDay else {
+        try checkRecipients(message)
+        guard remainingSends() > 0 else {
             throw PosternError(.quotaExceeded, "The sending limit the user set is reached. Try again later.")
         }
-
-        var badges: [String: [ApprovalBadge]] = [:]
-        for email in message.envelopeRecipients {
-            var list = extra[email] ?? []
-            if policy.trustedRecipients.contains(email) { list.append(.trusted) }
-            if !(try await backend.hasSentTo(email)) { list.append(.firstContact) }
-            if provenance.cameFromEmail(email) { list.append(.cameFromEmail) }
-            badges[email] = list
-        }
-        let request = ApprovalRequest(tool: tool.rawValue, client: client, message: message, badges: badges, context: context)
+        let request = try await approvalRequest(message, tool: tool, context: context, extra: extra)
 
         if let approved = await desk.approveTrusted(request, trusted: policy.trustedRecipients) {
             try await backend.send(approved)
@@ -164,6 +229,37 @@ struct SendTools {
         case .expired:
             throw PosternError(.approvalTimeout, "The user did not answer within two minutes, so nothing was sent.")
         }
+    }
+
+    private func checkRecipients(_ message: OutgoingMessage) throws {
+        let refused = message.envelopeRecipients.filter { !policy.mayReceive($0) }
+        guard refused.isEmpty else {
+            throw PosternError(.recipientNotAllowed, "The user only allows mail to their approved recipients; \(refused.joined(separator: ", ")) is not one of them.")
+        }
+    }
+
+    /// How many more emails the hourly and daily limits allow right now.
+    private func remainingSends() -> Int {
+        let now = Date()
+        let sends = ledger.recentSends()
+        let hour = policy.sendsPerHour - sends.filter { now.timeIntervalSince($0) < 3600 }.count
+        let day = policy.sendsPerDay - sends.filter { now.timeIntervalSince($0) < 86_400 }.count
+        return max(0, min(hour, day))
+    }
+
+    /// The panel's view of a message, with a warning for each recipient that deserves a second look.
+    private func approvalRequest(
+        _ message: OutgoingMessage, tool: ToolID, context: String?, extra: [String: [ApprovalBadge]]
+    ) async throws -> ApprovalRequest {
+        var badges: [String: [ApprovalBadge]] = [:]
+        for email in message.envelopeRecipients {
+            var list = extra[email] ?? []
+            if policy.trustedRecipients.contains(email) { list.append(.trusted) }
+            if !(try await backend.hasSentTo(email)) { list.append(.firstContact) }
+            if provenance.cameFromEmail(email) { list.append(.cameFromEmail) }
+            badges[email] = list
+        }
+        return ApprovalRequest(tool: tool.rawValue, client: client, message: message, badges: badges, context: context)
     }
 
     // MARK: Arguments

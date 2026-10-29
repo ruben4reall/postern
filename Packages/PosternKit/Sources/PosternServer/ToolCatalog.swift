@@ -211,6 +211,22 @@ public enum ToolCatalog {
                 inputSchema: schema(["id": .object(["type": "string", "description": "Draft id."])], required: ["id"]),
                 annotations: sendAnnotations, _meta: askEveryTime
             )
+        case .sendDrafts:
+            Tool(
+                name: id.rawValue, title: "Send several drafts",
+                description: """
+                Sends up to \(SendTools.batchLimit) drafts as they are, attachments included. The user reviews them all \
+                on one Postern panel, can leave some out, and approves the rest with one Touch ID. They leave one by one; \
+                each one sent is removed from Drafts. The answer gives the outcome for each id.
+                """,
+                inputSchema: schema([
+                    "ids": .object([
+                        "type": "array", "items": .object(["type": "string"]), "minItems": 1, "maxItems": .int(SendTools.batchLimit),
+                        "description": "Draft ids, from create_draft or the Drafts mailbox.",
+                    ]),
+                ], required: ["ids"]),
+                annotations: sendAnnotations, _meta: askEveryTime
+            )
         case .saveAttachment:
             Tool(
                 name: id.rawValue, title: "Save an attachment",
