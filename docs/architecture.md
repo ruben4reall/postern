@@ -35,7 +35,8 @@ One process hosts everything that matters:
 - **The policy**: which tools are on, hidden mailboxes, sending limits, allowed and trusted recipients, pause. One
   JSON item in the data protection Keychain.
 - **The approval desk**, the only place that can produce an approved message or an approved deletion. It shows a
-  panel, waits for your choice for up to two minutes, then asks for Touch ID. One panel at a time.
+  panel, waits for your choice for up to two minutes, then asks for Touch ID. One panel at a time. A batch of drafts
+  gets one panel, fifteen minutes and one Touch ID, and each email it approves is still bound to its own SHA-256.
 - **The Bridge clients**: IMAP and SMTP on SwiftNIO, TLS with the pinned certificate, STARTTLS or TLS from the first
   byte depending on the port.
 - **The activity log**: one JSON line per call, each chained to the previous one by its SHA-256, the latest hash kept

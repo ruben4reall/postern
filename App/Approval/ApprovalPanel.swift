@@ -243,7 +243,7 @@ struct ApprovalView: View {
     }
 }
 
-private struct BadgeView: View {
+struct BadgeView: View {
     let badge: ApprovalBadge
 
     var body: some View {
