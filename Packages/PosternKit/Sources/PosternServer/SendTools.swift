@@ -26,7 +26,8 @@ struct SendTools {
         case .updateDraft:
             let id = try await draftID(arguments["id"])
             let current = try await backend.message(id, maxChars: OutgoingMessage.maxBodyCharacters)
-            let message = try await compose(arguments, base: current)
+            let kept = arguments["attachments"] == nil ? try await backend.attachments(of: id) : []
+            let message = try await compose(arguments, base: current, baseFiles: kept)
             let newID = try await backend.saveDraft(message)
             try await backend.deleteDraft(id)
             return result("Updated the draft. Use the new id from now on.", ["draft_id": .string(newID.opaque)])
@@ -43,11 +44,7 @@ struct SendTools {
         case .sendDraft:
             let id = try await draftID(arguments["id"])
             let draft = try await backend.message(id, maxChars: OutgoingMessage.maxBodyCharacters)
-            let message = try OutgoingMessage.make(
-                from: try await backend.ownAddress(), to: draft.headers.to, cc: draft.headers.cc, bcc: draft.headers.bcc,
-                subject: draft.headers.subject, body: draft.body, inReplyTo: draft.headers.inReplyTo,
-                references: draft.headers.references
-            )
+            let message = try await compose([:], base: draft, baseFiles: try await backend.attachments(of: id))
             let outcome = try await deliver(message, tool: tool, context: "A draft saved in Drafts", extra: [:])
             if outcome.isError != true, case .object(let fields)? = outcome.structuredContent, fields["sent"] == .bool(true) {
                 try? await backend.deleteDraft(id)
@@ -171,13 +168,16 @@ struct SendTools {
 
     // MARK: Arguments
 
-    private func compose(_ arguments: [String: Value], base: SanitizedMessage? = nil) async throws -> OutgoingMessage {
+    /// Builds the message from the arguments; a draft being changed or sent gives the fields and files left out.
+    private func compose(
+        _ arguments: [String: Value], base: SanitizedMessage? = nil, baseFiles: [OutgoingAttachment] = []
+    ) async throws -> OutgoingMessage {
         let to = arguments["to"] == nil ? base?.headers.to ?? [] : try addresses(arguments["to"])
         let cc = arguments["cc"] == nil ? base?.headers.cc ?? [] : try addresses(arguments["cc"])
         let bcc = arguments["bcc"] == nil ? base?.headers.bcc ?? [] : try addresses(arguments["bcc"])
         let subject = string(arguments["subject"]) ?? base?.headers.subject ?? ""
         let body = arguments["body"] == nil ? base?.body ?? "" : (string(arguments["body"]) ?? "")
-        let files = try await outboxFiles(arguments["attachments"])
+        let files = arguments["attachments"] == nil ? baseFiles : try await outboxFiles(arguments["attachments"])
         do {
             return try OutgoingMessage.make(
                 from: try await backend.ownAddress(), to: to, cc: cc, bcc: bcc, subject: subject, body: body,

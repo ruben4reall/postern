@@ -50,7 +50,7 @@ applied.
 | Tool | Arguments | What it does |
 |---|---|---|
 | `create_draft` | `to`, `cc`, `bcc`, `subject`, `body` (plain text), `attachments` | Saves a draft in Drafts. Nothing is sent. |
-| `update_draft` | `id`, and any of `to`, `cc`, `bcc`, `subject`, `body` | Replaces those fields; the others keep their value. Returns the draft's new id. |
+| `update_draft` | `id`, and any of `to`, `cc`, `bcc`, `subject`, `body`, `attachments` | Replaces those fields; the others keep their value, attachments included. Returns the draft's new id. |
 | `delete_draft` | `id` | Deletes one draft from Drafts. The client also asks you each time. |
 
 ## Send
@@ -64,7 +64,7 @@ nobody else can be written to.
 | `send_message` | `to`, `cc`, `bcc`, `subject`, `body` (plain text), `attachments` | Writes and sends a new email. |
 | `reply_to_message` | `id`, `body`, `reply_all` (default `false`) | Replies above a quote of the original. Recipients come from the original. |
 | `forward_message` | `id`, `to`, `note`, `include_attachments` (default `true`) | Forwards a message with an optional note. |
-| `send_draft` | `id` | Sends a draft as it is, then removes it from Drafts. |
+| `send_draft` | `id` | Sends a draft as it is, attachments included, then removes it from Drafts. |
 
 Recipients are addresses such as `anna@example.com` or `Anna <anna@example.com>`, at most 50 in all.
 `attachments` are file names in `~/Downloads/Postern/Outbox`, at most 20 MB in all: put the files there first.
