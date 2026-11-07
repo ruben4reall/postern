@@ -356,6 +356,10 @@ struct ToolCopy {
             ToolCopy(title: "Send drafts", verb: "send drafts",
                      allows: "Send a draft as it is, after your approval, then remove it from Drafts.",
                      risk: "Once you approve, it leaves for good.")
+        case .sendDrafts:
+            ToolCopy(title: "Send drafts together", verb: "send several drafts at once",
+                     allows: "Send up to 50 drafts at once: one panel lists them all, you untick any, one Touch ID sends the rest.",
+                     risk: "One approval sends every email left ticked. Your hourly and daily limits still apply.")
         case .saveAttachment:
             ToolCopy(title: "Save attachments", verb: "save attachments to your Mac",
                      allows: "Save an attachment to Downloads › Postern, marked as downloaded.",

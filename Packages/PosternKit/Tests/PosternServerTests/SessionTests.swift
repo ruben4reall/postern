@@ -335,8 +335,16 @@ final class CapturingPresenter: ApprovalPresenter, @unchecked Sendable {
     let lock = NSLock()
     var requests: [ApprovalRequest] = []
     var deletions: [DeletionRequest] = []
+    var batches: [BatchApprovalRequest] = []
+    /// How many emails at the top of a batch the person unticks before choosing Send.
+    var leaveOut = 0
 
     init(_ intent: ApprovalIntent?) { self.intent = intent }
+
+    func presentBatch(_ request: BatchApprovalRequest, deadline: Date) async -> BatchIntent {
+        let leaveOut = lock.withLock { batches.append(request); return self.leaveOut }
+        return intent == .send ? .send(Set(request.items.dropFirst(leaveOut).map(\.id))) : .reject(reason: "Not today")
+    }
 
     func presentDeletion(_ request: DeletionRequest, deadline: Date) async -> ApprovalIntent {
         lock.withLock { deletions.append(request) }
@@ -376,7 +384,7 @@ final class MemoryLedger: SendLedger, @unchecked Sendable {
         let (clientTransport, serverTransport) = await InMemoryTransport.createConnectedPair()
         let chosen = policy ?? everything
         let session = Session(transport: serverTransport, backend: backend, version: "test", policy: { chosen },
-                              desk: desk, ledger: ledger, clientName: { "Claude Code" })
+                              desk: desk, ledger: ledger, clientName: { "Claude Code" }, batchSpacing: .zero)
         try await session.start()
         let client = Client(name: "test", version: "1")
         _ = try await client.connect(transport: clientTransport)
@@ -543,6 +551,60 @@ final class MemoryLedger: SendLedger, @unchecked Sendable {
         #expect(kept.subject == "Candidature, poste de vendeur" && kept.attachments == files)
         _ = try await client.callTool(name: "update_draft", arguments: ["id": .string(id), "attachments": .array([.string("contract.pdf")])])
         #expect(backend.lock.withLock { backend.drafts.last }?.attachments.map(\.filename) == ["contract.pdf"])
+    }
+
+    /// The whole result, structured part included.
+    func call(_ client: Client, _ name: String, _ arguments: [String: Value]) async throws -> ([Tool.Content], Value?, Bool?) {
+        let context: RequestContext<CallTool.Result> = try await client.callTool(name: name, arguments: arguments)
+        let result = try await context.value
+        return (result.content, result.structuredContent, result.isError)
+    }
+
+    func drafts(_ uids: [UInt32]) -> [MessageID] { uids.map { MessageID(mailbox: "Drafts", uidValidity: 1, uid: $0) } }
+
+    func statuses(_ result: Value?) -> [String] {
+        guard case .object(let fields)? = result, case .array(let items)? = fields["results"] else { return [] }
+        return items.compactMap { if case .object(let item) = $0, case .string(let status)? = item["status"] { status } else { nil } }
+    }
+
+    @Test func sendsSeveralDraftsAfterOnePanelEachBoundToItsBytes() async throws {
+        let backend = FakeBackend()
+        let files = try applicationDraft(backend)
+        let ledger = MemoryLedger()
+        let (client, presenter) = try await connect(backend: backend, ledger: ledger)
+        let ids = drafts([5, 6, 7])
+        let (content, structured, isError) = try await call(client, "send_drafts", ["ids": .array(ids.map { .string($0.opaque) })])
+        #expect(isError != true, "\(text(content))")
+        let batch = try #require(presenter.lock.withLock { presenter.batches.first })
+        #expect(presenter.lock.withLock { presenter.batches.count } == 1 && presenter.lock.withLock { presenter.requests }.isEmpty)
+        #expect(batch.items.count == 3 && batch.items.allSatisfy { $0.message.attachments == files })
+        let sent = backend.lock.withLock { backend.sent }
+        #expect(sent.map(\.digest) == batch.items.map(\.digest))
+        #expect(backend.lock.withLock { backend.deletedDrafts } == ids && ledger.recentSends().count == 3)
+        #expect(statuses(structured) == ["sent", "sent", "sent"])
+    }
+
+    @Test func untickedDraftsAndDraftsOverTheLimitStay() async throws {
+        let backend = FakeBackend()
+        _ = try applicationDraft(backend)
+        let (client, presenter) = try await connect(policy: Policy(enabledTools: Set(ToolID.allCases), sendsPerHour: 2), backend: backend)
+        presenter.lock.withLock { presenter.leaveOut = 1 }
+        let ids = drafts([5, 6, 7])
+        let (_, structured, _) = try await call(client, "send_drafts", ["ids": .array(ids.map { .string($0.opaque) })])
+        #expect(presenter.lock.withLock { presenter.batches.first }?.items.count == 2)
+        #expect(statuses(structured) == ["skipped", "sent", "refused"])
+        #expect(backend.lock.withLock { backend.deletedDrafts } == [ids[1]] && backend.lock.withLock { backend.sent }.count == 1)
+    }
+
+    @Test func aRejectedBatchSendsNothing() async throws {
+        let backend = FakeBackend()
+        _ = try applicationDraft(backend)
+        let (client, _) = try await connect(intent: .reject(reason: nil), backend: backend)
+        let (content, isError) = try await client.callTool(name: "send_drafts", arguments: ["ids": .array(drafts([5, 6]).map { .string($0.opaque) })])
+        #expect(isError == true && text(content).hasPrefix("approval_rejected"))
+        #expect(backend.lock.withLock { backend.sent }.isEmpty && backend.lock.withLock { backend.deletedDrafts }.isEmpty)
+        let (tooMany, refused) = try await client.callTool(name: "send_drafts", arguments: ["ids": .array(drafts(Array(1...51)).map { .string($0.opaque) })])
+        #expect(refused == true && text(tooMany).hasPrefix("invalid_argument"))
     }
 }
 

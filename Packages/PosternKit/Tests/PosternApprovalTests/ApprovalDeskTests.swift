@@ -18,6 +18,10 @@ final class ScriptedPresenter: ApprovalPresenter, @unchecked Sendable {
         self.delay = delay
     }
 
+    func presentBatch(_ request: BatchApprovalRequest, deadline: Date) async -> BatchIntent {
+        intent == .send ? .send(Set(request.items.map(\.id))) : .reject(reason: nil)
+    }
+
     func presentDeletion(_ request: DeletionRequest, deadline: Date) async -> ApprovalIntent {
         lock.withLock { deletions.append(request) }
         return intent ?? .reject(reason: nil)
