@@ -36,6 +36,34 @@ final class MemoryHead: HeadStore, @unchecked Sendable {
         #expect(records[0].outcome == "ok")
     }
 
+    /// Checks after the first read only what was appended, and give the same answers as a full pass.
+    @Test func laterChecksReadOnlyWhatWasAppended() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("activity-\(UUID().uuidString).jsonl")
+        let head = MemoryHead()
+        let log = ActivityLog(fileURL: url, head: head, fullCheckInterval: 3600)
+        try fill(log, 3)
+        #expect(try log.verify() == .intact(count: 3))
+        try fill(log, 2)
+        #expect(try log.verify() == .intact(count: 5))
+        var lines = try String(contentsOf: url, encoding: .utf8).split(separator: "\n").map(String.init)
+        lines.removeLast()
+        try (lines.joined(separator: "\n") + "\n").write(to: url, atomically: true, encoding: .utf8)
+        #expect(try log.verify() == .headMismatch)
+        let fresh = ActivityLog(fileURL: url, head: head, fullCheckInterval: 0)
+        try fill(fresh, 1)
+        #expect(try fresh.verify() == .broken(line: 5))
+    }
+
+    @Test func readsTheNewestRecordsFromTheEndOfALongLog() throws {
+        let (log, _, _) = makeLog()
+        for index in 0..<900 {
+            try log.append(client: "claude", tool: "search_messages", outcome: "ok", items: index)
+        }
+        let records = try log.records(limit: 200)
+        #expect(records.count == 200 && records.first?.items == 899 && records.last?.items == 700)
+        #expect(try log.verify() == .intact(count: 900))
+    }
+
     @Test func detectsAnEditedLine() throws {
         let (log, url, _) = makeLog()
         try fill(log, 4)
