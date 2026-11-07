@@ -10,6 +10,12 @@
   one Touch ID sends the rest, one by one. Each email is still approved for its exact bytes, and your hourly and daily
   limits still count each one. The tool is off until you turn it on.
 - **`update_draft` takes `attachments`** to replace a draft's files; without it, they stay.
+- **Calls are up to 2.5 times faster.** After each call, Postern reread and rechecked its whole activity log, and
+  the next call waited for it. It now checks only what was added since, with a full check every five minutes.
+- **HTML emails no longer come out empty.** Font size and color are judged where the text inherits them, so a
+  layout that sets a zero font size on a wrapper keeps its text, and rules meant for phones, print or dark mode no
+  longer hide the desktop version. White text on a dark background set by a style sheet stays; text hidden by a
+  style sheet class is now removed too.
 - **Calls made at the same time no longer hang.** Two apps, or one app calling two tools at once, could leave a call
   waiting until the client gave up. Postern now runs them one after the other on its Bridge session.
 
