@@ -105,6 +105,11 @@ struct BatchApprovalView: View {
             Toggle("", isOn: included).toggleStyle(.checkbox).labelsHidden()
             VStack(alignment: .leading, spacing: 5) {
                 Text(message.subject.isEmpty ? "(no subject)" : message.subject).fontWeight(.medium).lineLimit(1)
+                HStack(spacing: 6) {
+                    Text("From").foregroundStyle(.secondary).frame(width: 30, alignment: .leading)
+                    Text(message.from.email).lineLimit(1).truncationMode(.middle)
+                }
+                .font(.callout)
                 ForEach(Array(addresses(message).enumerated()), id: \.offset) { _, entry in
                     let (kind, address) = entry
                     HStack(spacing: 6) {

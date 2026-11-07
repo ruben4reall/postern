@@ -22,6 +22,11 @@ public enum ToolCatalog {
         "description": "Addresses such as anna@example.com or Anna <anna@example.com>.",
     ])
 
+    static let sender: Value = .object([
+        "type": "string",
+        "description": "The address to send from, such as an alias of the account. One of list_addresses; default the account's.",
+    ])
+
     static let outbox: Value = .object([
         "type": "array", "items": .object(["type": "string"]), "maxItems": 20,
         "description": "File names in the Postern outbox folder (~/Downloads/Postern/Outbox). Nothing else can be attached.",
@@ -83,6 +88,13 @@ public enum ToolCatalog {
                 inputSchema: schema(["id": .object(["type": "string", "description": "Message id from search_messages."])], required: ["id"]),
                 annotations: readAnnotations
             )
+        case .listAddresses:
+            Tool(
+                name: id.rawValue, title: "List sender addresses",
+                description: "Lists the addresses Postern may send from: the account's, and the aliases the user added in Postern's window.",
+                inputSchema: schema([:], required: []),
+                annotations: readAnnotations
+            )
         case .markRead, .markUnread:
             Tool(
                 name: id.rawValue, title: id == .markRead ? "Mark as read" : "Mark as unread",
@@ -142,10 +154,46 @@ public enum ToolCatalog {
                 name: id.rawValue, title: "Write a draft",
                 description: "Saves a draft in Drafts. Nothing is sent: the user, or send_draft with their approval, sends it.",
                 inputSchema: schema([
-                    "to": recipients, "cc": recipients, "bcc": recipients,
+                    "to": recipients, "cc": recipients, "bcc": recipients, "from": sender,
                     "subject": .object(["type": "string"]), "body": .object(["type": "string", "description": "Plain text."]),
                     "attachments": outbox,
                 ], required: ["to", "subject", "body"]),
+                annotations: draftAnnotations
+            )
+        case .createDrafts:
+            Tool(
+                name: id.rawValue, title: "Write drafts from a template",
+                description: """
+                Saves up to \(SendTools.batchLimit) drafts in Drafts at once, for example one application per company. \
+                A template gives the subject, body, attachments and sender they share; in its subject, body and \
+                attachment names, {{name}} is replaced by each draft's value for name. Each draft gives its recipients \
+                and values, and may override any template field. A draft with a {{name}} left without a value is not \
+                saved. Nothing is sent: review them, then send_drafts sends them after one approval.
+                """,
+                inputSchema: schema([
+                    "template": .object([
+                        "type": "object",
+                        "properties": .object([
+                            "subject": .object(["type": "string"]), "body": .object(["type": "string", "description": "Plain text."]),
+                            "attachments": outbox, "from": sender, "cc": recipients, "bcc": recipients,
+                        ]),
+                    ]),
+                    "drafts": .object([
+                        "type": "array", "minItems": 1, "maxItems": .int(SendTools.batchLimit),
+                        "items": .object([
+                            "type": "object",
+                            "properties": .object([
+                                "to": recipients, "cc": recipients, "bcc": recipients, "from": sender,
+                                "subject": .object(["type": "string"]), "body": .object(["type": "string"]), "attachments": outbox,
+                                "values": .object([
+                                    "type": "object", "additionalProperties": .object(["type": "string"]),
+                                    "description": "The text for each {{name}} of the template, such as {\"company\": \"Acme\"}.",
+                                ]),
+                            ]),
+                            "required": .array([.string("to")]),
+                        ]),
+                    ]),
+                ], required: ["drafts"]),
                 annotations: draftAnnotations
             )
         case .updateDraft:
@@ -154,7 +202,7 @@ public enum ToolCatalog {
                 description: "Replaces fields of a draft; fields left out keep their value, attachments included. Returns the draft's new id.",
                 inputSchema: schema([
                     "id": .object(["type": "string", "description": "Draft id."]),
-                    "to": recipients, "cc": recipients, "bcc": recipients,
+                    "to": recipients, "cc": recipients, "bcc": recipients, "from": sender,
                     "subject": .object(["type": "string"]), "body": .object(["type": "string"]),
                     "attachments": outbox,
                 ], required: ["id"]),
@@ -176,7 +224,7 @@ public enum ToolCatalog {
                 Touch ID; the call waits up to two minutes and reports what they decided.
                 """,
                 inputSchema: schema([
-                    "to": recipients, "cc": recipients, "bcc": recipients,
+                    "to": recipients, "cc": recipients, "bcc": recipients, "from": sender,
                     "subject": .object(["type": "string"]), "body": .object(["type": "string", "description": "Plain text."]),
                     "attachments": outbox,
                 ], required: ["to", "subject", "body"]),
@@ -190,6 +238,10 @@ public enum ToolCatalog {
                     "id": .object(["type": "string", "description": "Message id to answer."]),
                     "body": .object(["type": "string", "description": "Plain text, written above the quote."]),
                     "reply_all": .object(["type": "boolean", "description": "Also reply to the other recipients. Default false."]),
+                    "from": .object([
+                        "type": "string",
+                        "description": "The address to send from. Default: the address of the user's the message was sent to, else the account's.",
+                    ]),
                 ], required: ["id", "body"]),
                 annotations: sendAnnotations, _meta: askEveryTime
             )
@@ -201,6 +253,7 @@ public enum ToolCatalog {
                     "id": .object(["type": "string", "description": "Message id to forward."]),
                     "to": recipients, "note": .object(["type": "string", "description": "Optional text above the forwarded message."]),
                     "include_attachments": .object(["type": "boolean", "description": "Default true."]),
+                    "from": sender,
                 ], required: ["id", "to"]),
                 annotations: sendAnnotations, _meta: askEveryTime
             )

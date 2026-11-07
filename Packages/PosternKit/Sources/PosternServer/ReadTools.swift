@@ -21,6 +21,7 @@ struct ReadTools {
         case .searchMessages: try await search(arguments)
         case .getMessage: try await getMessage(arguments)
         case .getThread: try await getThread(arguments)
+        case .listAddresses: try await listAddresses()
         default: throw PosternError(.invalidArgument, "\(tool.rawValue) is not a read tool.")
         }
     }
@@ -168,6 +169,20 @@ struct ReadTools {
     private func ensureVisible(_ id: MessageID) async throws {
         let name = try await backend.displayName(ofRawMailbox: id.mailbox)
         guard !policy.isHidden(name) else { throw PosternError(.scopeHidden, "The user has hidden this mailbox from Postern.") }
+    }
+
+    /// The account's address and the aliases the user added in Postern's window; nothing else can send.
+    private func listAddresses() async throws -> CallTool.Result {
+        let account = try await backend.ownAddress()
+        let aliases = policy.senderAddresses.subtracting([account.email.lowercased()]).sorted()
+        let structured: Value = .object(["addresses": .array(
+            [.object(["email": .string(account.email), "kind": "account"])]
+                + aliases.map { .object(["email": .string($0), "kind": "alias"]) }
+        )])
+        let text = aliases.isEmpty
+            ? "Postern can send from \(account.email), the account's address. The user can add aliases in Postern's window."
+            : "Postern can send from \(account.email), the account's address, and from \(aliases.joined(separator: ", "))."
+        return result(text: text, structured)
     }
 
     private func result(text: String, _ structured: Value) -> CallTool.Result {

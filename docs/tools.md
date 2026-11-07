@@ -17,6 +17,7 @@ instructions. Their text form is wrapped in markers that carry a random value fr
 | `search_messages` | `mailbox` (default `INBOX`), `from`, `to`, `subject`, `text`, `since` and `before` (`YYYY-MM-DD`), `unread`, `starred`, `limit` (1 to 50, default 20), `cursor` | Finds messages, newest first, and returns ids with sender, subject and date. `next_cursor` gives the next page. |
 | `get_message` | `id`, `max_chars` (500 to 100,000, default 20,000) | Reads one message, cleaned: hidden text, invisible characters and images removed, links listed with their real destination, attachments listed by number, and a sender verdict. |
 | `get_thread` | `id` | Lists the messages of the conversation a message belongs to, oldest first, across mailboxes. |
+| `list_addresses` | none | Lists the addresses Postern may send from: the account's, and the aliases you added in the window. |
 | `save_attachment` | `message_id`, `index` (from `get_message`) | Saves one attachment to `~/Downloads/Postern`, marked as downloaded so macOS checks it before it opens. Returns the path, size and SHA-256. No other folder can be chosen. |
 
 The sender verdict comes with its reasons and is one of:
@@ -49,8 +50,9 @@ applied.
 
 | Tool | Arguments | What it does |
 |---|---|---|
-| `create_draft` | `to`, `cc`, `bcc`, `subject`, `body` (plain text), `attachments` | Saves a draft in Drafts. Nothing is sent. |
-| `update_draft` | `id`, and any of `to`, `cc`, `bcc`, `subject`, `body`, `attachments` | Replaces those fields; the others keep their value, attachments included. Returns the draft's new id. |
+| `create_draft` | `to`, `cc`, `bcc`, `from`, `subject`, `body` (plain text), `attachments` | Saves a draft in Drafts. Nothing is sent. |
+| `create_drafts` | `drafts`: 1 to 50, each with `to` and `values`, and any field of its own; `template`: `subject`, `body`, `attachments`, `from`, `cc`, `bcc` | Saves several drafts from one template. `{{name}}` in the subject, body and attachment names is replaced by each draft's value; a draft with a name left without a value is not saved. Returns the outcome for each draft. Nothing is sent. |
+| `update_draft` | `id`, and any of `to`, `cc`, `bcc`, `from`, `subject`, `body`, `attachments` | Replaces those fields; the others keep their value, attachments included. Returns the draft's new id. |
 | `delete_draft` | `id` | Deletes one draft from Drafts. The client also asks you each time. |
 
 ## Send
@@ -61,13 +63,16 @@ nobody else can be written to.
 
 | Tool | Arguments | What it does |
 |---|---|---|
-| `send_message` | `to`, `cc`, `bcc`, `subject`, `body` (plain text), `attachments` | Writes and sends a new email. |
-| `reply_to_message` | `id`, `body`, `reply_all` (default `false`) | Replies above a quote of the original. Recipients come from the original. |
-| `forward_message` | `id`, `to`, `note`, `include_attachments` (default `true`) | Forwards a message with an optional note. |
+| `send_message` | `to`, `cc`, `bcc`, `from`, `subject`, `body` (plain text), `attachments` | Writes and sends a new email. |
+| `reply_to_message` | `id`, `body`, `reply_all` (default `false`), `from` | Replies above a quote of the original. Recipients come from the original; it leaves from your address the original was sent to, unless `from` says otherwise. |
+| `forward_message` | `id`, `to`, `note`, `include_attachments` (default `true`), `from` | Forwards a message with an optional note. |
 | `send_draft` | `id` | Sends a draft as it is, attachments included, then removes it from Drafts. |
 | `send_drafts` | `ids`: 1 to 50 draft ids | Sends several drafts after one panel and one Touch ID, then removes each one sent from Drafts. Returns the outcome for each id: `sent`, `skipped` (you unticked it), `refused` (with the reason, such as the limit) or `failed`. |
 
 Recipients are addresses such as `anna@example.com` or `Anna <anna@example.com>`, at most 50 in all.
+`from` is the address an email leaves from: your account's by default, or an alias of the account that you added
+under Send from in Postern's window (with Touch ID). A draft keeps the address it was written from; Postern refuses to
+send it if that address is not one of yours on the list.
 `attachments` are file names in `~/Downloads/Postern/Outbox`, at most 20 MB in all: put the files there first.
 Nothing else on your Mac can be attached.
 
@@ -103,6 +108,7 @@ When Postern refuses, the client gets a code and a sentence it can repeat to you
 | `not_found` | No message or mailbox matches. |
 | `too_large` | The message or file is too large. |
 | `recipient_not_allowed` | A recipient is not on your allowed list. |
+| `sender_not_allowed` | The address to send from is not your account's or an alias you added. |
 | `quota_exceeded` | The hourly or daily sending limit is reached. |
 | `approval_rejected` | You chose not to send or delete, or Touch ID did not pass. |
 | `approval_timeout` | Nobody answered the panel within two minutes. |

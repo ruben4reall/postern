@@ -215,6 +215,16 @@ final class ControlModel {
         await update("let your apps send to anyone") { $0.allowedRecipients.remove(email) }
     }
 
+    func addSender(_ email: String) async {
+        let address = email.trimmingCharacters(in: .whitespaces).lowercased()
+        guard Self.looksLikeAnAddress(address) else { notice = "\(email) is not an email address."; return }
+        await update("let your apps send from \(address)") { $0.senderAddresses.insert(address) }
+    }
+
+    func removeSender(_ email: String) async {
+        await update("") { $0.senderAddresses.remove(email) }
+    }
+
     static func looksLikeAnAddress(_ text: String) -> Bool {
         text.wholeMatch(of: #/[^@\s]+@[^@\s]+\.[A-Za-z]{2,}/#) != nil
     }
@@ -332,6 +342,10 @@ struct ToolCopy {
             ToolCopy(title: "Write drafts", verb: "write drafts",
                      allows: "Save drafts in Drafts. Nothing is sent.",
                      risk: "Drafts sync to Proton on all your devices.")
+        case .createDrafts:
+            ToolCopy(title: "Write drafts from a template", verb: "write several drafts at once",
+                     allows: "Save up to 50 drafts at once from one template, such as one application per company.",
+                     risk: "It fills your Drafts folder; nothing is sent.")
         case .updateDraft:
             ToolCopy(title: "Change drafts", verb: "change drafts",
                      allows: "Rewrite a draft's recipients, subject or text.",
@@ -360,6 +374,10 @@ struct ToolCopy {
             ToolCopy(title: "Send drafts together", verb: "send several drafts at once",
                      allows: "Send up to 50 drafts at once: one panel lists them all, you untick any, one Touch ID sends the rest.",
                      risk: "One approval sends every email left ticked. Your hourly and daily limits still apply.")
+        case .listAddresses:
+            ToolCopy(title: "See your sender addresses", verb: "see which addresses you send from",
+                     allows: "List your account's address and the aliases you added under Send from.",
+                     risk: "Apps learn your aliases.")
         case .saveAttachment:
             ToolCopy(title: "Save attachments", verb: "save attachments to your Mac",
                      allows: "Save an attachment to Downloads › Postern, marked as downloaded.",

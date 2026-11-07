@@ -911,6 +911,7 @@ private struct SendingSection: View {
     @Bindable var model: ControlModel
     @State private var newTrusted = ""
     @State private var newAllowed = ""
+    @State private var newSender = ""
 
     var body: some View {
         Section {
@@ -955,6 +956,25 @@ private struct SendingSection: View {
         } footer: {
             Text("When this list is not empty, apps cannot write to anyone else, even with your approval.")
         }
+        Section {
+            AddressList(addresses: model.policy.senderAddresses.sorted(), empty: "Only your account's address.") { email in
+                Task { await model.removeSender(email) }
+            }
+            HStack {
+                TextField("Add an alias of your Proton account", text: $newSender).onSubmit(addSender)
+                Button("Add…", action: addSender).disabled(newSender.isEmpty)
+            }
+        } header: {
+            Text("Send from")
+        } footer: {
+            Text("Apps can send from your account's address and from these aliases; the panel always shows which one. Adding one asks for Touch ID. In Bridge's split mode, an alias needs its own Bridge account.")
+        }
+    }
+
+    private func addSender() {
+        let email = newSender
+        newSender = ""
+        Task { await model.addSender(email) }
     }
 
     private func addTrusted() {

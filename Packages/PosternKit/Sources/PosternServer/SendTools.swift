@@ -21,6 +21,8 @@ struct SendTools {
 
     func call(_ tool: ToolID, _ arguments: [String: Value]) async throws -> CallTool.Result {
         switch tool {
+        case .createDrafts:
+            return try await createDrafts(arguments)
         case .createDraft:
             let message = try await compose(arguments)
             let id = try await backend.saveDraft(message)
@@ -67,16 +69,17 @@ struct SendTools {
         guard let body = string(arguments["body"]) else { throw PosternError(.invalidArgument, "body is required.") }
         let original = try await backend.message(id, maxChars: Self.quoteLimit)
         let me = try await backend.ownAddress()
+        let mine = policy.senderAddresses.union([me.email.lowercased()])
         let headers = original.headers
         var to = headers.replyTo.isEmpty ? headers.from : headers.replyTo
         var cc: [Address] = []
         if bool(arguments["reply_all"]) == true {
             cc = (headers.to + headers.cc).filter { address in
-                address.email.lowercased() != me.email.lowercased()
+                !mine.contains(address.email.lowercased())
                     && !to.contains { $0.email.lowercased() == address.email.lowercased() }
             }
         }
-        to = to.filter { $0.email.lowercased() != me.email.lowercased() }
+        to = to.filter { !mine.contains($0.email.lowercased()) }
         if to.isEmpty { to = headers.from }
         let subject = headers.subject.lowercased().hasPrefix("re:") ? headers.subject : "Re: " + headers.subject
         let sender = headers.from.first.map(Self.describe) ?? "the sender"
@@ -86,7 +89,8 @@ struct SendTools {
         var references = headers.references
         if let messageID = headers.messageID { references.append(messageID) }
         let message = try OutgoingMessage.make(
-            from: me, to: to, cc: cc, subject: subject, body: body, quoted: quoted,
+            from: try await self.sender(arguments["from"], preferred: headers.to + headers.cc), to: to, cc: cc,
+            subject: subject, body: body, quoted: quoted,
             inReplyTo: headers.messageID, references: Array(references.suffix(20))
         )
         var extra: [String: [ApprovalBadge]] = [:]
@@ -112,7 +116,7 @@ struct SendTools {
         let message: OutgoingMessage
         do {
             message = try OutgoingMessage.make(
-                from: try await backend.ownAddress(), to: recipients, subject: subject, body: string(arguments["note"]) ?? "",
+                from: try await sender(arguments["from"]), to: recipients, subject: subject, body: string(arguments["note"]) ?? "",
                 quoted: quoted, attachments: files
             )
         } catch let error as ComposeError {
@@ -120,6 +124,75 @@ struct SendTools {
         }
         let sender = headers.from.first.map(Self.describe) ?? "someone"
         return try await deliver(message, tool: .forwardMessage, context: "Forward of \(sender): \(headers.subject)", extra: [:])
+    }
+
+    // MARK: Drafts from a template
+
+    /// Up to fifty drafts from one template. Nothing leaves, so nothing asks the user; each draft is saved or refused
+    /// on its own.
+    private func createDrafts(_ arguments: [String: Value]) async throws -> CallTool.Result {
+        guard case .array(let list)? = arguments["drafts"], (1...Self.batchLimit).contains(list.count) else {
+            throw PosternError(.invalidArgument, "drafts is a list of 1 to \(Self.batchLimit) drafts.")
+        }
+        var template: [String: Value] = [:]
+        switch arguments["template"] {
+        case .object(let fields)?: template = fields.filter { Self.templateFields.contains($0.key) }
+        case nil: break
+        default: throw PosternError(.invalidArgument, "template is an object with subject, body, attachments, from, cc and bcc.")
+        }
+        var results: [Value] = []
+        var lines: [String] = []
+        for (index, item) in list.enumerated() {
+            do {
+                guard case .object(var fields) = item else {
+                    throw PosternError(.invalidArgument, "Each draft is an object with to, and values for the template.")
+                }
+                var values: [String: String] = [:]
+                if case .object(let given)? = fields.removeValue(forKey: "values") {
+                    for case (let key, .string(let text)) in given { values[key] = text }
+                }
+                var merged = template.merging(fields) { _, own in own }
+                for key in ["subject", "body"] {
+                    if case .string(let text)? = merged[key] { merged[key] = .string(try Self.fill(text, values)) }
+                }
+                if case .array(let names)? = merged["attachments"] {
+                    merged["attachments"] = .array(try names.map { name in
+                        guard case .string(let text) = name else { return name }
+                        return .string(try Self.fill(text, values))
+                    })
+                }
+                let message = try await compose(merged)
+                let id = try await backend.saveDraft(message)
+                results.append(.object(["index": .int(index), "status": "saved", "draft_id": .string(id.opaque)]))
+                lines.append("\(index + 1). Saved for \(message.envelopeRecipients.joined(separator: ", ")): \(id.opaque)")
+            } catch {
+                let detail = (error as? PosternError).map { "\($0.code.rawValue): \($0.message)" } ?? "\(error)"
+                results.append(.object(["index": .int(index), "status": "refused", "detail": .string(detail)]))
+                lines.append("\(index + 1). Not saved. \(detail)")
+            }
+        }
+        let saved = results.filter { if case .object(let fields) = $0 { fields["status"] == "saved" } else { false } }.count
+        return result(
+            (["Saved \(saved) of \(list.count) drafts in Drafts. Nothing was sent."] + lines).joined(separator: "\n"),
+            ["saved": .int(saved), "results": .array(results)]
+        )
+    }
+
+    static let templateFields: Set<String> = ["subject", "body", "attachments", "from", "cc", "bcc"]
+
+    /// Replaces each {{name}} with its value. A name without a value refuses the draft, so none says "Dear {{name}}".
+    static func fill(_ text: String, _ values: [String: String]) throws -> String {
+        var missing: [String] = []
+        let filled = text.replacing(#/\{\{\s*([^{}\s]+)\s*\}\}/#) { match in
+            let key = String(match.1)
+            guard let value = values[key] else {
+                missing.append("{{\(key)}}")
+                return ""
+            }
+            return value
+        }
+        guard missing.isEmpty else { throw PosternError(.invalidArgument, "No value for \(missing.joined(separator: ", ")).") }
+        return filled
     }
 
     // MARK: Drafts sent together
@@ -231,6 +304,33 @@ struct SendTools {
         }
     }
 
+    /// The address an email leaves from: the account's, or an alias the user added in Postern's window. A draft
+    /// keeps the address it was written from, if the user allows it; a reply prefers the address it answers.
+    private func sender(_ value: Value?, draft: Address? = nil, preferred: [Address] = []) async throws -> Address {
+        let account = try await backend.ownAddress()
+        func allowed(_ address: Address) -> Bool {
+            let email = address.email.lowercased()
+            return email == account.email.lowercased() || policy.senderAddresses.contains(email)
+        }
+        func named(_ address: Address) -> Address { Address(name: address.name ?? account.name, email: address.email) }
+        if let value {
+            guard case .string(let text) = value, let address = RecipientParser.parse(text) else {
+                throw PosternError(.invalidArgument, "from is one address, such as pro@example.com.")
+            }
+            guard allowed(address) else {
+                throw PosternError(.senderNotAllowed, "\(address.email) is not one of the user's sender addresses; list_addresses gives them, and the user can add an alias in Postern's window.")
+            }
+            return named(address)
+        }
+        if let draft {
+            guard allowed(draft) else {
+                throw PosternError(.senderNotAllowed, "This draft is written from \(draft.email), which is not one of the user's sender addresses. Pass from with one of list_addresses, or the user can add it in Postern's window.")
+            }
+            return named(draft)
+        }
+        return preferred.first(where: allowed).map(named) ?? account
+    }
+
     private func checkRecipients(_ message: OutgoingMessage) throws {
         let refused = message.envelopeRecipients.filter { !policy.mayReceive($0) }
         guard refused.isEmpty else {
@@ -274,9 +374,10 @@ struct SendTools {
         let subject = string(arguments["subject"]) ?? base?.headers.subject ?? ""
         let body = arguments["body"] == nil ? base?.body ?? "" : (string(arguments["body"]) ?? "")
         let files = arguments["attachments"] == nil ? baseFiles : try await outboxFiles(arguments["attachments"])
+        let from = try await sender(arguments["from"], draft: base?.headers.from.first)
         do {
             return try OutgoingMessage.make(
-                from: try await backend.ownAddress(), to: to, cc: cc, bcc: bcc, subject: subject, body: body,
+                from: from, to: to, cc: cc, bcc: bcc, subject: subject, body: body,
                 inReplyTo: base?.headers.inReplyTo, references: base?.headers.references ?? [], attachments: files
             )
         } catch let error as ComposeError {

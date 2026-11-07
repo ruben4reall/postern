@@ -2,6 +2,13 @@
 
 ## 0.1.2 (unreleased)
 
+- **Send from your aliases.** Add an alias of your Proton account under Send from in Postern's window (Touch ID);
+  `send_message`, `create_draft`, `update_draft` and `forward_message` take `from`, replies leave from the address
+  the original was sent to, and `list_addresses` lists them. Any other From is refused (`sender_not_allowed`), and a
+  draft written from an address you did not add is not sent.
+- **Write up to 50 drafts from one template.** `create_drafts` fills `{{name}}` in the subject, body and attachment
+  names with each draft's values, for example one application per company with its own letter. A draft with a name
+  left without a value is not saved. With `send_drafts`, fifty applications take two calls and one Touch ID.
 - **Drafts keep their attachments when they are sent.** `send_draft` sent the text of a draft without its
   attachments, and `update_draft` dropped them too. Both now carry them, the panel lists them, and the bytes that
   leave are the ones you approved. If you sent drafts with attachments through 0.1.1, check your Sent folder.

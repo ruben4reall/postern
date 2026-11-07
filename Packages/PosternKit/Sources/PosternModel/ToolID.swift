@@ -18,6 +18,7 @@ public enum ToolID: String, Codable, Sendable, CaseIterable {
     case removeLabel = "remove_label"
     case createMailbox = "create_mailbox"
     case createDraft = "create_draft"
+    case createDrafts = "create_drafts"
     case updateDraft = "update_draft"
     case deleteDraft = "delete_draft"
     case sendMessage = "send_message"
@@ -26,15 +27,16 @@ public enum ToolID: String, Codable, Sendable, CaseIterable {
     case sendDraft = "send_draft"
     case sendDrafts = "send_drafts"
     case saveAttachment = "save_attachment"
+    case listAddresses = "list_addresses"
     case trashMessages = "trash_messages"
     case deletePermanently = "delete_permanently"
 
     public var tier: Tier {
         switch self {
-        case .listMailboxes, .searchMessages, .getMessage, .getThread, .saveAttachment: .read
+        case .listMailboxes, .searchMessages, .getMessage, .getThread, .saveAttachment, .listAddresses: .read
         case .markRead, .markUnread, .setStarred, .moveMessages, .archiveMessages, .addLabel, .removeLabel,
              .createMailbox: .organize
-        case .createDraft, .updateDraft, .deleteDraft: .draft
+        case .createDraft, .createDrafts, .updateDraft, .deleteDraft: .draft
         case .sendMessage, .replyToMessage, .forwardMessage, .sendDraft, .sendDrafts: .send
         case .trashMessages, .deletePermanently: .delete
         }

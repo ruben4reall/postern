@@ -17,6 +17,8 @@ public struct Policy: Codable, Sendable, Equatable {
     public var allowedRecipients: Set<String>
     public var sendsPerHour: Int
     public var sendsPerDay: Int
+    /// Addresses of the Proton account, besides the one Bridge signs in with, that apps may send from.
+    public var senderAddresses: Set<String>
 
     public static let defaultSendsPerHour = 10
     public static let defaultSendsPerDay = 30
@@ -25,7 +27,7 @@ public struct Policy: Codable, Sendable, Equatable {
         enabledTools: Set<ToolID>, hiddenMailboxes: Set<String> = [], paused: Bool = false,
         pauseWhenLocked: Bool = false, allowPasswordFallback: Bool = false, trustedRecipients: Set<String> = [],
         allowedRecipients: Set<String> = [], sendsPerHour: Int = Policy.defaultSendsPerHour,
-        sendsPerDay: Int = Policy.defaultSendsPerDay
+        sendsPerDay: Int = Policy.defaultSendsPerDay, senderAddresses: Set<String> = []
     ) {
         self.enabledTools = enabledTools
         self.hiddenMailboxes = hiddenMailboxes
@@ -36,6 +38,7 @@ public struct Policy: Codable, Sendable, Equatable {
         self.allowedRecipients = Set(allowedRecipients.map { $0.lowercased() })
         self.sendsPerHour = sendsPerHour
         self.sendsPerDay = sendsPerDay
+        self.senderAddresses = Set(senderAddresses.map { $0.lowercased() })
     }
 
     /// Fields added after the first release decode with their safe default, so an older policy still loads.
@@ -50,6 +53,7 @@ public struct Policy: Codable, Sendable, Equatable {
         allowedRecipients = try container.decodeIfPresent(Set<String>.self, forKey: .allowedRecipients) ?? []
         sendsPerHour = try container.decodeIfPresent(Int.self, forKey: .sendsPerHour) ?? Self.defaultSendsPerHour
         sendsPerDay = try container.decodeIfPresent(Int.self, forKey: .sendsPerDay) ?? Self.defaultSendsPerDay
+        senderAddresses = try container.decodeIfPresent(Set<String>.self, forKey: .senderAddresses) ?? []
     }
 
     /// Whether this address may receive mail through Postern.
@@ -87,6 +91,7 @@ public struct Policy: Codable, Sendable, Equatable {
             return true
         }
         if sendsPerHour > old.sendsPerHour || sendsPerDay > old.sendsPerDay { return true }
+        if !senderAddresses.isSubset(of: old.senderAddresses) { return true }
         return false
     }
 }

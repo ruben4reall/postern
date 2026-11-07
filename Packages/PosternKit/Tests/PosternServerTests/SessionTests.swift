@@ -254,7 +254,7 @@ final class Reports: @unchecked Sendable {
         #expect(try await readOnly.listTools().tools.count == 4)
         let (all, _) = try await connect(policy: organizePolicy)
         let tools = try await all.listTools().tools
-        #expect(tools.count == 13)
+        #expect(tools.count == 14)
         let move = try #require(tools.first { $0.name == "move_messages" })
         #expect(move.annotations.readOnlyHint == false && move.annotations.destructiveHint == false)
     }
@@ -508,14 +508,14 @@ final class MemoryLedger: SendLedger, @unchecked Sendable {
     }
 
     /// A job application saved as a draft: a letter, a CV and a certificate, the way Claude prepares them.
-    func applicationDraft(_ backend: FakeBackend) throws -> [OutgoingAttachment] {
+    func applicationDraft(_ backend: FakeBackend, from: String = "me@example.ch") throws -> [OutgoingAttachment] {
         let files = try ["Lettre.pdf", "CV.pdf", "Certificat.pdf"].map { name in
             try OutgoingAttachment.make(filename: name, data: Data("%PDF-1.7\n".utf8) + Data((0..<200_000).map { _ in UInt8.random(in: 0...255) }))
         }
         backend.lock.withLock {
             backend.draftFiles = files
             backend.draft = SanitizedMessage(
-                headers: SanitizedHeaders(from: [Address(name: "Me", email: "me@example.ch")], to: [Address(name: nil, email: "known@example.com")],
+                headers: SanitizedHeaders(from: [Address(name: "Me", email: from)], to: [Address(name: nil, email: "known@example.com")],
                                           subject: "Candidature"),
                 body: "Bonjour, voici ma candidature.", bodyTruncated: false, bodyWasHTML: false, hiddenElementsRemoved: 0, imagesOmitted: 0,
                 links: [], attachments: [],
@@ -604,6 +604,83 @@ final class MemoryLedger: SendLedger, @unchecked Sendable {
         #expect(isError == true && text(content).hasPrefix("approval_rejected"))
         #expect(backend.lock.withLock { backend.sent }.isEmpty && backend.lock.withLock { backend.deletedDrafts }.isEmpty)
         let (tooMany, refused) = try await client.callTool(name: "send_drafts", arguments: ["ids": .array(drafts(Array(1...51)).map { .string($0.opaque) })])
+        #expect(refused == true && text(tooMany).hasPrefix("invalid_argument"))
+    }
+
+    // MARK: Sender addresses
+
+    let withAlias = Policy(enabledTools: Set(ToolID.allCases), senderAddresses: ["pro@example.ch"])
+
+    @Test func sendsFromAnAliasTheUserAddedAndNoOther() async throws {
+        let (client, presenter) = try await connect(policy: withAlias)
+        let email: [String: Value] = ["to": .array([.string("known@example.com")]), "subject": .string("Hi"), "body": .string("Hello")]
+        _ = try await client.callTool(name: "send_message", arguments: email.merging(["from": .string("pro@example.ch")]) { $1 })
+        let shown = try #require(presenter.lock.withLock { presenter.requests.first })
+        #expect(shown.message.from.email == "pro@example.ch" && shown.message.from.name == "Me")
+        let (content, isError) = try await client.callTool(name: "send_message", arguments: email.merging(["from": .string("boss@example.com")]) { $1 })
+        #expect(isError == true && text(content).hasPrefix("sender_not_allowed"))
+        #expect(presenter.lock.withLock { presenter.requests }.count == 1)
+        let (listed, _) = try await client.callTool(name: "list_addresses")
+        #expect(text(listed).contains("me@example.ch") && text(listed).contains("pro@example.ch"))
+    }
+
+    @Test func repliesFromTheAliasTheMessageWasSentTo() async throws {
+        let backend = FakeBackend()
+        backend.lock.withLock { backend.original.headers.to = [Address(name: nil, email: "Pro@example.ch")] }
+        let (client, presenter) = try await connect(policy: withAlias, backend: backend)
+        _ = try await client.callTool(name: "reply_to_message", arguments: [
+            "id": .string(MessageID(mailbox: "INBOX", uidValidity: 1, uid: 77).opaque), "body": .string("Thanks"),
+        ])
+        #expect(presenter.lock.withLock { presenter.requests.first }?.message.from.email.lowercased() == "pro@example.ch")
+    }
+
+    @Test func aDraftWrittenFromAnAddressTheUserDidNotAddIsNotSent() async throws {
+        let backend = FakeBackend()
+        _ = try applicationDraft(backend, from: "old-alias@example.ch")
+        let (client, presenter) = try await connect(policy: withAlias, backend: backend)
+        let (content, isError) = try await client.callTool(name: "send_draft", arguments: ["id": .string(drafts([5])[0].opaque)])
+        #expect(isError == true && text(content).hasPrefix("sender_not_allowed"))
+        #expect(presenter.lock.withLock { presenter.requests }.isEmpty && backend.lock.withLock { backend.sent }.isEmpty)
+    }
+
+    // MARK: Drafts in batches
+
+    @Test func createsDraftsFromATemplate() async throws {
+        let backend = FakeBackend()
+        backend.lock.withLock {
+            backend.outbox["CV.pdf"] = Data("%PDF-cv".utf8)
+            backend.outbox["Lettre-Acme.pdf"] = Data("%PDF-acme".utf8)
+            backend.outbox["Lettre-Globex.pdf"] = Data("%PDF-globex".utf8)
+        }
+        let (client, presenter) = try await connect(policy: withAlias, backend: backend)
+        func application(_ to: String, _ values: [String: String]) -> Value {
+            .object(["to": .array([.string(to)]), "values": .object(values.mapValues { .string($0) })])
+        }
+        let (content, structured, isError) = try await call(client, "create_drafts", [
+            "template": .object([
+                "subject": .string("Candidature : {{poste}}"),
+                "body": .string("Bonjour {{contact}},\n\nJe postule au poste de {{ poste }} chez {{entreprise}}."),
+                "attachments": .array([.string("CV.pdf"), .string("Lettre-{{entreprise}}.pdf")]),
+                "from": .string("pro@example.ch"),
+            ]),
+            "drafts": .array([
+                application("rh@acme.example", ["contact": "Madame Dupont", "poste": "vendeur", "entreprise": "Acme"]),
+                application("jobs@globex.example", ["contact": "Monsieur Martin", "poste": "magasinier", "entreprise": "Globex"]),
+                application("hr@initech.example", ["poste": "caissier", "entreprise": "Initech"]),
+            ]),
+        ])
+        #expect(isError != true, "\(text(content))")
+        let saved = backend.lock.withLock { backend.drafts }
+        #expect(saved.map(\.subject) == ["Candidature : vendeur", "Candidature : magasinier"])
+        #expect(saved.first?.body == "Bonjour Madame Dupont,\n\nJe postule au poste de vendeur chez Acme.")
+        #expect(saved.last?.attachments.map(\.filename) == ["CV.pdf", "Lettre-Globex.pdf"])
+        #expect(saved.allSatisfy { $0.from.email == "pro@example.ch" })
+        #expect(statuses(structured) == ["saved", "saved", "refused"])
+        #expect(text(content).contains("{{contact}}"))
+        #expect(presenter.lock.withLock { presenter.requests }.isEmpty)
+        let (tooMany, refused) = try await client.callTool(name: "create_drafts", arguments: [
+            "drafts": .array(Array(repeating: application("a@example.com", [:]), count: 51)),
+        ])
         #expect(refused == true && text(tooMany).hasPrefix("invalid_argument"))
     }
 }

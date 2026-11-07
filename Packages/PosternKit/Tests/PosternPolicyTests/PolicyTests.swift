@@ -49,6 +49,7 @@ import PosternVault
         { (p: inout Policy) in p.hiddenMailboxes.remove("Folders/Private") },
         { (p: inout Policy) in p.pauseWhenLocked = false },
         { (p: inout Policy) in p.allowPasswordFallback = true },
+        { (p: inout Policy) in p.senderAddresses.insert("pro@example.ch") },
     ] as [@Sendable (inout Policy) -> Void])
     func givingPowerNeedsTheUser(_ change: @Sendable (inout Policy) -> Void) {
         var more = base
