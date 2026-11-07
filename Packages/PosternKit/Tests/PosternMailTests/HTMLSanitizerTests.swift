@@ -22,11 +22,32 @@ import Testing
         "<p>Visible</p><div style=\"color: rgba(0,0,0,0)\">SECRET</div>",
         "<p>Visible</p><!-- SECRET --><script>SECRET</script><noscript>SECRET</noscript>",
         "<p>Visible</p><template>SECRET</template><svg><text>SECRET</text></svg>",
+        "<p>Visible</p><div style=\"font-size:0\"><span>SECRET</span></div>",
+        "<style>.t { font-size: 0 }</style><p>Visible</p><p class=\"t\">SECRET</p>",
+        "<style>.w { color: #fff }</style><p>Visible</p><p class=\"w\">SECRET</p>",
+        "<style>@media all { .x { display: none } }</style><p>Visible</p><p class=\"x\">SECRET</p>",
+        "<style>@media screen and (max-width: 99999px) { .x { display: none } }</style><p>Visible</p><p class=\"x\">SECRET</p>",
     ])
     func removesHiddenText(_ html: String) {
         let rendering = sanitizer.render(html)
         #expect(rendering.text.contains("Visible"))
         #expect(!rendering.text.contains("SECRET"))
+    }
+
+    /// Patterns of ordinary newsletters and bank emails that left their body empty (Revolut, 15.10.2026; Decathlon,
+    /// 06.10.2026).
+    @Test(arguments: [
+        // A zero font size kills the gaps between inline blocks; each block sets its own size.
+        "<table><tr><td style=\"font-size:0\"><div style=\"display:inline-block;font-size:14px\">Shown</div></td></tr></table>",
+        // Rules for small screens hide the desktop layout on a phone, not on a Mac.
+        "<style>@media only screen and (max-width:600px) { .desktop { display:none !important } }</style><div class=\"desktop\">Shown</div>",
+        // A dark background set by a class, with white text on it.
+        "<style>.dark { background-color: #111111 }</style><div class=\"dark\"><p style=\"color:#ffffff\">Shown</p></div>",
+        // A light color on a wrapper, which the paragraph overrides.
+        "<div style=\"color:#ffffff\"><p style=\"color:#333333\">Shown</p></div>",
+    ])
+    func keepsTextThatIsVisible(_ html: String) {
+        #expect(sanitizer.render(html).text.contains("Shown"))
     }
 
     @Test func keepsWhiteTextOnADarkBackground() {

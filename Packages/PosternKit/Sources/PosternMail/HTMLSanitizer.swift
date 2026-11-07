@@ -14,8 +14,8 @@ public struct HTMLRendering: Sendable {
 /// Turns hostile HTML into the text a human would actually see.
 ///
 /// Anything a mail client would not display is removed before conversion: scripts, styles, hidden elements
-/// (by attribute, inline style, or simple `<style>` rules), text drawn in the background color. Images are
-/// never fetched; links are listed with their real destination.
+/// (by attribute, inline style, or `<style>` rules that apply to a desktop window), text too small to read or drawn
+/// in the color of its background. Images are never fetched; links are listed with their real destination.
 public struct HTMLSanitizer: Sendable {
     public init() {}
 
@@ -36,11 +36,13 @@ public struct HTMLSanitizer: Sendable {
             return HTMLRendering(text: "", links: [], hiddenElementsRemoved: 0, imagesOmitted: 0)
         }
         var removed = 0
-        removed += removeStyleSheetHiddenElements(document)
+        let sheet = StyleSheet(document)
+        removed += removeStyleSheetHiddenElements(document, sheet: sheet)
         if let invisible = try? document.select(Self.invisibleTags) {
             for element in invisible.array() { try? element.remove() }
         }
         removed += removeInlineHiddenElements(document)
+        removed += removeHiddenText(document, sheet: sheet)
 
         var renderer = TextRenderer()
         renderer.render(document.body() ?? document)
@@ -53,22 +55,12 @@ public struct HTMLSanitizer: Sendable {
     // MARK: Hidden content
 
     /// Applies `display:none`-like rules from `<style>` blocks for selectors SwiftSoup understands.
-    private func removeStyleSheetHiddenElements(_ document: Document) -> Int {
-        guard let styles = try? document.select("style") else { return 0 }
+    private func removeStyleSheetHiddenElements(_ document: Document, sheet: StyleSheet) -> Int {
         var removed = 0
-        let rule = #/([^{}]+)\{([^{}]*)\}/#
-        for style in styles.array() {
-            let css = style.data().replacingOccurrences(of: #"/\*[\s\S]*?\*/"#, with: "", options: .regularExpression)
-            for match in css.matches(of: rule) where StyleRules.hides(String(match.2), background: nil) {
-                for selector in match.1.split(separator: ",") {
-                    let trimmed = selector.trimmingCharacters(in: .whitespacesAndNewlines)
-                    guard !trimmed.isEmpty, !trimmed.contains(":"), !trimmed.hasPrefix("@") else { continue }
-                    guard let elements = try? document.select(trimmed) else { continue }
-                    for element in elements.array() where element.parent() != nil {
-                        try? element.remove()
-                        removed += 1
-                    }
-                }
+        for rule in sheet.rules where StyleRules.hidesBox(rule.values) {
+            for element in sheet.elements(matching: rule, in: document) where element.parent() != nil {
+                try? element.remove()
+                removed += 1
             }
         }
         return removed
@@ -91,24 +83,55 @@ public struct HTMLSanitizer: Sendable {
     private func isHidden(_ element: Element) -> Bool {
         if element.hasAttr("hidden") { return true }
         if (try? element.attr("aria-hidden"))?.lowercased() == "true" { return true }
-        let style = (try? element.attr("style")) ?? ""
-        let fontColor = element.tagName() == "font" ? (try? element.attr("color")) : nil
-        let background = effectiveBackground(of: element.parent())
-        if StyleRules.hides(style, background: background) { return true }
-        if let fontColor, !fontColor.isEmpty, StyleRules.sameColor(fontColor, background) { return true }
-        return false
+        return StyleRules.hidesBox(StyleRules.declarations((try? element.attr("style")) ?? ""))
     }
 
-    /// The nearest declared background, or white, which is how Proton shows a message.
-    private func effectiveBackground(of start: Element?) -> String {
-        var element = start
-        while let current = element {
-            let style = (try? current.attr("style")) ?? ""
-            if let color = StyleRules.backgroundColor(in: style) { return color }
-            if let attribute = try? current.attr("bgcolor"), !attribute.isEmpty { return attribute }
-            element = current.parent()
+    /// Text too small to read, transparent, or in the color of what is behind it. Font size and color are inherited,
+    /// so each text is judged by the nearest element that sets them: a wrapper with a zero font size, whose blocks
+    /// set their own size, is a common layout trick and its text stays.
+    private func removeHiddenText(_ document: Document, sheet: StyleSheet) -> Int {
+        let matched = sheet.declarationsByElement(in: document)
+        func value(_ property: String, of element: Element) -> String? {
+            if let inline = StyleRules.declarations((try? element.attr("style")) ?? "")[property] { return inline }
+            if property == "color", element.tagName() == "font", let color = try? element.attr("color"), !color.isEmpty {
+                return color
+            }
+            return matched[ObjectIdentifier(element)]?[property]
         }
-        return "#ffffff"
+        func background(of element: Element) -> String? {
+            let inline = StyleRules.declarations((try? element.attr("style")) ?? "")
+            if let color = StyleRules.backgroundColor(in: inline) { return color }
+            if let attribute = try? element.attr("bgcolor"), !attribute.isEmpty { return attribute }
+            return matched[ObjectIdentifier(element)].flatMap(StyleRules.backgroundColor(in:))
+        }
+        func isHidden(_ text: TextNode) -> Bool {
+            var size: String?
+            var color: String?
+            var behind: String?
+            var current = text.parent() as? Element
+            while let element = current, size == nil || color == nil || behind == nil {
+                if size == nil { size = value("font-size", of: element) }
+                if color == nil { color = value("color", of: element) }
+                if behind == nil { behind = background(of: element) }
+                current = element.parent()
+            }
+            if let size, StyleRules.isTiny(size) { return true }
+            guard let color else { return false }
+            return StyleRules.isTransparent(color) || StyleRules.sameColor(color, behind ?? "#ffffff")
+        }
+        var hidden: [TextNode] = []
+        func collect(_ node: Node) {
+            for child in node.getChildNodes() {
+                if let text = child as? TextNode {
+                    if !text.isBlank(), isHidden(text) { hidden.append(text) }
+                } else {
+                    collect(child)
+                }
+            }
+        }
+        collect(document.body() ?? document)
+        for text in hidden { try? text.remove() }
+        return hidden.count
     }
 
     private static func normalize(_ text: String) -> String {
@@ -190,6 +213,101 @@ public struct HTMLSanitizer: Sendable {
     }
 }
 
+/// The rules of a message's `<style>` blocks that apply in a desktop window, the way Proton shows mail. Rules for
+/// small screens, print or dark mode are left out: they hide the desktop layout on a phone, not on a Mac.
+struct StyleSheet {
+    struct Rule {
+        let selectors: [String]
+        let values: [String: String]
+    }
+
+    static let viewportWidth = 800.0
+    private(set) var rules: [Rule] = []
+
+    init(_ document: Document) {
+        guard let styles = try? document.select("style") else { return }
+        for style in styles.array() {
+            let css = style.data().replacingOccurrences(of: #"/\*[\s\S]*?\*/"#, with: "", options: .regularExpression)
+            rules += Self.rules(in: Substring(css))
+        }
+    }
+
+    /// The elements a rule selects, for the selectors SwiftSoup understands; pseudo-classes are skipped.
+    func elements(matching rule: Rule, in document: Document) -> [Element] {
+        rule.selectors.flatMap { selector -> [Element] in
+            guard !selector.contains(":"), let elements = try? document.select(selector) else { return [] }
+            return elements.array()
+        }
+    }
+
+    /// For each element, what the rules set on it, later rules winning.
+    func declarationsByElement(in document: Document) -> [ObjectIdentifier: [String: String]] {
+        var result: [ObjectIdentifier: [String: String]] = [:]
+        for rule in rules where !rule.values.isEmpty {
+            for element in elements(matching: rule, in: document) {
+                result[ObjectIdentifier(element), default: [:]].merge(rule.values) { _, new in new }
+            }
+        }
+        return result
+    }
+
+    static func rules(in css: Substring) -> [Rule] {
+        var rules: [Rule] = []
+        var index = css.startIndex
+        var prelude = ""
+        while index < css.endIndex {
+            let character = css[index]
+            if character == ";" {
+                prelude = ""
+            } else if character == "{" {
+                var depth = 1
+                var end = css.index(after: index)
+                while end < css.endIndex, depth > 0 {
+                    if css[end] == "{" { depth += 1 } else if css[end] == "}" { depth -= 1 }
+                    if depth > 0 { end = css.index(after: end) }
+                }
+                let block = css[css.index(after: index)..<end]
+                let head = prelude.trimmingCharacters(in: .whitespacesAndNewlines)
+                let lowered = head.lowercased()
+                if lowered.hasPrefix("@media") {
+                    if applies(media: String(lowered.dropFirst(6))) { rules += Self.rules(in: block) }
+                } else if lowered.hasPrefix("@supports") {
+                    rules += Self.rules(in: block)
+                } else if !head.hasPrefix("@"), !head.isEmpty {
+                    let selectors = head.split(separator: ",").map { $0.trimmingCharacters(in: .whitespacesAndNewlines) }
+                        .filter { !$0.isEmpty }
+                    rules.append(Rule(selectors: selectors, values: StyleRules.declarations(String(block))))
+                }
+                prelude = ""
+                index = end < css.endIndex ? css.index(after: end) : end
+                continue
+            } else if character != "}" {
+                prelude.append(character)
+            }
+            index = css.index(after: index)
+        }
+        return rules
+    }
+
+    /// Whether a media query list matches a screen 800 points wide in light mode.
+    static func applies(media list: String) -> Bool {
+        let width = #/(min|max)-(?:device-)?width\s*:\s*([0-9.]+)\s*(px|em|rem)?/#
+        return list.split(separator: ",").contains { query in
+            let query = query.trimmingCharacters(in: .whitespaces)
+            if query.hasPrefix("not ") { return true }
+            if query.contains("print") || query.contains("speech") { return false }
+            if query.contains("prefers-color-scheme") && query.contains("dark") { return false }
+            for match in query.matches(of: width) {
+                guard var value = Double(match.2) else { continue }
+                if match.3 == "em" || match.3 == "rem" { value *= 16 }
+                if match.1 == "max" && viewportWidth > value { return false }
+                if match.1 == "min" && viewportWidth < value { return false }
+            }
+            return true
+        }
+    }
+}
+
 /// Reads CSS declarations for the tricks used to hide text from a reader.
 enum StyleRules {
     static func declarations(_ style: String) -> [String: String] {
@@ -206,7 +324,10 @@ enum StyleRules {
     }
 
     static func backgroundColor(in style: String) -> String? {
-        let values = declarations(style)
+        backgroundColor(in: declarations(style))
+    }
+
+    static func backgroundColor(in values: [String: String]) -> String? {
         if let color = values["background-color"] { return color }
         if let background = values["background"], let first = background.split(separator: " ").first {
             return String(first)
@@ -214,14 +335,13 @@ enum StyleRules {
         return nil
     }
 
-    static func hides(_ style: String, background: String?) -> Bool {
-        let values = declarations(style)
+    /// Whether these declarations hide an element and everything in it, whatever its children say. Font size and
+    /// color are judged on the text itself, since children can set their own.
+    static func hidesBox(_ values: [String: String]) -> Bool {
         if values.isEmpty { return false }
         if values["display"] == "none" { return true }
         if let visibility = values["visibility"], visibility == "hidden" || visibility == "collapse" { return true }
         if let opacity = values["opacity"], let number = number(opacity), number <= 0.05 { return true }
-        if let size = values["font-size"], isTiny(size) { return true }
-        if let color = values["color"], isTransparent(color) { return true }
         let overflowHidden = values["overflow"] == "hidden" || values["overflow-y"] == "hidden"
             || values["overflow-x"] == "hidden"
         for key in ["height", "max-height", "width", "max-width"] {
@@ -239,10 +359,6 @@ enum StyleRules {
         }
         if let transform = values["transform"], transform.contains("scale(0)") || transform.contains("scale(0,") {
             return true
-        }
-        if let color = values["color"] {
-            let own = backgroundColor(in: style) ?? background
-            if let own, sameColor(color, own) { return true }
         }
         return false
     }
@@ -275,7 +391,7 @@ enum StyleRules {
         return nil
     }
 
-    private static func isTransparent(_ color: String) -> Bool {
+    static func isTransparent(_ color: String) -> Bool {
         if color == "transparent" { return true }
         if color.hasPrefix("rgba("), let alpha = color.dropLast().split(separator: ",").last,
            let number = Double(alpha.trimmingCharacters(in: .whitespaces)), number <= 0.05 {
@@ -284,7 +400,7 @@ enum StyleRules {
         return false
     }
 
-    private static func isTiny(_ size: String) -> Bool {
+    static func isTiny(_ size: String) -> Bool {
         guard let n = number(size) else { return false }
         if size.hasSuffix("em") || size.hasSuffix("rem") { return n <= 0.1 }
         if size.hasSuffix("%") { return n <= 10 }
