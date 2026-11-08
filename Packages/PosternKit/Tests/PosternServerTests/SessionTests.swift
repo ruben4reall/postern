@@ -19,8 +19,12 @@ final class FakeBackend: MailBackend, @unchecked Sendable {
          MailboxInfo(name: "Folders/Secret", kind: .folder, total: 1, unread: 0)]
     }
 
+    /// What a search of each mailbox finds, when set; else one message of INBOX.
+    var searchResults: [String: [MessageSummary]] = [:]
+    var searches: [SearchQuery] = []
     func search(_ query: SearchQuery, limit: Int, offset: Int) async throws -> (items: [MessageSummary], total: Int) {
-        lock.withLock { lastLimit = limit }
+        lock.withLock { lastLimit = limit; searches.append(query) }
+        if let found = lock.withLock({ searchResults[query.mailbox] }) { return (found, found.count) }
         return ([summary(inbox)], 1)
     }
 
@@ -45,7 +49,13 @@ final class FakeBackend: MailBackend, @unchecked Sendable {
         )
     }
 
-    func thread(_ id: MessageID) async throws -> [MessageSummary] { [summary(inbox), summary(secret)] }
+    var threadSearched: [String] = []
+    func thread(_ id: MessageID, in mailboxes: [String]) async throws -> [MessageSummary] {
+        lock.withLock { threadSearched = mailboxes }
+        return [summary(inbox), summary(secret)]
+    }
+    var names = ["INBOX", "Sent", "Folders/Secret", "Labels/Work", "Trash", "All Mail", "Starred"]
+    func mailboxNames() async throws -> [String] { lock.withLock { names } }
 
     func displayName(ofRawMailbox raw: String) async throws -> String { raw }
 
@@ -120,6 +130,12 @@ final class FakeBackend: MailBackend, @unchecked Sendable {
     }
     var draft: SanitizedMessage?
     var draftFiles: [OutgoingAttachment] = []
+
+    func readAttachment(_ id: MessageID, index: Int, maxChars: Int) async throws -> AttachmentContent {
+        guard index == 1 else { throw PosternError(.parseFailed, "There is no attachment \(index) in this message.") }
+        return AttachmentContent(filename: "facture.pdf", mimeType: "application/pdf", size: 1200, kind: .pdf,
+                                 text: "Facture 117\nTotal CHF 42.00", pages: 1, recognized: false, truncated: false)
+    }
 
     func outboxFiles() async throws -> [OutboxFile] {
         lock.withLock { outbox.map { OutboxFile(path: $0.key, size: $0.value.count, modified: nil) } }.sorted { $0.path < $1.path }
@@ -229,6 +245,8 @@ final class Reports: @unchecked Sendable {
         #expect(text(read).hasPrefix("scope_hidden"))
         let (thread, _) = try await client.callTool(name: "get_thread", arguments: ["id": .string(backend.inbox.opaque)])
         #expect(text(thread).contains("1 message(s)"))
+        // All Mail is hidden with any folder, so the conversation is looked for in the visible folders.
+        #expect(backend.lock.withLock { backend.threadSearched } == ["INBOX", "Sent"])
         let (search, searchError) = try await client.callTool(name: "search_messages", arguments: ["mailbox": .string("All Mail")])
         #expect(searchError == true)
         #expect(text(search).hasPrefix("scope_hidden"))
@@ -281,7 +299,7 @@ final class Reports: @unchecked Sendable {
         #expect(try await readOnly.listTools().tools.count == 4)
         let (all, _) = try await connect(policy: organizePolicy)
         let tools = try await all.listTools().tools
-        #expect(tools.count == 14)
+        #expect(tools.count == 16)
         let move = try #require(tools.first { $0.name == "move_messages" })
         #expect(move.annotations.readOnlyHint == false && move.annotations.destructiveHint == false)
     }

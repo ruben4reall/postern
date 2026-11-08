@@ -88,6 +88,27 @@ public enum ToolCatalog {
                 inputSchema: schema(["id": .object(["type": "string", "description": "Message id from search_messages."])], required: ["id"]),
                 annotations: readAnnotations
             )
+        case .awaitingReply:
+            Tool(
+                name: id.rawValue, title: "Find emails awaiting a reply",
+                description: """
+                Lists the people the user wrote to who have not answered: the follow-ups to write, such as job \
+                applications with no news. Looks at Sent since a day (default 30 days ago), groups the emails by their \
+                first recipient, leaves out people written to in the last quiet_days (default 7), and checks for an \
+                answer three ways: a reply in the conversation, any later email from the same address, or from the \
+                same company domain (not for public providers such as gmail.com). Spam is checked too. By default \
+                only people without any answer are listed; include_answered lists the others with what was heard.
+                """,
+                inputSchema: schema([
+                    "since": .object(["type": "string", "description": "First day of sent mail to look at, YYYY-MM-DD. Default 30 days ago."]),
+                    "quiet_days": .object(["type": "integer", "minimum": 0, "maximum": 365, "description": "Leave out people written to in the last days. Default 7."]),
+                    "to": .object(["type": "string", "description": "Text in a recipient's address, such as a company domain."]),
+                    "subject": .object(["type": "string", "description": "Text in the subject of the sent emails, such as Candidature."]),
+                    "include_answered": .object(["type": "boolean", "description": "Also list the people who answered. Default false."]),
+                    "limit": .object(["type": "integer", "minimum": 1, "maximum": 200, "description": "Default 50."]),
+                ]),
+                annotations: readAnnotations
+            )
         case .listAddresses:
             Tool(
                 name: id.rawValue, title: "List sender addresses",
@@ -332,6 +353,22 @@ public enum ToolCatalog {
                 name: id.rawValue, title: "List the outbox",
                 description: "Lists the files the user put in the Postern outbox folder (~/Downloads/Postern/Outbox) and its subfolders: the only files that can be attached, or read as a data_file.",
                 inputSchema: schema([:]),
+                annotations: readAnnotations
+            )
+        case .readAttachment:
+            Tool(
+                name: id.rawValue, title: "Read an attachment",
+                description: """
+                Reads the text of one attachment without saving it: a PDF's text, or the text recognized on a scanned \
+                PDF or a photo (first 10 pages, on the Mac, may hold mistakes); text, CSV, JSON, calendar and \
+                contact files; HTML as a person would see it. Read in Postern's sandboxed reader and untrusted, like \
+                the email it came in. Other files: save_attachment.
+                """,
+                inputSchema: schema([
+                    "message_id": .object(["type": "string", "description": "Message id from search_messages."]),
+                    "index": .object(["type": "integer", "minimum": 1, "description": "Attachment number from get_message."]),
+                    "max_chars": .object(["type": "integer", "minimum": 500, "maximum": 100_000, "description": "Default 20,000."]),
+                ], required: ["message_id", "index"]),
                 annotations: readAnnotations
             )
         case .saveAttachment:

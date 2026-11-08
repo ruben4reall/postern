@@ -126,6 +126,9 @@ reads Bridge's own window; a compromised Proton account.
 
 - Decoding happens in `PosternParser.xpc`, sandboxed with no entitlement: no network, no Keychain, no file. A crash
   there makes one message unreadable, and the service starts again on the next request.
+- `read_attachment` opens PDFs and images there too, with PDFKit, ImageIO and Vision: the frameworks a crafted file
+  would target run in the same jail. Text recognition happens on the Mac; nothing is uploaded. At most 300 pages of
+  text and 10 recognized pages are read, and the text comes back marked untrusted.
 - Hard limits on message size (25 MB), MIME depth and part counts.
 
 ## What Postern cannot protect against

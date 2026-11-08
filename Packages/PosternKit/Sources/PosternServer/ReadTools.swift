@@ -153,8 +153,10 @@ struct ReadTools {
     private func getThread(_ arguments: [String: Value]) async throws -> CallTool.Result {
         let id = try messageID(arguments["id"])
         try await ensureVisible(id)
+        let names = try await backend.mailboxNames().filter { !policy.isHidden($0) }
+        let searched = names.contains("All Mail") ? ["All Mail"] : names.filter { !Self.notSearchedForThreads($0) }
         var visible: [MessageSummary] = []
-        for summary in try await backend.thread(id) {
+        for summary in try await backend.thread(id, in: searched) {
             if !policy.isHidden(try await backend.displayName(ofRawMailbox: summary.id.mailbox)) { visible.append(summary) }
         }
         for item in visible { provenance.record(item.from + item.to + item.cc) }
@@ -162,6 +164,12 @@ struct ReadTools {
         let listing = visible.map(summaryLine).joined(separator: "\n")
         let text = "\(visible.count) message(s) in this conversation.\n" + renderer.wrap(listing, source: "conversation")
         return result(text: text, structured)
+    }
+
+    /// Without All Mail, a conversation is looked for in the real folders: labels and Starred only repeat them,
+    /// and Trash and Spam hold what the user put aside.
+    static func notSearchedForThreads(_ name: String) -> Bool {
+        name.hasPrefix("Labels/") || ["All Mail", "Starred", "Trash", "Spam"].contains(name)
     }
 
     // MARK: Helpers

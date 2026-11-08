@@ -43,6 +43,12 @@ public enum MessageSanitizer {
         )
     }
 
+    /// The text of attachment `index`, read as `AttachmentReader` can.
+    public static func readAttachment(raw: Data, index: Int, maxChars: Int, limits: MIMELimits = MIMELimits()) throws -> AttachmentContent {
+        let file = try attachment(raw: raw, index: index, limits: limits)
+        return try AttachmentReader.read(file.data, filename: file.filename, mimeType: file.mimeType, maxChars: maxChars)
+    }
+
     /// The decoded bytes of attachment `index` (counted from 1, as `sanitize` lists them).
     public static func attachment(raw: Data, index: Int, limits: MIMELimits = MIMELimits()) throws -> (filename: String?, mimeType: String, data: Data) {
         let root = try MIMEParser.parse(raw, limits: limits)

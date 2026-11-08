@@ -106,8 +106,12 @@ public actor Session {
             }
             let arguments = parameters.arguments ?? [:]
             switch tool.tier {
+            case .read where tool == .awaitingReply:
+                return try await FollowUpTools(backend: backend, policy: policy, provenance: send.provenance).awaitingReply(arguments)
             case .read where tool == .saveAttachment:
                 return try await AttachmentTools(backend: backend, policy: policy).save(arguments)
+            case .read where tool == .readAttachment:
+                return try await AttachmentTools(backend: backend, policy: policy).read(arguments)
             case .read:
                 return try await ReadTools(backend: backend, policy: policy, provenance: send.provenance).call(tool, arguments)
             case .organize:

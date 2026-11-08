@@ -386,6 +386,14 @@ struct ToolCopy {
             ToolCopy(title: "Send drafts together", verb: "send several drafts at once",
                      allows: "Send up to 500 drafts at once: one panel lists them all, you untick any, one Touch ID sends the rest, one by one within your limits.",
                      risk: "One approval sends every email left ticked, even hours later when your limits make room. You can stop a batch here at any time.")
+        case .readAttachment:
+            ToolCopy(title: "Read attachments", verb: "read the text of your attachments",
+                     allows: "Read the text of PDFs, scans, photos of documents, spreadsheets and text files attached to your mail, without saving them.",
+                     risk: "Apps read what your attachments say, like reading the messages themselves.")
+        case .awaitingReply:
+            ToolCopy(title: "Find emails awaiting a reply", verb: "see who has not answered you",
+                     allows: "List the people you wrote to who have not answered yet, such as job applications to follow up.",
+                     risk: "Apps learn who you wrote to and who answered, like reading Sent.")
         case .listOutbox:
             ToolCopy(title: "See the outbox", verb: "see the files in your outbox",
                      allows: "List the files you put in Downloads › Postern › Outbox.",

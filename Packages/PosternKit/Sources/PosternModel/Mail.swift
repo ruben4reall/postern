@@ -196,3 +196,34 @@ public struct SanitizedMessage: Codable, Sendable, Hashable {
         self.verdict = verdict
     }
 }
+
+/// The text of an attachment, read inside the parser's sandbox. It is as untrusted as the email that carried it.
+public struct AttachmentContent: Codable, Sendable, Equatable {
+    public enum Kind: String, Codable, Sendable {
+        case pdf, image, text, html
+    }
+
+    public var filename: String?
+    public var mimeType: String
+    public var size: Int
+    public var kind: Kind
+    public var text: String
+    /// For a PDF, its number of pages.
+    public var pages: Int?
+    /// Some of the text was recognized on an image: a scanned page or a photo. It may hold mistakes.
+    public var recognized: Bool
+    public var truncated: Bool
+
+    public init(
+        filename: String?, mimeType: String, size: Int, kind: Kind, text: String, pages: Int?, recognized: Bool, truncated: Bool
+    ) {
+        self.filename = filename
+        self.mimeType = mimeType
+        self.size = size
+        self.kind = kind
+        self.text = text
+        self.pages = pages
+        self.recognized = recognized
+        self.truncated = truncated
+    }
+}

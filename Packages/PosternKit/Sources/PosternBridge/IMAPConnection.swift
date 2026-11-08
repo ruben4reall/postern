@@ -187,6 +187,17 @@ public actor IMAPConnection {
         return body
     }
 
+    /// The header of a message only: a few kilobytes, whatever the size of its attachments.
+    public func fetchHeader(uid: UInt32) async throws -> Data {
+        guard let set = Self.uidSet([uid]) else { throw BridgeError.commandFailed("Empty UID") }
+        let reply = try await send(.uidFetch(.set(set), [.uid, .bodySection(peek: true, .header, nil)], []))
+        guard reply.isOK else { throw BridgeError.commandFailed(reply.tagged.state.text) }
+        guard let header = FetchAssembler.bodies(from: reply.responses).first else {
+            throw BridgeError.mailboxNotFound("message \(uid)")
+        }
+        return header
+    }
+
     // MARK: Plumbing
 
     func sendCommand(_ command: Command, timeout: TimeAmount = .seconds(30)) async throws -> CommandResult {

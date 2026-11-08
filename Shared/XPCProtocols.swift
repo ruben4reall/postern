@@ -37,4 +37,6 @@ enum PosternXPC {
     func sanitize(_ raw: Data, maxChars: Int, reply: @escaping @Sendable (Data?, String?) -> Void)
     /// Returns the decoded bytes, file name and type of attachment `index`, or an error message.
     func attachment(_ raw: Data, index: Int, reply: @escaping @Sendable (Data?, String?, String?, String?) -> Void)
+    /// Returns a JSON-encoded `AttachmentContent`: the text of attachment `index`, or an error message.
+    func readAttachment(_ raw: Data, index: Int, maxChars: Int, reply: @escaping @Sendable (Data?, String?) -> Void)
 }

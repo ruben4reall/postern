@@ -27,6 +27,19 @@ extension Parser {
     }
 }
 
+extension Parser {
+    func readAttachment(_ raw: Data, index: Int, maxChars: Int, reply: @escaping @Sendable (Data?, String?) -> Void) {
+        do {
+            let content = try MessageSanitizer.readAttachment(raw: raw, index: index, maxChars: maxChars)
+            reply(try JSONEncoder().encode(content), nil)
+        } catch let failure as AttachmentReader.Failure {
+            reply(nil, failure.description)
+        } catch {
+            reply(nil, "There is no attachment \(index) in this message, or it could not be read.")
+        }
+    }
+}
+
 final class Delegate: NSObject, NSXPCListenerDelegate {
     let parser = Parser()
 

@@ -24,7 +24,10 @@ struct LiveBackend: MailBackend {
     func message(_ id: MessageID, maxChars: Int) async throws -> SanitizedMessage {
         try await current().message(id, maxChars: maxChars)
     }
-    func thread(_ id: MessageID) async throws -> [MessageSummary] { try await current().thread(id) }
+    func thread(_ id: MessageID, in mailboxes: [String]) async throws -> [MessageSummary] {
+        try await current().thread(id, in: mailboxes)
+    }
+    func mailboxNames() async throws -> [String] { try await current().mailboxNames() }
     func displayName(ofRawMailbox raw: String) async throws -> String {
         try await current().displayName(ofRawMailbox: raw)
     }
@@ -55,6 +58,9 @@ struct LiveBackend: MailBackend {
     }
     func attachments(of id: MessageID) async throws -> [OutgoingAttachment] { try await current().attachments(of: id) }
     func outboxFiles() async throws -> [OutboxFile] { PosternFolders.outboxFiles() }
+    func readAttachment(_ id: MessageID, index: Int, maxChars: Int) async throws -> AttachmentContent {
+        try await current().readAttachment(id, index: index, maxChars: maxChars)
+    }
     func draftForSending(_ id: MessageID) async throws -> (message: SanitizedMessage, files: [OutgoingAttachment]) {
         try await current().draftForSending(id)
     }
@@ -119,20 +125,37 @@ final class BridgeBackend: MailBackend, Sendable {
         return message
     }
 
-    func thread(_ id: MessageID) async throws -> [MessageSummary] {
-        let message = try await parser.sanitize(try await rawMessage(id), maxChars: 500)
+    /// Reads only the header of the message, then looks for its conversation mailbox by mailbox: All Mail when it
+    /// is visible, else each visible folder, so hiding one folder does not empty every conversation.
+    func thread(_ id: MessageID, in mailboxes: [String]) async throws -> [MessageSummary] {
+        let message = try await parser.sanitize(try await rawHeader(id), maxChars: 100)
         var ids = message.headers.references
         if let own = message.headers.messageID { ids.append(own) }
         if let parent = message.headers.inReplyTo { ids.append(parent) }
         guard let key = SearchKeyBuilder.thread(ids: Array(Set(ids))) else { return [] }
         return try await bridge {
             try await self.client.withConnection { connection in
-                let all = try await connection.mailbox(named: "All Mail")
-                let status = try await connection.examine(all)
-                let uids = Array(try await connection.uidSearch(key).prefix(Self.maxThreadMessages))
-                return try await connection.fetchSummaries(uids)
-                    .compactMap { Self.summary($0, mailbox: all.raw, validity: status.uidValidity) }
-                    .sorted { ($0.date ?? .distantPast) < ($1.date ?? .distantPast) }
+                var found: [MessageSummary] = []
+                var seen: Set<String> = []
+                for name in mailboxes {
+                    guard let mailbox = try? await connection.mailbox(named: name), mailbox.selectable else { continue }
+                    let status = try await connection.examine(mailbox)
+                    let uids = Array(try await connection.uidSearch(key).prefix(Self.maxThreadMessages))
+                    for fetched in try await connection.fetchSummaries(uids) {
+                        guard let summary = Self.summary(fetched, mailbox: mailbox.raw, validity: status.uidValidity) else { continue }
+                        // A message filed in a folder and in a label is listed once.
+                        if seen.insert(summary.messageIDHeader ?? summary.id.opaque).inserted { found.append(summary) }
+                    }
+                }
+                return Array(found.sorted { ($0.date ?? .distantPast) < ($1.date ?? .distantPast) }.suffix(Self.maxThreadMessages))
+            }
+        }
+    }
+
+    func mailboxNames() async throws -> [String] {
+        try await bridge {
+            try await self.client.withConnection { connection in
+                try await connection.mailboxes().filter(\.selectable).map(\.display)
             }
         }
     }
@@ -272,6 +295,10 @@ final class BridgeBackend: MailBackend, Sendable {
 
     func outboxFiles() async throws -> [OutboxFile] { PosternFolders.outboxFiles() }
 
+    func readAttachment(_ id: MessageID, index: Int, maxChars: Int) async throws -> AttachmentContent {
+        try await parser.readAttachment(try await rawMessage(id), index: index, maxChars: maxChars)
+    }
+
     /// Reads the draft once from Bridge for both its text and its files.
     func draftForSending(_ id: MessageID) async throws -> (message: SanitizedMessage, files: [OutgoingAttachment]) {
         let raw = try await rawMessage(id)
@@ -331,6 +358,19 @@ final class BridgeBackend: MailBackend, Sendable {
 
     static func report(_ result: OrganizeResult) -> ChangeReport {
         ChangeReport(done: result.done, failed: result.failed.map { ($0.id, $0.reason) }, verified: result.verified)
+    }
+
+    func rawHeader(_ id: MessageID) async throws -> Data {
+        try await bridge {
+            try await self.client.withConnection { connection in
+                guard let mailbox = try await connection.mailboxes().first(where: { $0.raw == id.mailbox }) else {
+                    throw BridgeError.mailboxNotFound(id.mailbox)
+                }
+                let status = try await connection.examine(mailbox)
+                guard status.uidValidity == id.uidValidity else { throw BridgeError.staleUIDValidity }
+                return try await connection.fetchHeader(uid: id.uid)
+            }
+        }
     }
 
     func rawMessage(_ id: MessageID) async throws -> Data {
@@ -458,6 +498,27 @@ extension ParserClient {
                 if once.claim() { continuation.resume(returning: (data, filename, mimeType)) }
             }
             DispatchQueue.global().asyncAfter(deadline: .now() + 30) { fail("Reading this attachment took too long.") }
+        }
+    }
+}
+
+extension ParserClient {
+    func readAttachment(_ raw: Data, index: Int, maxChars: Int) async throws -> AttachmentContent {
+        try await withCheckedThrowingContinuation { (continuation: CheckedContinuation<AttachmentContent, any Error>) in
+            let once = OnceFlag()
+            let fail: @Sendable (String) -> Void = { message in
+                if once.claim() { continuation.resume(throwing: PosternError(.parseFailed, message)) }
+            }
+            let parser = proxy { _ in fail("The attachment reader stopped. Try again.") }
+            parser.readAttachment(raw, index: index, maxChars: maxChars) { data, error in
+                guard let data, let content = try? JSONDecoder().decode(AttachmentContent.self, from: data) else {
+                    fail(error ?? "This attachment could not be read.")
+                    return
+                }
+                if once.claim() { continuation.resume(returning: content) }
+            }
+            // Recognizing the text of ten scanned pages takes a while.
+            DispatchQueue.global().asyncAfter(deadline: .now() + 90) { fail("Reading this attachment took too long.") }
         }
     }
 }

@@ -12,6 +12,15 @@
   Every draft is checked before any is saved, so a missing value or file stops the batch instead of leaving half of
   it; `dry_run` shows the first draft without saving anything. With `send_drafts`, 500 applications take two calls
   and one Touch ID.
+- **Find the people who have not answered.** `awaiting_reply` lists who you wrote to without an answer, the longest
+  wait first: the follow-ups to write, such as job applications with no news. An answer is a reply in the
+  conversation, or a later email from the same address or company domain, Spam included.
+- **Read attachments without saving them.** `read_attachment` returns the text of a PDF, of a scanned PDF or a photo
+  of a document (recognized on your Mac by Vision), of text, CSV, JSON, calendar and contact files, and of HTML as a
+  person would see it. Everything is read in the sandboxed reader and marked untrusted, like the email it came in.
+- **Conversations still load when you hide a mailbox.** Hiding a mailbox also hides All Mail, which left every
+  conversation empty; `get_thread` now looks folder by folder then. It also reads only the header of the message
+  instead of downloading it with its attachments.
 - **Drafts keep their attachments when they are sent.** `send_draft` sent the text of a draft without its
   attachments, and `update_draft` dropped them too. Both now carry them, the panel lists them, and the bytes that
   leave are the ones you approved. If you sent drafts with attachments through 0.1.1, check your Sent folder.

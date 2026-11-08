@@ -9,7 +9,10 @@ public protocol MailBackend: Sendable {
     /// Newest first. `offset` skips that many matches.
     func search(_ query: SearchQuery, limit: Int, offset: Int) async throws -> (items: [MessageSummary], total: Int)
     func message(_ id: MessageID, maxChars: Int) async throws -> SanitizedMessage
-    func thread(_ id: MessageID) async throws -> [MessageSummary]
+    /// The messages of a conversation, oldest first, looked up in these mailboxes (display names).
+    func thread(_ id: MessageID, in mailboxes: [String]) async throws -> [MessageSummary]
+    /// The display names of every mailbox, without counting their messages.
+    func mailboxNames() async throws -> [String]
     /// The display name of a raw IMAP mailbox name, to apply the user's hidden mailboxes.
     func displayName(ofRawMailbox raw: String) async throws -> String
 
@@ -41,6 +44,8 @@ public protocol MailBackend: Sendable {
     func attachments(of id: MessageID) async throws -> [OutgoingAttachment]
     /// Whether a draft is still in Drafts: deleting it there holds back an email waiting in a batch.
     func draftExists(_ id: MessageID) async throws -> Bool
+    /// The text of attachment `index` (from 1), read in the parser's sandbox.
+    func readAttachment(_ id: MessageID, index: Int, maxChars: Int) async throws -> AttachmentContent
     /// The files of the outbox folder and its subfolders, by path inside it.
     func outboxFiles() async throws -> [OutboxFile]
     /// A draft's text and files at once, to send it.
