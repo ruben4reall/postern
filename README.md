@@ -46,16 +46,17 @@ Touch ID, and the client only ever sees the tools you turned on.
 
 ## What apps can do
 
-Postern offers 22 tools in five tiers. Each tool has its own switch, and every switch starts off: the setup ends by
+Postern offers 27 tools in five tiers. Each tool has its own switch, and every switch starts off: the setup ends by
 turning on the first four Read tools, with Touch ID. Turning a tool on asks for Touch ID; turning it off is
-immediate, and connected apps see the change at once.
+immediate, and connected apps see the change at once. Three helpers have no switch and come with the tools they
+serve: `list_outbox`, `batch_status` and `cancel_batch`.
 
 | Tier | Tools | What happens |
 |---|---|---|
-| **Read** | `list_mailboxes`, `search_messages`, `get_message`, `get_thread`, `save_attachment` | Every message is cleaned of hidden text and invisible characters, and labeled as untrusted. Attachments are saved only to `~/Downloads/Postern`, marked as downloaded. |
+| **Read** | `list_mailboxes`, `search_messages`, `get_message`, `get_thread`, `awaiting_reply`, `read_attachment`, `save_attachment`, `list_addresses` | Every message is cleaned of hidden text and invisible characters, and labeled as untrusted. Attachments are read (PDFs, scans, photos, text) in a sandboxed reader, or saved only to `~/Downloads/Postern`, marked as downloaded. `awaiting_reply` lists who has not answered you. |
 | **Organize** | `mark_read`, `mark_unread`, `set_starred`, `move_messages`, `archive_messages`, `add_label`, `remove_label`, `create_mailbox` | Changes are read back from Bridge to confirm them. Never to Trash or Spam. |
-| **Drafts** | `create_draft`, `update_draft`, `delete_draft` | Drafts stay in Drafts. Nothing is sent. |
-| **Send** | `send_message`, `reply_to_message`, `forward_message`, `send_draft` | Every email waits for you on the approval panel and leaves only after Touch ID. 10 per hour and 30 per day by default. |
+| **Drafts** | `create_draft`, `create_drafts`, `update_draft`, `delete_draft` | Drafts stay in Drafts. Nothing is sent. `create_drafts` writes up to 500 from a template or a spreadsheet, each with its own attachments. |
+| **Send** | `send_message`, `reply_to_message`, `forward_message`, `send_draft`, `send_drafts` | Every email waits for you on the approval panel and leaves only after Touch ID. A batch of up to 500 drafts takes one panel and one Touch ID, then leaves at a steady pace within your limits: 10 per hour and 30 per day by default. Aliases you add can be used as sender. |
 | **Delete** | `trash_messages`, `delete_permanently` | Every deletion lists each message on a panel and needs Touch ID. Erasing works only on messages already in Trash or Spam. |
 
 The full reference, with every argument, is in [docs/tools.md](docs/tools.md).
