@@ -28,6 +28,9 @@ public enum ToolID: String, Codable, Sendable, CaseIterable {
     case sendDrafts = "send_drafts"
     case saveAttachment = "save_attachment"
     case listAddresses = "list_addresses"
+    case listOutbox = "list_outbox"
+    case batchStatus = "batch_status"
+    case cancelBatch = "cancel_batch"
     case trashMessages = "trash_messages"
     case deletePermanently = "delete_permanently"
 
@@ -36,9 +39,21 @@ public enum ToolID: String, Codable, Sendable, CaseIterable {
         case .listMailboxes, .searchMessages, .getMessage, .getThread, .saveAttachment, .listAddresses: .read
         case .markRead, .markUnread, .setStarred, .moveMessages, .archiveMessages, .addLabel, .removeLabel,
              .createMailbox: .organize
-        case .createDraft, .createDrafts, .updateDraft, .deleteDraft: .draft
-        case .sendMessage, .replyToMessage, .forwardMessage, .sendDraft, .sendDrafts: .send
+        case .createDraft, .createDrafts, .updateDraft, .deleteDraft, .listOutbox, .batchStatus: .draft
+        case .sendMessage, .replyToMessage, .forwardMessage, .sendDraft, .sendDrafts, .cancelBatch: .send
         case .trashMessages, .deletePermanently: .delete
         }
     }
+
+    /// A companion has no switch of its own: it is on whenever one of these tools is.
+    public var companionOf: Set<ToolID>? {
+        switch self {
+        case .listOutbox: [.createDraft, .createDrafts, .updateDraft, .sendMessage]
+        case .batchStatus, .cancelBatch: [.createDrafts, .sendDrafts]
+        default: nil
+        }
+    }
+
+    /// The tools the user turns on and off one by one.
+    public static var switchable: [ToolID] { allCases.filter { $0.companionOf == nil } }
 }

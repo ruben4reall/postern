@@ -67,7 +67,14 @@ public struct SMTPClient: Sendable {
                 try await reader.command("RCPT TO:<\(recipient)>", expect: 250, on: channel)
             }
             try await reader.command("DATA", expect: 354, on: channel)
-            try await reader.data(Self.dotStuffed(approved.rfc822), expect: 250, on: channel)
+            do {
+                try await reader.data(Self.dotStuffed(approved.rfc822), expect: 250, on: channel)
+            } catch BridgeError.commandFailed(let reply) {
+                // A clear refusal: the message did not leave.
+                throw BridgeError.commandFailed(reply)
+            } catch {
+                throw BridgeError.sendInterrupted
+            }
             try? await reader.command("QUIT", expect: 221, on: channel)
         } catch {
             if let seen = recorder.seenHash, seen != pin.sha256Hex { throw BridgeError.certificateMismatch(actual: seen) }

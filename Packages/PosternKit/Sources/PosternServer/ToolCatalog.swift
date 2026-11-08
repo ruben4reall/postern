@@ -29,7 +29,7 @@ public enum ToolCatalog {
 
     static let outbox: Value = .object([
         "type": "array", "items": .object(["type": "string"]), "maxItems": 20,
-        "description": "File names in the Postern outbox folder (~/Downloads/Postern/Outbox). Nothing else can be attached.",
+        "description": "File names in the Postern outbox folder (~/Downloads/Postern/Outbox), such as CV.pdf or Letters/Acme.pdf for a subfolder; list_outbox lists them. Nothing else can be attached.",
     ])
 
     static let ids: Value = .object([
@@ -164,11 +164,16 @@ public enum ToolCatalog {
             Tool(
                 name: id.rawValue, title: "Write drafts from a template",
                 description: """
-                Saves up to \(SendTools.batchLimit) drafts in Drafts at once, for example one application per company. \
-                A template gives the subject, body, attachments and sender they share; in its subject, body and \
-                attachment names, {{name}} is replaced by each draft's value for name. Each draft gives its recipients \
-                and values, and may override any template field. A draft with a {{name}} left without a value is not \
-                saved. Nothing is sent: review them, then send_drafts sends them after one approval.
+                Saves up to \(SendTools.batchLimit) drafts in Drafts at once, for example one job application per \
+                company, each with its own attachments. A template gives the subject, body, attachments and sender \
+                they share; in its subject, body and attachment names, {{name}} is replaced by each draft's value for \
+                name. Give the drafts inline, each with its recipients and values, or as data_file: a spreadsheet \
+                (CSV, semicolon or tab separated, or a JSON list) in the outbox, one row per draft, whose to, cc, \
+                bcc, from, subject, body and attachments columns fill those fields and whose every column is a value. \
+                Every draft is checked first: if one has a problem (a {{name}} without a value, a missing file), \
+                none is saved, unless skip_invalid is true. dry_run checks them all and shows the first one without \
+                saving anything. Long batches go on in the background: the answer then gives a batch id for \
+                batch_status. Nothing is sent: send_drafts with that batch id sends them after one approval.
                 """,
                 inputSchema: schema([
                     "template": .object([
@@ -193,7 +198,13 @@ public enum ToolCatalog {
                             "required": .array([.string("to")]),
                         ]),
                     ]),
-                ], required: ["drafts"]),
+                    "data_file": .object([
+                        "type": "string",
+                        "description": "Instead of drafts: a .csv, .tsv or .json file in the outbox with one row per draft and a header line.",
+                    ]),
+                    "dry_run": .object(["type": "boolean", "description": "Check every draft and show the first one; save nothing."]),
+                    "skip_invalid": .object(["type": "boolean", "description": "Save the drafts without a problem even if others have one. Default false."]),
+                ]),
                 annotations: draftAnnotations
             )
         case .updateDraft:
@@ -268,17 +279,60 @@ public enum ToolCatalog {
             Tool(
                 name: id.rawValue, title: "Send several drafts",
                 description: """
-                Sends up to \(SendTools.batchLimit) drafts as they are, attachments included. The user reviews them all \
-                on one Postern panel, can leave some out, and approves the rest with one Touch ID. They leave one by one; \
-                each one sent is removed from Drafts. The answer gives the outcome for each id.
+                Sends up to \(SendTools.batchLimit) drafts as they are, attachments included: the ids given, or every \
+                draft a create_drafts batch saved. The user reviews them all on one Postern panel, which also shows \
+                when the last should leave, can leave some out, and approves the rest with one Touch ID. They leave \
+                one by one, spacing_seconds apart, within the user's hourly and daily limits: when a limit is \
+                reached, the batch waits for room instead of failing. Each email sent leaves Drafts. Short batches \
+                answer with the outcome of each id; long ones answer at once with a batch id for batch_status and \
+                cancel_batch, and go on while Postern runs.
                 """,
                 inputSchema: schema([
                     "ids": .object([
                         "type": "array", "items": .object(["type": "string"]), "minItems": 1, "maxItems": .int(SendTools.batchLimit),
                         "description": "Draft ids, from create_draft or the Drafts mailbox.",
                     ]),
-                ], required: ["ids"]),
+                    "batch": .object(["type": "string", "description": "Instead of ids: a batch id create_drafts returned, to send every draft it saved."]),
+                    "spacing_seconds": .object([
+                        "type": "number", "minimum": 1, "maximum": 3600,
+                        "description": "Seconds between two emails. Default 2 for up to 20 emails, 30 above, so a long batch does not reach Proton as a burst.",
+                    ]),
+                    "start_at": .object([
+                        "type": "string",
+                        "description": "When the first email leaves, within 30 days, such as 2026-11-10T08:00 (the Mac's time zone). Default now.",
+                    ]),
+                ]),
                 annotations: sendAnnotations, _meta: askEveryTime
+            )
+        case .batchStatus:
+            Tool(
+                name: id.rawValue, title: "Follow a batch",
+                description: """
+                Shows how a batch of create_drafts or send_drafts stands: what is saved or sent, what waits and why \
+                (start time, sending limit, Bridge), and the items that need attention. Without id, lists the \
+                batches since Postern started. all lists every item, 100 at a time from offset.
+                """,
+                inputSchema: schema([
+                    "id": .object(["type": "string", "description": "Batch id."]),
+                    "all": .object(["type": "boolean", "description": "List every item, not only those that need attention."]),
+                    "offset": .object(["type": "integer", "minimum": 0]),
+                    "limit": .object(["type": "integer", "minimum": 1, "maximum": 100]),
+                ]),
+                annotations: readAnnotations
+            )
+        case .cancelBatch:
+            Tool(
+                name: id.rawValue, title: "Stop a batch",
+                description: "Stops a batch of create_drafts or send_drafts. What is already saved or sent stays so; the emails not sent yet keep their drafts in Drafts.",
+                inputSchema: schema(["id": .object(["type": "string", "description": "Batch id."])], required: ["id"]),
+                annotations: Tool.Annotations(readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false)
+            )
+        case .listOutbox:
+            Tool(
+                name: id.rawValue, title: "List the outbox",
+                description: "Lists the files the user put in the Postern outbox folder (~/Downloads/Postern/Outbox) and its subfolders: the only files that can be attached, or read as a data_file.",
+                inputSchema: schema([:]),
+                annotations: readAnnotations
             )
         case .saveAttachment:
             Tool(

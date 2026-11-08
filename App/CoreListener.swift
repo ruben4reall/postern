@@ -27,7 +27,7 @@ final class CoreListener: NSObject, NSXPCListenerDelegate, @unchecked Sendable {
             policy: { state.policy }, readiness: { state.readiness },
             onCall: { [weak handler] report in state.record(report, client: handler?.clientName ?? "MCP client") },
             desk: state.desk, ledger: state.ledger,
-            clientName: { [weak handler] in handler?.clientName ?? "An app" }
+            clientName: { [weak handler] in handler?.clientName ?? "An app" }, board: state.board
         )
         state.add(session, connection: handler, for: key)
         let stop: @Sendable () -> Void = {

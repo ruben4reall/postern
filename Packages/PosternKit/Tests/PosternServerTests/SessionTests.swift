@@ -27,6 +27,14 @@ final class FakeBackend: MailBackend, @unchecked Sendable {
     func message(_ id: MessageID, maxChars: Int) async throws -> SanitizedMessage {
         if id.mailbox == "INBOX" && id.uid == 77 { return lock.withLock { original } }
         if id.mailbox == "Drafts", let draft = lock.withLock({ draft }) { return draft }
+        if id.mailbox == "Drafts", let saved = savedDraft(id) {
+            return SanitizedMessage(
+                headers: SanitizedHeaders(from: [saved.from], to: saved.to, cc: saved.cc, bcc: saved.bcc, subject: saved.subject),
+                body: saved.body, bodyTruncated: false, bodyWasHTML: false, hiddenElementsRemoved: 0, imagesOmitted: 0,
+                links: [], attachments: [],
+                verdict: SenderVerdict(level: .internal, spf: nil, dkim: nil, dmarc: nil, origin: nil, reasons: [], forgedHeaderSeen: false, authservIDsSeen: [])
+            )
+        }
         return SanitizedMessage(
             headers: SanitizedHeaders(from: [Address(name: "Eve", email: "eve@evil.example")], subject: "Hi"),
             body: body, bodyTruncated: false, bodyWasHTML: false, hiddenElementsRemoved: 2, imagesOmitted: 0,
@@ -83,7 +91,16 @@ final class FakeBackend: MailBackend, @unchecked Sendable {
         return MessageID(mailbox: "Drafts", uidValidity: 1, uid: UInt32(drafts.count))
     }
     func deleteDraft(_ id: MessageID) async throws { lock.withLock { deletedDrafts.append(id) } }
-    func send(_ message: ApprovedMessage) async throws { lock.withLock { sent.append(message.message) } }
+    /// Errors the next sends throw, one each.
+    var sendFailures: [PosternError] = []
+    func send(_ message: ApprovedMessage) async throws {
+        if let failure = lock.withLock({ sendFailures.isEmpty ? nil : sendFailures.removeFirst() }) { throw failure }
+        lock.withLock { sent.append(message.message) }
+    }
+    /// A draft create_draft or create_drafts saved, by the id it returned.
+    func savedDraft(_ id: MessageID) -> OutgoingMessage? {
+        lock.withLock { id.uid >= 1 && Int(id.uid) <= drafts.count ? drafts[Int(id.uid) - 1] : nil }
+    }
 
     var trashed: [MessageID] = []
     var erased: [MessageID] = []
@@ -94,12 +111,17 @@ final class FakeBackend: MailBackend, @unchecked Sendable {
     }
     func outboxAttachment(named name: String) async throws -> OutgoingAttachment {
         guard let data = lock.withLock({ outbox[name] }) else { throw PosternError(.notFound, "\(name) is not in the outbox.") }
-        return try OutgoingAttachment.make(filename: name, data: data)
+        return try OutgoingAttachment.make(filename: (name as NSString).lastPathComponent, data: data)
     }
     var draft: SanitizedMessage?
     var draftFiles: [OutgoingAttachment] = []
 
+    func outboxFiles() async throws -> [OutboxFile] {
+        lock.withLock { outbox.map { OutboxFile(path: $0.key, size: $0.value.count, modified: nil) } }.sorted { $0.path < $1.path }
+    }
+
     func attachments(of id: MessageID) async throws -> [OutgoingAttachment] {
+        if id.mailbox == "Drafts", lock.withLock({ draft }) == nil, let saved = savedDraft(id) { return saved.attachments }
         if id.mailbox == "Drafts" { return lock.withLock { draftFiles } }
         return [try OutgoingAttachment.make(filename: "invoice.pdf", data: Data("%PDF-invoice".utf8))]
     }
@@ -384,7 +406,8 @@ final class MemoryLedger: SendLedger, @unchecked Sendable {
         let (clientTransport, serverTransport) = await InMemoryTransport.createConnectedPair()
         let chosen = policy ?? everything
         let session = Session(transport: serverTransport, backend: backend, version: "test", policy: { chosen },
-                              desk: desk, ledger: ledger, clientName: { "Claude Code" }, batchSpacing: .zero)
+                              desk: desk, ledger: ledger, clientName: { "Claude Code" }, batchSpacing: .zero,
+                              inlineWait: .seconds(5))
         try await session.start()
         let client = Client(name: "test", version: "1")
         _ = try await client.connect(transport: clientTransport)
@@ -584,16 +607,34 @@ final class MemoryLedger: SendLedger, @unchecked Sendable {
         #expect(statuses(structured) == ["sent", "sent", "sent"])
     }
 
-    @Test func untickedDraftsAndDraftsOverTheLimitStay() async throws {
+    @Test func untickedDraftsStayAndDraftsOverTheLimitWaitForRoom() async throws {
         let backend = FakeBackend()
         _ = try applicationDraft(backend)
         let (client, presenter) = try await connect(policy: Policy(enabledTools: Set(ToolID.allCases), sendsPerHour: 2), backend: backend)
         presenter.lock.withLock { presenter.leaveOut = 1 }
-        let ids = drafts([5, 6, 7])
-        let (_, structured, _) = try await call(client, "send_drafts", ["ids": .array(ids.map { .string($0.opaque) })])
-        #expect(presenter.lock.withLock { presenter.batches.first }?.items.count == 2)
-        #expect(statuses(structured) == ["skipped", "sent", "refused"])
-        #expect(backend.lock.withLock { backend.deletedDrafts } == [ids[1]] && backend.lock.withLock { backend.sent }.count == 1)
+        let ids = drafts([5, 6, 7, 8])
+        let (content, structured, _) = try await call(client, "send_drafts", ["ids": .array(ids.map { .string($0.opaque) })])
+        let schedule = try #require(presenter.lock.withLock { presenter.batches.first }?.schedule)
+        #expect(presenter.lock.withLock { presenter.batches.first }?.items.count == 4)
+        #expect(schedule.sendsPerHour == 2 && schedule.finish.timeIntervalSinceNow > 3000)
+        #expect(statuses(structured) == ["skipped", "sent", "sent", "waiting"])
+        #expect(backend.lock.withLock { backend.deletedDrafts } == [ids[1], ids[2]] && backend.lock.withLock { backend.sent }.count == 2)
+        let batch = try #require(batchID(structured), "\(text(content))")
+
+        let (_, status, _) = try await call(client, "batch_status", ["id": .string(batch)])
+        guard case .object(let fields)? = status else { Issue.record("No status"); return }
+        #expect(fields["phase"] == "waiting" && fields["waiting_until"] != nil)
+        #expect(fields["reason"].flatMap { if case .string(let text) = $0 { text } else { nil } }?.contains("limit") == true)
+
+        let (stopped, _, stopError) = try await call(client, "cancel_batch", ["id": .string(batch)])
+        #expect(stopError != true && text(stopped).contains("1 will not leave"))
+        try await Task.sleep(for: .milliseconds(100))
+        #expect(backend.lock.withLock { backend.sent }.count == 2 && backend.lock.withLock { backend.deletedDrafts }.count == 2)
+    }
+
+    func batchID(_ structured: Value?) -> String? {
+        guard case .object(let fields)? = structured, case .string(let id)? = fields["batch"] else { return nil }
+        return id
     }
 
     @Test func aRejectedBatchSendsNothing() async throws {
@@ -603,7 +644,7 @@ final class MemoryLedger: SendLedger, @unchecked Sendable {
         let (content, isError) = try await client.callTool(name: "send_drafts", arguments: ["ids": .array(drafts([5, 6]).map { .string($0.opaque) })])
         #expect(isError == true && text(content).hasPrefix("approval_rejected"))
         #expect(backend.lock.withLock { backend.sent }.isEmpty && backend.lock.withLock { backend.deletedDrafts }.isEmpty)
-        let (tooMany, refused) = try await client.callTool(name: "send_drafts", arguments: ["ids": .array(drafts(Array(1...51)).map { .string($0.opaque) })])
+        let (tooMany, refused) = try await client.callTool(name: "send_drafts", arguments: ["ids": .array(drafts(Array(1...501)).map { .string($0.opaque) })])
         #expect(refused == true && text(tooMany).hasPrefix("invalid_argument"))
     }
 
@@ -656,7 +697,22 @@ final class MemoryLedger: SendLedger, @unchecked Sendable {
         func application(_ to: String, _ values: [String: String]) -> Value {
             .object(["to": .array([.string(to)]), "values": .object(values.mapValues { .string($0) })])
         }
+        let template: Value = .object([
+            "subject": .string("Candidature : {{poste}}"),
+            "body": .string("Bonjour {{contact}},\n\nJe postule au poste de {{ poste }} chez {{entreprise}}."),
+            "attachments": .array([.string("CV.pdf"), .string("Lettre-{{entreprise}}.pdf")]),
+            "from": .string("pro@example.ch"),
+        ])
+        let list: Value = .array([
+            application("rh@acme.example", ["contact": "Madame Dupont", "poste": "vendeur", "entreprise": "Acme"]),
+            application("hr@initech.example", ["poste": "caissier", "entreprise": "Initech"]),
+        ])
+        let (stopped, stoppedError) = try await client.callTool(name: "create_drafts", arguments: ["template": template, "drafts": list])
+        #expect(stoppedError == true && text(stopped).contains("none was saved") && text(stopped).contains("{{contact}}"))
+        #expect(backend.lock.withLock { backend.drafts }.isEmpty)
+
         let (content, structured, isError) = try await call(client, "create_drafts", [
+            "skip_invalid": .bool(true),
             "template": .object([
                 "subject": .string("Candidature : {{poste}}"),
                 "body": .string("Bonjour {{contact}},\n\nJe postule au poste de {{ poste }} chez {{entreprise}}."),
@@ -679,7 +735,7 @@ final class MemoryLedger: SendLedger, @unchecked Sendable {
         #expect(text(content).contains("{{contact}}"))
         #expect(presenter.lock.withLock { presenter.requests }.isEmpty)
         let (tooMany, refused) = try await client.callTool(name: "create_drafts", arguments: [
-            "drafts": .array(Array(repeating: application("a@example.com", [:]), count: 51)),
+            "drafts": .array(Array(repeating: application("a@example.com", [:]), count: 501)),
         ])
         #expect(refused == true && text(tooMany).hasPrefix("invalid_argument"))
     }

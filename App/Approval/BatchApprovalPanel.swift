@@ -34,6 +34,8 @@ struct BatchApprovalView: View {
     let reject: (String?) -> Void
     @State private var chosen: Set<UUID>
     @State private var reason = ""
+    @State private var filter = ""
+    private let summary: String
 
     init(request: BatchApprovalRequest, deadline: Date, send: @escaping (Set<UUID>) -> Void, reject: @escaping (String?) -> Void) {
         self.request = request
@@ -41,14 +43,19 @@ struct BatchApprovalView: View {
         self.send = send
         self.reject = reject
         _chosen = State(initialValue: Set(request.items.map(\.id)))
+        summary = Self.summary(of: request)
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 16) {
+        VStack(alignment: .leading, spacing: 14) {
             header
+            if request.items.count > Self.filterThreshold {
+                TextField("Show only the emails to or about…", text: $filter)
+                    .textFieldStyle(.roundedBorder)
+            }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
-                    ForEach(Array(request.items.enumerated()), id: \.element.id) { index, item in
+                    ForEach(Array(shown.enumerated()), id: \.element.id) { index, item in
                         if index > 0 { Divider() }
                         row(item)
                     }
@@ -60,12 +67,56 @@ struct BatchApprovalView: View {
         .padding(.horizontal, 24)
         .padding(.top, 36)
         .padding(.bottom, 20)
-        .frame(width: 680, height: Self.height(for: request))
+        .frame(width: 720, height: Self.height(for: request))
     }
+
+    static let filterThreshold = 8
 
     /// Tall enough for four emails; longer batches scroll.
     static func height(for request: BatchApprovalRequest) -> CGFloat {
-        CGFloat(210 + 132 * min(request.items.count, 4))
+        let filter = request.items.count > filterThreshold ? 36 : 0
+        let schedule = request.schedule == nil ? 0 : 44
+        let rows = request.items.count > filterThreshold ? 3 : min(request.items.count, 4)
+        return CGFloat(236 + filter + schedule + 132 * rows)
+    }
+
+    private var shown: [ApprovalRequest] {
+        let words = filter.lowercased().split(separator: " ").map(String.init)
+        guard !words.isEmpty else { return request.items }
+        return request.items.filter { item in
+            let message = item.message
+            let text = ([message.subject] + message.envelopeRecipients + (message.to + message.cc).compactMap(\.name)
+                + message.attachments.map(\.filename)).joined(separator: " ").lowercased()
+            return words.allSatisfy { text.contains($0) }
+        }
+    }
+
+    /// Who, from where, which files and how heavy, in one line.
+    static func summary(of request: BatchApprovalRequest) -> String {
+        let messages = request.items.map(\.message)
+        let people = Set(messages.flatMap(\.envelopeRecipients)).count
+        let senders = Set(messages.map { $0.from.email })
+        var parts = [people == 1 ? "To 1 person" : "To \(people) people"]
+        parts.append(senders.count == 1 ? "from \(senders.first!)" : "from \(senders.count) addresses")
+        let names = messages.map { Set($0.attachments.map(\.filename)) }
+        let shared = names.dropFirst().reduce(names.first ?? []) { $0.intersection($1) }
+        let own = Set(names.flatMap { $0 }).subtracting(shared)
+        if !shared.isEmpty { parts.append(shared.sorted().joined(separator: ", ") + (messages.count > 1 ? " in each" : "")) }
+        if !own.isEmpty { parts.append(own.count == 1 ? "1 other file" : "\(own.count) other files") }
+        let bytes = messages.reduce(0) { $0 + $1.attachments.reduce(0) { $0 + $1.data.count } }
+        if bytes > 0 { parts.append(size(bytes) + " of files in all") }
+        return parts.joined(separator: " · ")
+    }
+
+    /// When the emails leave, and when the last should, at the user's limits.
+    private func scheduleText(_ schedule: BatchSchedule) -> String {
+        let start = schedule.start.map { "Starts " + $0.formatted(date: .abbreviated, time: .shortened) } ?? "Starts now"
+        let pace = schedule.spacing >= 60 && schedule.spacing.truncatingRemainder(dividingBy: 60) == 0
+            ? "\(Int(schedule.spacing / 60)) min" : "\(Int(schedule.spacing.rounded())) s"
+        let finish = Calendar.current.isDateInToday(schedule.finish)
+            ? schedule.finish.formatted(date: .omitted, time: .shortened)
+            : schedule.finish.formatted(date: .abbreviated, time: .shortened)
+        return "\(start), one every \(pace). Within your limits (\(schedule.sendsPerHour) per hour, \(schedule.sendsPerDay) per day), the last leaves around \(finish)."
     }
 
     private var header: some View {
@@ -79,6 +130,14 @@ struct BatchApprovalView: View {
                 Text("Untick any that should wait. The others leave one by one, exactly as shown, after one Touch ID.")
                     .foregroundStyle(.secondary)
                     .fixedSize(horizontal: false, vertical: true)
+                Text(summary).font(.callout).lineLimit(2)
+                if let schedule = request.schedule {
+                    Label(scheduleText(schedule), systemImage: "clock")
+                        .font(.callout)
+                        .foregroundStyle(schedule.finish.timeIntervalSinceNow > 86_400 ? .orange : .secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .help("Postern waits for room when a limit is reached. Raise the limits in Postern's window to send faster.")
+                }
             }
             Spacer()
             VStack(alignment: .trailing, spacing: 6) {
@@ -159,7 +218,7 @@ struct BatchApprovalView: View {
         return flat.count > 300 ? String(flat.prefix(300)) + "…" : flat
     }
 
-    private static func size(_ bytes: Int) -> String {
+    static func size(_ bytes: Int) -> String {
         ByteCountFormatter.string(fromByteCount: Int64(bytes), countStyle: .file)
     }
 }

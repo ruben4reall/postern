@@ -50,11 +50,33 @@ public struct BatchApprovalRequest: Sendable, Identifiable {
     public let tool: String
     public let client: String
     public let items: [ApprovalRequest]
+    /// When and how fast the emails leave.
+    public let schedule: BatchSchedule?
 
-    public init(tool: String, client: String, items: [ApprovalRequest]) {
+    public init(tool: String, client: String, items: [ApprovalRequest], schedule: BatchSchedule? = nil) {
         self.tool = tool
         self.client = client
         self.items = items
+        self.schedule = schedule
+    }
+}
+
+/// The pace a batch keeps, as the panel tells it: a start time, a pause between two emails, the user's limits, and
+/// when the last one should leave if every email is approved.
+public struct BatchSchedule: Sendable, Equatable {
+    /// Nil to start at once.
+    public let start: Date?
+    public let spacing: TimeInterval
+    public let sendsPerHour: Int
+    public let sendsPerDay: Int
+    public let finish: Date
+
+    public init(start: Date?, spacing: TimeInterval, sendsPerHour: Int, sendsPerDay: Int, finish: Date) {
+        self.start = start
+        self.spacing = spacing
+        self.sendsPerHour = sendsPerHour
+        self.sendsPerDay = sendsPerDay
+        self.finish = finish
     }
 }
 

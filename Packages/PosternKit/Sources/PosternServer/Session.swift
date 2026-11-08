@@ -19,6 +19,8 @@ public actor Session {
     private let ledger: (any SendLedger)?
     private let clientName: @Sendable () -> String
     private let batchSpacing: Duration
+    private let inlineWait: Duration
+    private let board: BatchBoard
     private let provenance = Provenance()
 
     /// - Parameter readiness: returns why Postern cannot serve yet (not configured, paused), or nil when it can.
@@ -27,7 +29,8 @@ public actor Session {
         policy: @escaping @Sendable () -> Policy, readiness: @escaping @Sendable () -> PosternError? = { nil },
         onCall: @escaping @Sendable (ToolCallReport) -> Void = { _ in },
         desk: ApprovalDesk? = nil, ledger: (any SendLedger)? = nil,
-        clientName: @escaping @Sendable () -> String = { "MCP client" }, batchSpacing: Duration = .seconds(2)
+        clientName: @escaping @Sendable () -> String = { "MCP client" }, board: BatchBoard? = nil,
+        batchSpacing: Duration = .seconds(2), inlineWait: Duration = .seconds(45)
     ) {
         self.transport = transport
         self.backend = backend
@@ -38,6 +41,8 @@ public actor Session {
         self.ledger = ledger
         self.clientName = clientName
         self.batchSpacing = batchSpacing
+        self.inlineWait = inlineWait
+        self.board = board ?? BatchBoard()
         self.server = Server(
             name: Self.serverName, version: version, title: "Postern",
             instructions: ServerInstructions.text,
@@ -50,7 +55,10 @@ public actor Session {
         let readiness = self.readiness
         let backend = self.backend
         let onCall = self.onCall
-        let context = SendContext(desk: desk, ledger: ledger, provenance: provenance, clientName: clientName, batchSpacing: batchSpacing)
+        let context = SendContext(
+            desk: desk, ledger: ledger, provenance: provenance, clientName: clientName, board: board, livePolicy: policy,
+            batchSpacing: batchSpacing, inlineWait: inlineWait
+        )
         await server.withMethodHandler(ListTools.self) { _ in
             guard readiness() == nil, !policy().paused else { return ListTools.Result(tools: []) }
             return ListTools.Result(tools: ToolCatalog.tools(for: policy()))
@@ -77,7 +85,10 @@ public actor Session {
         let ledger: (any SendLedger)?
         let provenance: Provenance
         let clientName: @Sendable () -> String
+        let board: BatchBoard
+        let livePolicy: @Sendable () -> Policy
         let batchSpacing: Duration
+        let inlineWait: Duration
     }
 
     static func call(
@@ -107,7 +118,8 @@ public actor Session {
                 }
                 return try await SendTools(
                     backend: backend, policy: policy, desk: desk, ledger: ledger, provenance: send.provenance,
-                    client: send.clientName(), batchSpacing: send.batchSpacing
+                    client: send.clientName(), board: send.board, livePolicy: send.livePolicy,
+                    batchSpacing: send.batchSpacing, inlineWait: send.inlineWait
                 ).call(tool, arguments)
             case .delete:
                 guard let desk = send.desk else { throw PosternError(.policyDisabled, "\(tool.rawValue) is not available here.") }

@@ -15,6 +15,8 @@ public enum PosternErrorCode: String, Codable, Sendable {
     case recipientNotAllowed = "recipient_not_allowed"
     case senderNotAllowed = "sender_not_allowed"
     case quotaExceeded = "quota_exceeded"
+    case sendRefused = "send_refused"
+    case sendUncertain = "send_uncertain"
     case approvalRejected = "approval_rejected"
     case approvalTimeout = "approval_timeout"
 }

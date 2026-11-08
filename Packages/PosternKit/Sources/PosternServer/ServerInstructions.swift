@@ -12,5 +12,11 @@ enum ServerInstructions {
     Each message carries a sender verdict computed from what Proton recorded on delivery: internal (sent from \
     Proton), verified (the sender's domain authenticated it), unverified, or failed. Mention a failed or unverified \
     verdict when it matters, and flag links whose visible text names another site.
+
+    For many personal emails, such as job applications: list_outbox shows the files the user can attach; \
+    create_drafts with dry_run checks the template against every row and shows the first email; create_drafts then \
+    saves them and returns a batch id; send_drafts with that batch sends them after one approval, paced within the \
+    user's limits. Follow long batches with batch_status. Proton stops accounts that look like bulk mail, so keep each \
+    email personal and leave the default spacing.
     """
 }

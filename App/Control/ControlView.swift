@@ -4,6 +4,7 @@ import PosternBridge
 import PosternClients
 import PosternModel
 import PosternPolicy
+import PosternServer
 import SwiftUI
 
 /// The main window: a sidebar of tiles that show the state at a glance, and one pane at a time.
@@ -63,7 +64,7 @@ extension ControlModel {
         if !configured { return "Not set up" }
         if policy.paused { return "Paused: every tool is off" }
         let count = policy.enabledTools.count
-        return count == 0 ? "On, every tool off" : "On, \(count) of \(ToolID.allCases.count) tools on"
+        return count == 0 ? "On, every tool off" : "On, \(count) of \(ToolID.switchable.count) tools on"
     }
 
     var statusTint: Color {
@@ -317,10 +318,21 @@ private struct OverviewPane: View {
                 }
                 .padding(.vertical, 8)
             }
+            if !model.batches.isEmpty {
+                Section {
+                    ForEach(model.batches.prefix(5)) { batch in
+                        BatchRow(batch: batch) { model.cancelBatch(batch.id) }
+                    }
+                } header: {
+                    Text("Batches")
+                } footer: {
+                    Text("Approved emails leave one by one within your sending limits, as long as Postern runs. Stopping a batch keeps the drafts of the emails not sent yet.")
+                }
+            }
             Section {
                 ForEach(Tier.allCases, id: \.self) { tier in
                     TierSummaryRow(tier: tier, on: model.enabledCount(tier),
-                                   total: ToolID.allCases.filter { $0.tier == tier }.count) {
+                                   total: ToolID.switchable.filter { $0.tier == tier }.count) {
                         model.pane = .tools
                     }
                 }
@@ -358,6 +370,55 @@ private struct OverviewPane: View {
         Dictionary(grouping: model.connectedApps, by: { $0 })
             .map { $0.value.count > 1 ? "\($0.key) (\($0.value.count))" : $0.key }
             .sorted().joined(separator: ", ")
+    }
+}
+
+/// One batch: what it does, how far it got, why it waits, and a way to stop it.
+private struct BatchRow: View {
+    let batch: BatchBoard.Batch
+    let cancel: () -> Void
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 6) {
+            HStack(alignment: .firstTextBaseline) {
+                Label(title, systemImage: batch.kind == .sends ? "paperplane" : "doc.on.doc")
+                    .font(.body.weight(.medium))
+                Spacer()
+                if !batch.isOver {
+                    Button("Stop", role: .destructive, action: cancel).controlSize(.small)
+                }
+            }
+            ProgressView(value: Double(done), total: Double(max(1, batch.items.count)))
+            Text(status).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+        }
+        .padding(.vertical, 4)
+    }
+
+    private var title: String {
+        let what = batch.kind == .sends ? "Sending \(batch.items.count) emails" : "Saving \(batch.items.count) drafts"
+        return "\(what) for \(batch.client)"
+    }
+
+    private var done: Int { batch.items.filter { $0.status != .waiting }.count }
+
+    private var status: String {
+        let good = batch.kind == .sends ? batch.count(.sent) : batch.count(.saved)
+        let word = batch.kind == .sends ? "sent" : "saved"
+        var parts = ["\(good) of \(batch.items.count) \(word)"]
+        let other = BatchBoard.ItemStatus.allCases.filter { ![.waiting, .sent, .saved].contains($0) }
+        for status in other where batch.count(status) > 0 { parts.append("\(batch.count(status)) \(status.rawValue)") }
+        switch batch.phase {
+        case .running: parts.append("in progress")
+        case .finished: parts.append("finished")
+        case .cancelled: parts.append("stopped")
+        case .waiting(let until, let reason):
+            let time = until.map { " until " + $0.formatted(date: Calendar.current.isDateInToday($0) ? .omitted : .abbreviated, time: .shortened) } ?? ""
+            parts.append("waiting\(time). \(reason)")
+        }
+        if batch.kind == .sends, !batch.isOver, let estimate = batch.estimate {
+            parts.append("last one around " + estimate.formatted(date: Calendar.current.isDateInToday(estimate) ? .omitted : .abbreviated, time: .shortened))
+        }
+        return parts.joined(separator: " · ")
     }
 }
 
@@ -422,7 +483,7 @@ private struct ToolsPane: View {
             }
             ForEach(Tier.allCases, id: \.self) { tier in
                 Section {
-                    ForEach(ToolID.allCases.filter { $0.tier == tier }, id: \.self) { tool in
+                    ForEach(ToolID.switchable.filter { $0.tier == tier }, id: \.self) { tool in
                         ToolRow(tool: tool, model: model)
                     }
                 } header: {
@@ -441,7 +502,7 @@ private struct ToolsPane: View {
             VStack(alignment: .leading, spacing: 8) {
                 Text("Every email waits for you on a panel that shows all of it: recipients, subject, the whole text, every attachment. It leaves only after Touch ID. Limits and trusted recipients are in Security.")
                 HStack(spacing: 6) {
-                    Text("Apps can attach only files you put in Downloads › Postern › Outbox.")
+                    Text("Apps can attach only files you put in Downloads › Postern › Outbox, or in folders inside it.")
                     Button("Show Outbox") { model.showOutbox() }.buttonStyle(.link)
                 }
             }
@@ -460,7 +521,7 @@ private struct TierHeader: View {
     var body: some View {
         let copy = TierCopy.for(tier)
         let on = model.enabledCount(tier)
-        let total = ToolID.allCases.filter { $0.tier == tier }.count
+        let total = ToolID.switchable.filter { $0.tier == tier }.count
         HStack(spacing: 8) {
             Image(systemName: copy.symbol)
                 .font(.system(size: 11, weight: .semibold))

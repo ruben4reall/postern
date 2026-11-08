@@ -53,6 +53,10 @@ struct LiveBackend: MailBackend {
         try await current().outboxAttachment(named: name)
     }
     func attachments(of id: MessageID) async throws -> [OutgoingAttachment] { try await current().attachments(of: id) }
+    func outboxFiles() async throws -> [OutboxFile] { PosternFolders.outboxFiles() }
+    func draftForSending(_ id: MessageID) async throws -> (message: SanitizedMessage, files: [OutgoingAttachment]) {
+        try await current().draftForSending(id)
+    }
     func deletionItems(_ ids: [MessageID]) async throws -> [DeletionItem] { try await current().deletionItems(ids) }
     func trash(_ approved: ApprovedDeletion) async throws -> ChangeReport { try await current().trash(approved) }
     func erase(_ approved: ApprovedDeletion) async throws -> ChangeReport { try await current().erase(approved) }
@@ -250,7 +254,19 @@ final class BridgeBackend: MailBackend, Sendable {
 
     func attachments(of id: MessageID) async throws -> [OutgoingAttachment] {
         let raw = try await rawMessage(id)
-        let listed = try await parser.sanitize(raw, maxChars: 100).attachments
+        return try await files(of: raw, listed: try await parser.sanitize(raw, maxChars: 100).attachments)
+    }
+
+    func outboxFiles() async throws -> [OutboxFile] { PosternFolders.outboxFiles() }
+
+    /// Reads the draft once from Bridge for both its text and its files.
+    func draftForSending(_ id: MessageID) async throws -> (message: SanitizedMessage, files: [OutgoingAttachment]) {
+        let raw = try await rawMessage(id)
+        let message = try await parser.sanitize(raw, maxChars: OutgoingMessage.maxBodyCharacters)
+        return (message, try await files(of: raw, listed: message.attachments))
+    }
+
+    private func files(of raw: Data, listed: [AttachmentInfo]) async throws -> [OutgoingAttachment] {
         var files: [OutgoingAttachment] = []
         for item in listed {
             let file = try await parser.attachment(raw, index: item.index)
@@ -342,6 +358,12 @@ final class BridgeBackend: MailBackend, Sendable {
             PosternError(.notFound, "No mailbox or message matches \(name).")
         case .tooLarge:
             PosternError(.tooLarge, "This message is larger than 25 MB.")
+        case .commandFailed(let reply) where reply.hasPrefix("SMTP 5"):
+            PosternError(.sendRefused, "Proton refused this email (\(reply.prefix(200))). It was not sent.")
+        case .commandFailed(let reply) where reply.hasPrefix("SMTP 4"):
+            PosternError(.bridgeUnreachable, "Proton asked to try again later (\(reply.prefix(200))). It was not sent.")
+        case .sendInterrupted:
+            PosternError(.sendUncertain, "The connection to Bridge broke while the email was handed over, so it may have left. Check Sent before sending it again.")
         case .notBridge, .starttlsRefused, .tlsFailed, .commandFailed:
             PosternError(.bridgeUnreachable, "Bridge did not answer as expected. Try again in a moment.")
         }
@@ -481,22 +503,52 @@ enum PosternFolders {
         return SavedAttachment(path: url.path, filename: url.lastPathComponent, mimeType: mimeType, size: data.count, sha256: hash)
     }
 
-    /// Only a plain file sitting directly in the outbox: no path, no link out of it.
+    /// Only a plain file inside the outbox, directly or in a subfolder such as `Letters/Acme.pdf`: no `..`, no
+    /// hidden name, no link anywhere on the way, so nothing outside the outbox can be reached.
     static func outboxFile(named name: String) throws -> OutgoingAttachment {
-        guard name == safeName(name), !name.contains("/") else {
-            throw PosternError(.invalidArgument, "\(name) is not a plain file name. Attachments come only from Downloads › Postern › Outbox.")
+        let parts = name.split(separator: "/", omittingEmptySubsequences: false).map(String.init)
+        guard !parts.isEmpty, parts.count <= 4, parts.allSatisfy({ $0 == safeName($0) && $0 != ".." && $0 != "." }) else {
+            throw PosternError(.invalidArgument, "\(name) is not a file name Postern accepts. Attachments come only from Downloads › Postern › Outbox.")
         }
-        let url = outbox.appendingPathComponent(name)
-        let values = try? url.resourceValues(forKeys: [.isRegularFileKey, .isSymbolicLinkKey, .fileSizeKey])
-        guard let values, values.isRegularFile == true, values.isSymbolicLink != true else {
-            throw PosternError(.notFound, "\(name) is not in Downloads › Postern › Outbox. Put the file there first.")
+        var url = outbox
+        for (index, part) in parts.enumerated() {
+            url.appendPathComponent(part, isDirectory: index < parts.count - 1)
+            let values = try? url.resourceValues(forKeys: [.isSymbolicLinkKey, .isDirectoryKey, .isRegularFileKey])
+            guard let values, values.isSymbolicLink != true,
+                  index < parts.count - 1 ? values.isDirectory == true : values.isRegularFile == true else {
+                throw PosternError(.notFound, "\(name) is not in Downloads › Postern › Outbox. Put the file there first.")
+            }
         }
-        guard (values.fileSize ?? 0) <= maxOutboxFile else { throw PosternError(.tooLarge, "\(name) is larger than 20 MB.") }
+        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
+        guard size <= maxOutboxFile else { throw PosternError(.tooLarge, "\(name) is larger than 20 MB.") }
         do {
-            return try OutgoingAttachment.make(filename: name, data: try Data(contentsOf: url))
+            return try OutgoingAttachment.make(filename: parts[parts.count - 1], data: try Data(contentsOf: url))
         } catch {
             throw PosternError(.invalidArgument, "\(name) could not be attached.")
         }
+    }
+
+    /// The files of the outbox and its subfolders, three levels deep at most, without hidden files or links.
+    static func outboxFiles() -> [OutboxFile] {
+        var found: [OutboxFile] = []
+        func visit(_ folder: URL, prefix: String, depth: Int) {
+            let keys: [URLResourceKey] = [.isSymbolicLinkKey, .isDirectoryKey, .isRegularFileKey, .fileSizeKey, .contentModificationDateKey]
+            guard depth < 4, found.count < 5000, let entries = try? FileManager.default.contentsOfDirectory(
+                at: folder, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles]
+            ) else { return }
+            for entry in entries {
+                let name = entry.lastPathComponent
+                guard name == safeName(name), let values = try? entry.resourceValues(forKeys: Set(keys)),
+                      values.isSymbolicLink != true else { continue }
+                if values.isDirectory == true {
+                    visit(entry, prefix: prefix + name + "/", depth: depth + 1)
+                } else if values.isRegularFile == true {
+                    found.append(OutboxFile(path: prefix + name, size: values.fileSize ?? 0, modified: values.contentModificationDate))
+                }
+            }
+        }
+        visit(outbox, prefix: "", depth: 0)
+        return found.sorted { $0.path.localizedStandardCompare($1.path) == .orderedAscending }
     }
 }
 

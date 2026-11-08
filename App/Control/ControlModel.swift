@@ -5,6 +5,7 @@ import PosternAudit
 import PosternBridge
 import PosternModel
 import PosternPolicy
+import PosternServer
 import PosternVault
 
 /// What the control window shows, and the only place that changes the policy.
@@ -59,6 +60,8 @@ final class ControlModel {
     var mailboxState: MailboxState = .idle
     var clients: [ClientRow] = []
     var activity: [ActivityRecord] = []
+    /// Batches of drafts and sends since the app started, newest first.
+    var batches: [BatchBoard.Batch] = []
     var integrity: Integrity?
     var pin: CertificatePin?
     var endpoint: BridgeEndpoint?
@@ -115,6 +118,15 @@ final class ControlModel {
         pin = try? state.vault.read(.certificatePin, as: CertificatePin.self)
         endpoint = try? state.vault.read(.bridgeEndpoint, as: BridgeEndpoint.self)
         clients = ClientConnector.rows()
+        Task { batches = await state.board.all() }
+    }
+
+    /// Stops a batch at once: taking power away needs no Touch ID.
+    func cancelBatch(_ id: String) {
+        Task {
+            await CoreState.shared.board.cancel(id)
+            batches = await CoreState.shared.board.all()
+        }
     }
 
     func loadMailboxes() async {
@@ -162,7 +174,7 @@ final class ControlModel {
 
     /// Turns a whole tier on or off at once: one Touch ID for all of it.
     func setTier(_ tier: Tier, enabled: Bool) async {
-        let tools = ToolID.allCases.filter { $0.tier == tier }
+        let tools = ToolID.switchable.filter { $0.tier == tier }
         await update("let your apps \(TierCopy.for(tier).verb)") { policy in
             if enabled { policy.enabledTools.formUnion(tools) } else { policy.enabledTools.subtract(tools) }
         }
@@ -344,7 +356,7 @@ struct ToolCopy {
                      risk: "Drafts sync to Proton on all your devices.")
         case .createDrafts:
             ToolCopy(title: "Write drafts from a template", verb: "write several drafts at once",
-                     allows: "Save up to 50 drafts at once from one template, such as one application per company.",
+                     allows: "Save up to 500 drafts at once from one template or a spreadsheet in the outbox, such as one application per company with its own letter.",
                      risk: "It fills your Drafts folder; nothing is sent.")
         case .updateDraft:
             ToolCopy(title: "Change drafts", verb: "change drafts",
@@ -372,8 +384,20 @@ struct ToolCopy {
                      risk: "Once you approve, it leaves for good.")
         case .sendDrafts:
             ToolCopy(title: "Send drafts together", verb: "send several drafts at once",
-                     allows: "Send up to 50 drafts at once: one panel lists them all, you untick any, one Touch ID sends the rest.",
-                     risk: "One approval sends every email left ticked. Your hourly and daily limits still apply.")
+                     allows: "Send up to 500 drafts at once: one panel lists them all, you untick any, one Touch ID sends the rest, one by one within your limits.",
+                     risk: "One approval sends every email left ticked, even hours later when your limits make room. You can stop a batch here at any time.")
+        case .listOutbox:
+            ToolCopy(title: "See the outbox", verb: "see the files in your outbox",
+                     allows: "List the files you put in Downloads › Postern › Outbox.",
+                     risk: "Apps learn the names of those files.")
+        case .batchStatus:
+            ToolCopy(title: "Follow batches", verb: "follow batches",
+                     allows: "See how a batch of drafts or emails stands.",
+                     risk: "None beyond the batch tools.")
+        case .cancelBatch:
+            ToolCopy(title: "Stop batches", verb: "stop batches",
+                     allows: "Stop a batch before it ends.",
+                     risk: "None: stopping only takes power away.")
         case .listAddresses:
             ToolCopy(title: "See your sender addresses", verb: "see which addresses you send from",
                      allows: "List your account's address and the aliases you added under Send from.",

@@ -69,4 +69,6 @@ public enum BridgeError: Error, Equatable, Sendable {
     case mailboxNotFound(String)
     case staleUIDValidity
     case tooLarge
+    /// The connection broke after the message was handed to Bridge, before Bridge said it took it: it may have left.
+    case sendInterrupted
 }

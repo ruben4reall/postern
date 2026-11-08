@@ -13,11 +13,17 @@ struct SendTools {
     let ledger: any SendLedger
     let provenance: Provenance
     let client: String
-    /// The pause between two emails of a batch, so they leave at a person's pace rather than in a burst.
+    /// Where long batches run, beyond this call.
+    let board: BatchBoard
+    /// The policy as it is now, for batches that outlive the call.
+    let livePolicy: @Sendable () -> Policy
+    /// The pause between two emails of a short batch, so they leave at a person's pace rather than in a burst.
     var batchSpacing: Duration = .seconds(2)
+    /// How long a batch call waits for its batch before answering with its progress.
+    var inlineWait: Duration = .seconds(45)
 
     static let quoteLimit = 20_000
-    static let batchLimit = 50
+    static let batchLimit = 500
 
     func call(_ tool: ToolID, _ arguments: [String: Value]) async throws -> CallTool.Result {
         switch tool {
@@ -57,6 +63,12 @@ struct SendTools {
             return outcome
         case .sendDrafts:
             return try await sendDrafts(arguments)
+        case .batchStatus:
+            return try await batchStatus(arguments)
+        case .cancelBatch:
+            return try await cancelBatch(arguments)
+        case .listOutbox:
+            return try await listOutbox()
         default:
             throw PosternError(.invalidArgument, "\(tool.rawValue) is not a draft or send tool.")
         }
@@ -126,158 +138,14 @@ struct SendTools {
         return try await deliver(message, tool: .forwardMessage, context: "Forward of \(sender): \(headers.subject)", extra: [:])
     }
 
-    // MARK: Drafts from a template
-
-    /// Up to fifty drafts from one template. Nothing leaves, so nothing asks the user; each draft is saved or refused
-    /// on its own.
-    private func createDrafts(_ arguments: [String: Value]) async throws -> CallTool.Result {
-        guard case .array(let list)? = arguments["drafts"], (1...Self.batchLimit).contains(list.count) else {
-            throw PosternError(.invalidArgument, "drafts is a list of 1 to \(Self.batchLimit) drafts.")
-        }
-        var template: [String: Value] = [:]
-        switch arguments["template"] {
-        case .object(let fields)?: template = fields.filter { Self.templateFields.contains($0.key) }
-        case nil: break
-        default: throw PosternError(.invalidArgument, "template is an object with subject, body, attachments, from, cc and bcc.")
-        }
-        var results: [Value] = []
-        var lines: [String] = []
-        for (index, item) in list.enumerated() {
-            do {
-                guard case .object(var fields) = item else {
-                    throw PosternError(.invalidArgument, "Each draft is an object with to, and values for the template.")
-                }
-                var values: [String: String] = [:]
-                if case .object(let given)? = fields.removeValue(forKey: "values") {
-                    for case (let key, .string(let text)) in given { values[key] = text }
-                }
-                var merged = template.merging(fields) { _, own in own }
-                for key in ["subject", "body"] {
-                    if case .string(let text)? = merged[key] { merged[key] = .string(try Self.fill(text, values)) }
-                }
-                if case .array(let names)? = merged["attachments"] {
-                    merged["attachments"] = .array(try names.map { name in
-                        guard case .string(let text) = name else { return name }
-                        return .string(try Self.fill(text, values))
-                    })
-                }
-                let message = try await compose(merged)
-                let id = try await backend.saveDraft(message)
-                results.append(.object(["index": .int(index), "status": "saved", "draft_id": .string(id.opaque)]))
-                lines.append("\(index + 1). Saved for \(message.envelopeRecipients.joined(separator: ", ")): \(id.opaque)")
-            } catch {
-                let detail = (error as? PosternError).map { "\($0.code.rawValue): \($0.message)" } ?? "\(error)"
-                results.append(.object(["index": .int(index), "status": "refused", "detail": .string(detail)]))
-                lines.append("\(index + 1). Not saved. \(detail)")
-            }
-        }
-        let saved = results.filter { if case .object(let fields) = $0 { fields["status"] == "saved" } else { false } }.count
-        return result(
-            (["Saved \(saved) of \(list.count) drafts in Drafts. Nothing was sent."] + lines).joined(separator: "\n"),
-            ["saved": .int(saved), "results": .array(results)]
-        )
-    }
-
-    static let templateFields: Set<String> = ["subject", "body", "attachments", "from", "cc", "bcc"]
-
-    /// Replaces each {{name}} with its value. A name without a value refuses the draft, so none says "Dear {{name}}".
-    static func fill(_ text: String, _ values: [String: String]) throws -> String {
-        var missing: [String] = []
-        let filled = text.replacing(#/\{\{\s*([^{}\s]+)\s*\}\}/#) { match in
-            let key = String(match.1)
-            guard let value = values[key] else {
-                missing.append("{{\(key)}}")
-                return ""
-            }
-            return value
-        }
-        guard missing.isEmpty else { throw PosternError(.invalidArgument, "No value for \(missing.joined(separator: ", ")).") }
-        return filled
-    }
-
-    // MARK: Drafts sent together
-
-    /// One panel and one Touch ID for up to fifty drafts; each approved email stays bound to its own digest, and the
-    /// limits count each one.
-    private func sendDrafts(_ arguments: [String: Value]) async throws -> CallTool.Result {
-        guard case .array(let list)? = arguments["ids"], (1...Self.batchLimit).contains(list.count) else {
-            throw PosternError(.invalidArgument, "ids is a list of 1 to \(Self.batchLimit) draft ids.")
-        }
-        var ids: [MessageID] = []
-        for value in list {
-            let id = try await draftID(value)
-            if !ids.contains(id) { ids.append(id) }
-        }
-        var outcomes: [MessageID: (status: String, detail: String)] = [:]
-        var pending: [(id: MessageID, request: ApprovalRequest)] = []
-        var room = remainingSends()
-        for id in ids {
-            do {
-                let draft = try await backend.message(id, maxChars: OutgoingMessage.maxBodyCharacters)
-                let message = try await compose([:], base: draft, baseFiles: try await backend.attachments(of: id))
-                try checkRecipients(message)
-                guard room > 0 else { throw PosternError(.quotaExceeded, "The sending limit the user set is reached; this draft stays in Drafts.") }
-                room -= 1
-                pending.append((id, try await approvalRequest(message, tool: .sendDrafts, context: "A draft saved in Drafts", extra: [:])))
-            } catch let error as PosternError {
-                outcomes[id] = ("refused", "\(error.code.rawValue): \(error.message)")
-            } catch {
-                outcomes[id] = ("refused", "\(error)")
-            }
-        }
-        if !pending.isEmpty {
-            let batch = BatchApprovalRequest(tool: ToolID.sendDrafts.rawValue, client: client, items: pending.map(\.request))
-            switch await desk.reviewBatch(batch) {
-            case .approved(let approved):
-                var first = true
-                for (id, request) in pending {
-                    guard let message = approved[request.id] else {
-                        outcomes[id] = ("skipped", "The user left this email out; the draft stays in Drafts.")
-                        continue
-                    }
-                    if !first { try? await Task.sleep(for: batchSpacing) }
-                    first = false
-                    do {
-                        try await backend.send(message)
-                        ledger.recordSend(at: Date())
-                        try? await backend.deleteDraft(id)
-                        outcomes[id] = ("sent", "Sent to \(message.recipients.joined(separator: ", ")).")
-                    } catch let error as PosternError {
-                        outcomes[id] = ("failed", "\(error.code.rawValue): \(error.message)")
-                    } catch {
-                        outcomes[id] = ("failed", "\(error)")
-                    }
-                }
-            case .rejected(let reason):
-                throw PosternError(.approvalRejected, "The user rejected these emails, so nothing was sent" + (reason.map { ": \($0)" } ?? "."))
-            case .notAuthenticated:
-                throw PosternError(.approvalRejected, "The user did not confirm with Touch ID, so nothing was sent.")
-            case .expired:
-                throw PosternError(.approvalTimeout, "The user did not answer in time, so nothing was sent.")
-            }
-        }
-        let sent = ids.filter { outcomes[$0]?.status == "sent" }.count
-        let lines = ids.map { id in "\(id.opaque): \(outcomes[id]?.status ?? "refused"). \(outcomes[id]?.detail ?? "")" }
-        let summary = sent == 0
-            ? "Nothing was sent."
-            : "The user approved the batch with Touch ID; \(sent) of \(ids.count) emails were sent."
-        return result(([summary] + lines).joined(separator: "\n"), [
-            "sent": .int(sent),
-            "results": .array(ids.map { id in
-                .object(["id": .string(id.opaque), "status": .string(outcomes[id]?.status ?? "refused"),
-                         "detail": .string(outcomes[id]?.detail ?? "")])
-            }),
-        ])
-    }
-
     // MARK: The send pipeline
 
     /// Checks the recipients and the quota, then asks the desk; only an approved message reaches Bridge.
-    private func deliver(
+    func deliver(
         _ message: OutgoingMessage, tool: ToolID, context: String?, extra: [String: [ApprovalBadge]]
     ) async throws -> CallTool.Result {
         try checkRecipients(message)
-        guard remainingSends() > 0 else {
+        guard SendBudget.remaining(policy, sends: ledger.recentSends()) > 0 else {
             throw PosternError(.quotaExceeded, "The sending limit the user set is reached. Try again later.")
         }
         let request = try await approvalRequest(message, tool: tool, context: context, extra: extra)
@@ -306,7 +174,7 @@ struct SendTools {
 
     /// The address an email leaves from: the account's, or an alias the user added in Postern's window. A draft
     /// keeps the address it was written from, if the user allows it; a reply prefers the address it answers.
-    private func sender(_ value: Value?, draft: Address? = nil, preferred: [Address] = []) async throws -> Address {
+    func sender(_ value: Value?, draft: Address? = nil, preferred: [Address] = []) async throws -> Address {
         let account = try await backend.ownAddress()
         func allowed(_ address: Address) -> Bool {
             let email = address.email.lowercased()
@@ -331,31 +199,30 @@ struct SendTools {
         return preferred.first(where: allowed).map(named) ?? account
     }
 
-    private func checkRecipients(_ message: OutgoingMessage) throws {
+    func checkRecipients(_ message: OutgoingMessage) throws {
         let refused = message.envelopeRecipients.filter { !policy.mayReceive($0) }
         guard refused.isEmpty else {
             throw PosternError(.recipientNotAllowed, "The user only allows mail to their approved recipients; \(refused.joined(separator: ", ")) is not one of them.")
         }
     }
 
-    /// How many more emails the hourly and daily limits allow right now.
-    private func remainingSends() -> Int {
-        let now = Date()
-        let sends = ledger.recentSends()
-        let hour = policy.sendsPerHour - sends.filter { now.timeIntervalSince($0) < 3600 }.count
-        let day = policy.sendsPerDay - sends.filter { now.timeIntervalSince($0) < 86_400 }.count
-        return max(0, min(hour, day))
-    }
-
     /// The panel's view of a message, with a warning for each recipient that deserves a second look.
-    private func approvalRequest(
-        _ message: OutgoingMessage, tool: ToolID, context: String?, extra: [String: [ApprovalBadge]]
+    func approvalRequest(
+        _ message: OutgoingMessage, tool: ToolID, context: String?, extra: [String: [ApprovalBadge]],
+        contacted: ContactCache? = nil
     ) async throws -> ApprovalRequest {
         var badges: [String: [ApprovalBadge]] = [:]
         for email in message.envelopeRecipients {
             var list = extra[email] ?? []
             if policy.trustedRecipients.contains(email) { list.append(.trusted) }
-            if !(try await backend.hasSentTo(email)) { list.append(.firstContact) }
+            let known: Bool
+            if let cached = contacted?.known(email) {
+                known = cached
+            } else {
+                known = try await backend.hasSentTo(email)
+                contacted?.remember(email, known)
+            }
+            if !known { list.append(.firstContact) }
             if provenance.cameFromEmail(email) { list.append(.cameFromEmail) }
             badges[email] = list
         }
@@ -365,15 +232,16 @@ struct SendTools {
     // MARK: Arguments
 
     /// Builds the message from the arguments; a draft being changed or sent gives the fields and files left out.
-    private func compose(
-        _ arguments: [String: Value], base: SanitizedMessage? = nil, baseFiles: [OutgoingAttachment] = []
+    func compose(
+        _ arguments: [String: Value], base: SanitizedMessage? = nil, baseFiles: [OutgoingAttachment] = [],
+        cache: AttachmentCache? = nil
     ) async throws -> OutgoingMessage {
         let to = arguments["to"] == nil ? base?.headers.to ?? [] : try addresses(arguments["to"])
         let cc = arguments["cc"] == nil ? base?.headers.cc ?? [] : try addresses(arguments["cc"])
         let bcc = arguments["bcc"] == nil ? base?.headers.bcc ?? [] : try addresses(arguments["bcc"])
         let subject = string(arguments["subject"]) ?? base?.headers.subject ?? ""
         let body = arguments["body"] == nil ? base?.body ?? "" : (string(arguments["body"]) ?? "")
-        let files = arguments["attachments"] == nil ? baseFiles : try await outboxFiles(arguments["attachments"])
+        let files = arguments["attachments"] == nil ? baseFiles : try await outboxFiles(arguments["attachments"], cache: cache)
         let from = try await sender(arguments["from"], draft: base?.headers.from.first)
         do {
             return try OutgoingMessage.make(
@@ -385,19 +253,26 @@ struct SendTools {
         }
     }
 
-    /// Files named by the client, taken only from the Postern outbox folder; the panel shows each one.
-    private func outboxFiles(_ value: Value?) async throws -> [OutgoingAttachment] {
+    /// Files named by the client, taken only from the Postern outbox folder; the panel shows each one. A batch
+    /// reads each file once, and its drafts share the bytes.
+    func outboxFiles(_ value: Value?, cache: AttachmentCache? = nil) async throws -> [OutgoingAttachment] {
         guard let value else { return [] }
         guard case .array(let list) = value else { throw PosternError(.invalidArgument, "attachments is a list of file names.") }
         var files: [OutgoingAttachment] = []
         for item in list {
             guard case .string(let name) = item else { throw PosternError(.invalidArgument, "attachments is a list of file names.") }
-            files.append(try await backend.outboxAttachment(named: name))
+            if let known = cache?.file(name) {
+                files.append(known)
+            } else {
+                let file = try await backend.outboxAttachment(named: name)
+                cache?.keep(file, as: name)
+                files.append(file)
+            }
         }
         return files
     }
 
-    private func addresses(_ value: Value?) throws -> [Address] {
+    func addresses(_ value: Value?) throws -> [Address] {
         let items: [Value]
         switch value {
         case .array(let list)?: items = list
@@ -420,13 +295,13 @@ struct SendTools {
         }
     }
 
-    private func draftID(_ value: Value?) async throws -> MessageID {
+    func draftID(_ value: Value?) async throws -> MessageID {
         let id = try await messageID(value)
         guard id.mailbox == "Drafts" else { throw PosternError(.invalidArgument, "This id is not a draft. Use an id from create_draft or the Drafts mailbox.") }
         return id
     }
 
-    private func messageID(_ value: Value?) async throws -> MessageID {
+    func messageID(_ value: Value?) async throws -> MessageID {
         guard case .string(let text)? = value, let id = MessageID(opaque: text) else {
             throw PosternError(.invalidArgument, "id is not a Postern message id.")
         }
@@ -436,7 +311,7 @@ struct SendTools {
         return id
     }
 
-    private func string(_ value: Value?) -> String? {
+    func string(_ value: Value?) -> String? {
         if case .string(let text)? = value {
             let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
             return trimmed.isEmpty ? nil : trimmed
@@ -444,12 +319,12 @@ struct SendTools {
         return nil
     }
 
-    private func bool(_ value: Value?) -> Bool? {
+    func bool(_ value: Value?) -> Bool? {
         if case .bool(let flag)? = value { return flag }
         return nil
     }
 
-    private func result(_ text: String, _ fields: [String: Value]) -> CallTool.Result {
+    func result(_ text: String, _ fields: [String: Value]) -> CallTool.Result {
         CallTool.Result(content: [.text(text: text, annotations: nil, _meta: nil)],
                         structuredContent: Optional<Value>.some(.object(fields)), isError: false)
     }

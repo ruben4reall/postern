@@ -6,16 +6,30 @@
   `send_message`, `create_draft`, `update_draft` and `forward_message` take `from`, replies leave from the address
   the original was sent to, and `list_addresses` lists them. Any other From is refused (`sender_not_allowed`), and a
   draft written from an address you did not add is not sent.
-- **Write up to 50 drafts from one template.** `create_drafts` fills `{{name}}` in the subject, body and attachment
-  names with each draft's values, for example one application per company with its own letter. A draft with a name
-  left without a value is not saved. With `send_drafts`, fifty applications take two calls and one Touch ID.
+- **Write up to 500 drafts from one template, or from a spreadsheet.** `create_drafts` fills `{{name}}` in the
+  subject, body and attachment names with each draft's values, for example one application per company with its own
+  letter. The values can come from a CSV or JSON file in the outbox, one row per draft, as Numbers or Excel export it.
+  Every draft is checked before any is saved, so a missing value or file stops the batch instead of leaving half of
+  it; `dry_run` shows the first draft without saving anything. With `send_drafts`, 500 applications take two calls
+  and one Touch ID.
 - **Drafts keep their attachments when they are sent.** `send_draft` sent the text of a draft without its
   attachments, and `update_draft` dropped them too. Both now carry them, the panel lists them, and the bytes that
   leave are the ones you approved. If you sent drafts with attachments through 0.1.1, check your Sent folder.
-- **Send a batch of drafts with one Touch ID.** `send_drafts` takes up to 50 drafts and shows them all on one panel:
-  recipients, warnings, subject, the start of the text, attachments and their size. Untick any that should wait, and
-  one Touch ID sends the rest, one by one. Each email is still approved for its exact bytes, and your hourly and daily
-  limits still count each one. The tool is off until you turn it on.
+- **Send a batch of drafts with one Touch ID.** `send_drafts` takes up to 500 drafts, or every draft a
+  `create_drafts` batch saved, and shows them all on one panel: who they go to and from, the files and their total
+  size, then each email with its recipients, warnings, subject, the start of the text and its attachments, with a
+  filter to find one. Untick any that should wait, and one Touch ID sends the rest. Each email is still approved for
+  its exact bytes. The tool is off until you turn it on.
+- **Long batches pace themselves.** Approved emails leave one by one, two seconds apart for a short batch and thirty
+  for a long one (`spacing_seconds` changes it), and when your hourly or daily limit is reached they wait for room
+  instead of being refused. The panel says when the last should leave; `start_at` schedules the first, up to thirty
+  days ahead. The Overview pane follows each batch with a Stop button, and `batch_status` and `cancel_batch` let apps
+  do the same. Pausing Postern holds a batch; a draft leaves Drafts only once its email is sent.
+- **Attachments from folders inside the outbox**, such as `Letters/Acme.pdf`, and `list_outbox` lists what is there.
+  A file attached to many drafts is read once and held once in memory.
+- **Clearer sending errors.** An email Proton refuses comes back as `send_refused`, and one whose connection broke
+  while Bridge was taking it as `send_uncertain`, so it is not sent twice by mistake. A batch retries an email Bridge
+  did not take, and goes on past one Proton refused.
 - **`update_draft` takes `attachments`** to replace a draft's files; without it, they stay.
 - **Calls are up to 2.5 times faster.** After each call, Postern reread and rechecked its whole activity log, and
   the next call waited for it. It now checks only what was added since, with a full check every five minutes.

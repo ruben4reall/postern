@@ -39,12 +39,36 @@ public protocol MailBackend: Sendable {
     func outboxAttachment(named name: String) async throws -> OutgoingAttachment
     /// The attachments of a message, to forward them.
     func attachments(of id: MessageID) async throws -> [OutgoingAttachment]
+    /// The files of the outbox folder and its subfolders, by path inside it.
+    func outboxFiles() async throws -> [OutboxFile]
+    /// A draft's text and files at once, to send it.
+    func draftForSending(_ id: MessageID) async throws -> (message: SanitizedMessage, files: [OutgoingAttachment])
 
     // Deleting.
     /// What the deletion panel lists for these messages.
     func deletionItems(_ ids: [MessageID]) async throws -> [DeletionItem]
     func trash(_ approved: ApprovedDeletion) async throws -> ChangeReport
     func erase(_ approved: ApprovedDeletion) async throws -> ChangeReport
+}
+
+extension MailBackend {
+    public func draftForSending(_ id: MessageID) async throws -> (message: SanitizedMessage, files: [OutgoingAttachment]) {
+        (try await message(id, maxChars: OutgoingMessage.maxBodyCharacters), try await attachments(of: id))
+    }
+}
+
+/// One file waiting in the outbox folder.
+public struct OutboxFile: Sendable, Equatable {
+    /// The path inside the outbox, such as `CV.pdf` or `Letters/Acme.pdf`.
+    public let path: String
+    public let size: Int
+    public let modified: Date?
+
+    public init(path: String, size: Int, modified: Date?) {
+        self.path = path
+        self.size = size
+        self.modified = modified
+    }
 }
 
 public struct SavedAttachment: Sendable, Equatable {

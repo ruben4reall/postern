@@ -37,6 +37,9 @@ One process hosts everything that matters:
 - **The approval desk**, the only place that can produce an approved message or an approved deletion. It shows a
   panel, waits for your choice for up to two minutes, then asks for Touch ID. One panel at a time. A batch of drafts
   gets one panel, fifteen minutes and one Touch ID, and each email it approves is still bound to its own SHA-256.
+- **The batch board**, one for the app: batches of drafts being saved and approved emails waiting for their turn,
+  each run as a task that spaces the emails, waits for room in the limits, and holds while Postern is paused. It
+  lives in memory only; quitting Postern stops what is left, and the drafts stay.
 - **The Bridge clients**: IMAP and SMTP on SwiftNIO, TLS with the pinned certificate, STARTTLS or TLS from the first
   byte depending on the port.
 - **The activity log**: one JSON line per call, each chained to the previous one by its SHA-256, the latest hash kept

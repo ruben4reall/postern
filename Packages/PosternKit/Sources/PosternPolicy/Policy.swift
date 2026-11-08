@@ -67,7 +67,11 @@ public struct Policy: Codable, Sendable, Equatable {
     /// What setup turns on: reading only. Saving attachments to disk has its own switch.
     public static let readOnly = Policy(enabledTools: [.listMailboxes, .searchMessages, .getMessage, .getThread])
 
-    public func allows(_ tool: ToolID) -> Bool { !paused && enabledTools.contains(tool) }
+    public func allows(_ tool: ToolID) -> Bool {
+        guard !paused else { return false }
+        if let owners = tool.companionOf { return !owners.isDisjoint(with: enabledTools) }
+        return enabledTools.contains(tool)
+    }
 
     /// `All Mail` and `Starred` show messages from every mailbox, so hiding any mailbox hides them too.
     public func isHidden(_ mailbox: String) -> Bool {

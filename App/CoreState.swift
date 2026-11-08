@@ -18,6 +18,13 @@ final class CoreState: @unchecked Sendable {
     let ledger: KeychainLedger
     /// One desk for the whole app: one approval panel at a time, whatever the client.
     let desk = ApprovalDesk(presenter: PanelPresenter(), authenticator: PolicyAuthenticator())
+    /// Batches of drafts and sends, for every client, while the app runs. Each email a batch sends is logged.
+    let board = BatchBoard(
+        onChange: { CoreState.shared.changed() },
+        record: { client, tool, outcome in
+            try? CoreState.shared.activity.append(client: client, tool: tool, outcome: outcome, items: 1)
+        }
+    )
     private let lock = NSLock()
     private var _policy: Policy = .initial
     private var _backend: BridgeBackend?

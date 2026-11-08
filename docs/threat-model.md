@@ -77,11 +77,16 @@ reads Bridge's own window; a compromised Proton account.
   deletes only an `ApprovedDeletion`. Only the approval desk can make them, after you chose on the panel and passed
   Touch ID. A send approval covers a SHA-256 of every byte that leaves; a deletion approval covers the exact list of
   messages. One panel at a time. A batch of drafts gets one panel and one Touch ID, and each email in it is still
-  bound to its own SHA-256.
+  bound to its own SHA-256. An approved batch may take hours to leave at your limits: it is the one approval that
+  outlives the panel. It covers only those exact emails, each sent once, it holds while Postern is paused or
+  `send_drafts` is off, it rechecks your allowed recipients before each email, and the Overview pane can stop it at
+  any time. It is kept in memory only, so quitting Postern ends it.
 - **Writing as someone else.** An email leaves from your account's address or from an alias you added under Send
   from, with Touch ID; any other From is refused before the panel, and the panel always shows it.
 - **Sending a lot.** 10 emails per hour and 30 per day by default, counted in the Keychain. Raising them needs
-  Touch ID. You can also restrict recipients to a list.
+  Touch ID. You can also restrict recipients to a list. A batch never goes past the limits: it waits for room.
+- **Attaching a file from elsewhere.** Attachments and spreadsheets are read only from the outbox folder and the
+  folders inside it, by a path that may not contain `..`, a hidden name or a link.
 - **Talking to Postern directly.** Every XPC connection between Postern's processes requires the other side to be
   signed by Postern's developer, in both directions.
 - **Reading the password from a settings file.** Client settings hold the path of the relay, never a secret.
