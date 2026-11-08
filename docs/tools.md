@@ -34,8 +34,10 @@ It also flags a display name that shows a different address than the real one.
 
 ## Organize
 
-All take `ids`: 1 to 100 message ids. Each change is read back from Bridge; the answer says whether Postern saw it
-applied.
+All take `ids`: 1 to 100 message ids, or `search`: the fields of `search_messages` (a `mailbox` and at least one
+condition), to change every message the search finds, up to `limit` (1,000 at most), a hundred at a time. With
+`search`, `dry_run` lists what would change and changes nothing. Each change is read back from Bridge; the answer says
+whether Postern saw it applied.
 
 | Tool | Other arguments | What it does |
 |---|---|---|

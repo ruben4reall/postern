@@ -37,6 +37,31 @@ public enum ToolCatalog {
         "description": "Message ids from search_messages, get_thread or a previous change. At most 100.",
     ])
 
+    /// Instead of ids: every message a search finds, previewed first with dry_run.
+    static let bulk: [String: Value] = [
+        "search": .object([
+            "type": "object",
+            "description": "Instead of ids: change every message this search finds, up to limit. Same fields as search_messages.",
+            "properties": .object([
+                "mailbox": .object(["type": "string", "description": "Mailbox name from list_mailboxes."]),
+                "from": .object(["type": "string"]), "to": .object(["type": "string"]), "subject": .object(["type": "string"]),
+                "text": .object(["type": "string"]),
+                "since": .object(["type": "string", "description": "YYYY-MM-DD."]),
+                "before": .object(["type": "string", "description": "YYYY-MM-DD."]),
+                "unread": .object(["type": "boolean"]), "starred": .object(["type": "boolean"]),
+            ]),
+            "required": .array([.string("mailbox")]),
+        ]),
+        "dry_run": .object(["type": "boolean", "description": "With search: list what would change, change nothing."]),
+        "limit": .object(["type": "integer", "minimum": 1, "maximum": .int(OrganizeTools.maxSearched), "description": "With search: at most this many messages, newest first. Default \(OrganizeTools.maxSearched)."]),
+    ]
+
+    static let bulkNote = " Give ids, or search to change every message a search finds (up to \(OrganizeTools.maxSearched); dry_run lists them first)."
+
+    static func organize(_ extra: [String: Value] = [:], required: [String] = []) -> Value {
+        schema(bulk.merging(extra) { $1 }.merging(["ids": ids]) { $1 }, required: required)
+    }
+
     static func definition(_ id: ToolID) -> Tool {
         switch id {
         case .listMailboxes:
@@ -119,14 +144,14 @@ public enum ToolCatalog {
         case .markRead, .markUnread:
             Tool(
                 name: id.rawValue, title: id == .markRead ? "Mark as read" : "Mark as unread",
-                description: "Marks messages as \(id == .markRead ? "read" : "unread"). Postern reads Bridge again to confirm.",
-                inputSchema: schema(["ids": ids], required: ["ids"]), annotations: organizeAnnotations
+                description: "Marks messages as \(id == .markRead ? "read" : "unread"). Postern reads Bridge again to confirm." + bulkNote,
+                inputSchema: organize(), annotations: organizeAnnotations
             )
         case .setStarred:
             Tool(
                 name: id.rawValue, title: "Star or unstar",
-                description: "Stars messages, or removes the star with starred false.",
-                inputSchema: schema(["ids": ids, "starred": .object(["type": "boolean", "description": "Default true."])], required: ["ids"]),
+                description: "Stars messages, or removes the star with starred false." + bulkNote,
+                inputSchema: organize(["starred": .object(["type": "boolean", "description": "Default true."])]),
                 annotations: organizeAnnotations
             )
         case .moveMessages:
@@ -135,29 +160,27 @@ public enum ToolCatalog {
                 description: """
                 Moves messages to Inbox, Archive or a folder under Folders/. Labels stay as they are. Trash and Spam \
                 are not destinations here. Returns the ids the messages have in their new folder.
-                """,
-                inputSchema: schema([
-                    "ids": ids,
+                """ + bulkNote,
+                inputSchema: organize([
                     "destination": .object(["type": "string", "description": "INBOX, Archive, or a Folders/ name from list_mailboxes."]),
-                ], required: ["ids", "destination"]),
+                ], required: ["destination"]),
                 annotations: organizeAnnotations
             )
         case .archiveMessages:
             Tool(
                 name: id.rawValue, title: "Archive messages",
-                description: "Moves messages to Archive. Labels stay as they are. Returns their new ids.",
-                inputSchema: schema(["ids": ids], required: ["ids"]), annotations: organizeAnnotations
+                description: "Moves messages to Archive. Labels stay as they are. Returns their new ids." + bulkNote,
+                inputSchema: organize(), annotations: organizeAnnotations
             )
         case .addLabel, .removeLabel:
             Tool(
                 name: id.rawValue, title: id == .addLabel ? "Add a label" : "Remove a label",
-                description: id == .addLabel
+                description: (id == .addLabel
                     ? "Adds a label to messages. They stay in their folder."
-                    : "Removes a label from messages. They stay in their folder.",
-                inputSchema: schema([
-                    "ids": ids,
+                    : "Removes a label from messages. They stay in their folder.") + bulkNote,
+                inputSchema: organize([
                     "label": .object(["type": "string", "description": "Label name, with or without Labels/."]),
-                ], required: ["ids", "label"]),
+                ], required: ["label"]),
                 annotations: organizeAnnotations
             )
         case .createMailbox:

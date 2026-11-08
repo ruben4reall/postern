@@ -11,6 +11,9 @@ struct OrganizeTools {
 
     static let maxIDs = 100
     static let maxNameLength = 100
+    /// Messages a search can change in one call; they are changed a hundred at a time.
+    static let maxSearched = 1000
+    let renderer = UntrustedRenderer()
 
     func call(_ tool: ToolID, _ arguments: [String: Value]) async throws -> CallTool.Result {
         switch tool {
@@ -35,12 +38,14 @@ struct OrganizeTools {
             }
             let label = MailboxNames.label(name)
             try ensureVisible(label)
-            let ids = try await visibleIDs(arguments)
-            let report = tool == .addLabel
-                ? try await backend.addLabel(ids, label: label)
-                : try await backend.removeLabel(ids, label: label)
-            let verb = tool == .addLabel ? "Added \(label) to" : "Removed \(label) from"
-            return result(report, summary: "\(verb) \(report.done.count) message(s).", mailbox: nil)
+            let verb = tool == .addLabel ? "add \(label) to" : "remove \(label) from"
+            let targets = try await visibleIDs(arguments)
+            if let preview = targets.preview { return dryRun(preview, total: targets.total, action: verb) }
+            let report = try await inChunks(targets.ids) { ids in
+                tool == .addLabel ? try await backend.addLabel(ids, label: label) : try await backend.removeLabel(ids, label: label)
+            }
+            let done = tool == .addLabel ? "Added \(label) to" : "Removed \(label) from"
+            return result(report, summary: "\(done) \(report.done.count) message(s).", mailbox: nil)
         case .createMailbox:
             return try await create(arguments)
         default:
@@ -51,8 +56,12 @@ struct OrganizeTools {
     // MARK: Tools
 
     private func flag(_ flag: MessageFlag, on: Bool, _ arguments: [String: Value], done: String) async throws -> CallTool.Result {
-        let ids = try await visibleIDs(arguments)
-        let report = try await backend.setFlag(flag, on: on, ids: ids)
+        let targets = try await visibleIDs(arguments)
+        if let preview = targets.preview {
+            let action = flag == .read ? (on ? "mark as read" : "mark as unread") : (on ? "star" : "unstar")
+            return dryRun(preview, total: targets.total, action: action)
+        }
+        let report = try await inChunks(targets.ids) { ids in try await backend.setFlag(flag, on: on, ids: ids) }
         return result(report, summary: String(format: done, report.done.count), mailbox: nil)
     }
 
@@ -64,8 +73,9 @@ struct OrganizeTools {
             throw PosternError(.invalidArgument, hint)
         }
         try ensureVisible(destination)
-        let ids = try await visibleIDs(arguments)
-        let report = try await backend.move(ids, to: destination)
+        let targets = try await visibleIDs(arguments)
+        if let preview = targets.preview { return dryRun(preview, total: targets.total, action: "move to \(destination)") }
+        let report = try await inChunks(targets.ids) { ids in try await backend.move(ids, to: destination) }
         return result(report, summary: "Moved \(report.done.count) message(s) to \(destination).", mailbox: destination)
     }
 
@@ -95,15 +105,29 @@ struct OrganizeTools {
 
     // MARK: Helpers
 
-    /// The ids to change, refusing the whole call if any of them sits in a hidden mailbox.
-    private func visibleIDs(_ arguments: [String: Value]) async throws -> [MessageID] {
+    /// The messages to change: the ids given, or what a search finds. With dry_run, the search's messages come back
+    /// to be listed instead. The whole call is refused if a message sits in a hidden mailbox.
+    private func visibleIDs(_ arguments: [String: Value]) async throws -> (ids: [MessageID], preview: [MessageSummary]?, total: Int) {
+        if let search = arguments["search"] {
+            guard arguments["ids"] == nil, arguments["id"] == nil else {
+                throw PosternError(.invalidArgument, "Give ids or search, not both.")
+            }
+            guard case .object(let fields) = search else { throw PosternError(.invalidArgument, "search is an object, like the arguments of search_messages.") }
+            let query = try Self.query(fields)
+            try ensureVisible(query.mailbox)
+            let limit = min(max(int(arguments["limit"]) ?? Self.maxSearched, 1), Self.maxSearched)
+            let found = try await backend.search(query, limit: limit, offset: 0)
+            if bool(arguments["dry_run"]) == true { return ([], found.items, found.total) }
+            return (found.items.map(\.id), nil, found.total)
+        }
+        if bool(arguments["dry_run"]) == true { throw PosternError(.invalidArgument, "dry_run goes with search.") }
         var texts: [String] = []
         if case .array(let values)? = arguments["ids"] {
             texts = values.compactMap { if case .string(let text) = $0 { text } else { nil } }
         } else if let single = string(arguments["id"]) {
             texts = [single]
         }
-        guard !texts.isEmpty else { throw PosternError(.invalidArgument, "ids is required: message ids from search_messages.") }
+        guard !texts.isEmpty else { throw PosternError(.invalidArgument, "ids is required: message ids from search_messages. Or give search to change what a search finds.") }
         guard texts.count <= Self.maxIDs else {
             throw PosternError(.invalidArgument, "At most \(Self.maxIDs) messages per call.")
         }
@@ -114,7 +138,77 @@ struct OrganizeTools {
         for mailbox in Set(ids.map(\.mailbox)) {
             try ensureVisible(try await backend.displayName(ofRawMailbox: mailbox))
         }
-        return Array(NSOrderedSet(array: ids.map(\.opaque)).compactMap { ($0 as? String).flatMap(MessageID.init(opaque:)) })
+        let unique = Array(NSOrderedSet(array: ids.map(\.opaque)).compactMap { ($0 as? String).flatMap(MessageID.init(opaque:)) })
+        return (unique, nil, unique.count)
+    }
+
+    /// A search's arguments, read the way search_messages reads them.
+    static func query(_ fields: [String: Value]) throws -> SearchQuery {
+        func text(_ key: String) -> String? {
+            guard case .string(let value)? = fields[key] else { return nil }
+            let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+            return trimmed.isEmpty ? nil : trimmed
+        }
+        func day(_ key: String) throws -> Date? {
+            guard let value = text(key) else { return nil }
+            let formatter = DateFormatter()
+            formatter.locale = Locale(identifier: "en_US_POSIX")
+            formatter.dateFormat = "yyyy-MM-dd"
+            guard let date = formatter.date(from: value) else { throw PosternError(.invalidArgument, "\(key) must be a day written YYYY-MM-DD.") }
+            return date
+        }
+        func flag(_ key: String) -> Bool? { if case .bool(let value)? = fields[key] { value } else { nil } }
+        guard let mailbox = text("mailbox") else { throw PosternError(.invalidArgument, "search needs a mailbox from list_mailboxes.") }
+        let query = SearchQuery(
+            mailbox: mailbox, from: text("from"), to: text("to"), subject: text("subject"), text: text("text"),
+            since: try day("since"), before: try day("before"), unread: flag("unread"), starred: flag("starred")
+        )
+        // A search that names nothing but a mailbox would change all of it: ask for at least one condition.
+        guard query.from != nil || query.to != nil || query.subject != nil || query.text != nil || query.since != nil
+                || query.before != nil || query.unread != nil || query.starred != nil else {
+            throw PosternError(.invalidArgument, "search needs at least one condition besides the mailbox, such as from, before or unread.")
+        }
+        return query
+    }
+
+    /// Applies a change a hundred messages at a time and gathers the reports.
+    private func inChunks(_ ids: [MessageID], _ change: ([MessageID]) async throws -> ChangeReport) async throws -> ChangeReport {
+        guard !ids.isEmpty else { return ChangeReport(done: [], failed: [], verified: true) }
+        var total = ChangeReport(done: [], failed: [], verified: true)
+        for start in stride(from: 0, to: ids.count, by: Self.maxIDs) {
+            let report = try await change(Array(ids[start..<min(start + Self.maxIDs, ids.count)]))
+            total.done += report.done
+            total.failed += report.failed
+            total.verified = total.verified && report.verified
+        }
+        return total
+    }
+
+    /// What a search would change, newest first, without changing anything.
+    private func dryRun(_ found: [MessageSummary], total: Int, action: String) -> CallTool.Result {
+        let iso = ISO8601DateFormatter()
+        var text = "Would \(action) \(found.count) message(s)"
+        if total > found.count { text += "; the search finds \(total), more than the limit" }
+        text += ". Nothing was changed."
+        let listing = found.prefix(30).map { item in
+            "- \(item.date.map { iso.string(from: $0) } ?? "no date") | from \(item.from.map(\.email).joined(separator: ", ")) | \(item.subject)"
+        }.joined(separator: "\n")
+        if !listing.isEmpty { text += "\n" + renderer.wrap(listing, source: "messages a change would touch") }
+        return CallTool.Result(
+            content: [.text(text: text, annotations: nil, _meta: nil)],
+            structuredContent: Optional<Value>.some(.object([
+                "count": .int(found.count), "found": .int(total), "dry_run": .bool(true),
+                "messages": .array(found.prefix(30).map { item in
+                    .object([
+                        "id": .string(item.id.opaque),
+                        "date": item.date.map { .string(iso.string(from: $0)) } ?? .null,
+                        "untrusted_from": .string(UntrustedRenderer.defuse(item.from.first?.email ?? "")),
+                        "untrusted_subject": .string(UntrustedRenderer.defuse(item.subject)),
+                    ])
+                }),
+            ])),
+            isError: false
+        )
     }
 
     private func ensureVisible(_ mailbox: String) throws {
@@ -138,7 +232,8 @@ struct OrganizeTools {
             "not_done": .array(report.failed.map { .object(["id": .string($0.id.opaque), "reason": .string($0.reason)]) }),
             "verified": .bool(report.verified),
         ])
-        let ids = report.done.map(\.opaque).joined(separator: "\n")
+        // Long lists of new ids stay in the structured result.
+        let ids = report.done.count > Self.maxIDs ? "" : report.done.map(\.opaque).joined(separator: "\n")
         return CallTool.Result(
             content: [.text(text: ids.isEmpty ? text : text + "\n" + ids, annotations: nil, _meta: nil)],
             structuredContent: Optional<Value>.some(structured), isError: false
@@ -156,5 +251,13 @@ struct OrganizeTools {
     private func bool(_ value: Value?) -> Bool? {
         if case .bool(let flag)? = value { return flag }
         return nil
+    }
+
+    private func int(_ value: Value?) -> Int? {
+        switch value {
+        case .int(let number)?: number
+        case .double(let number)?: Int(number)
+        default: nil
+        }
     }
 }

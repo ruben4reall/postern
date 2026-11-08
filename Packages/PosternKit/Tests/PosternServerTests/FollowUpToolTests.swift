@@ -102,3 +102,42 @@ import PosternPolicy
         #expect(hiddenError != true || base.text(hidden).hasPrefix("scope_hidden"))
     }
 }
+
+@Suite struct OrganizeBySearchTests {
+    let base = SendToolTests()
+
+    func newsletters(_ count: Int) -> [MessageSummary] {
+        (1...count).map { uid in
+            MessageSummary(id: MessageID(mailbox: "Folders/Newsletters", uidValidity: 1, uid: UInt32(uid)), date: Date(),
+                           from: [Address(name: nil, email: "news@shop.example")], to: [], cc: [], subject: "Offer \(uid)",
+                           unread: true, starred: false, answered: false, size: 10, attachmentCount: 0, messageIDHeader: nil, inReplyTo: nil)
+        }
+    }
+
+    @Test func previewsThenChangesEverythingASearchFinds() async throws {
+        let backend = FakeBackend()
+        backend.lock.withLock { backend.searchResults["Folders/Newsletters"] = newsletters(150) }
+        let policy = Policy(enabledTools: [.archiveMessages, .markRead], hiddenMailboxes: ["Folders/Secret"])
+        let (client, _) = try await base.connect(policy: policy, backend: backend)
+        let search: Value = .object(["mailbox": "Folders/Newsletters", "before": "2026-10-01"])
+
+        let (preview, previewResult, _) = try await base.call(client, "archive_messages", ["search": search, "dry_run": .bool(true)])
+        #expect(base.text(preview).contains("Would move to Archive 150 message(s)") && base.text(preview).contains("Nothing was changed"))
+        #expect(backend.lock.withLock { backend.changes }.isEmpty)
+        guard case .object(let fields)? = previewResult else { Issue.record("No preview"); return }
+        #expect(fields["dry_run"] == .bool(true) && fields["count"] == .int(150))
+
+        let (_, done, isError) = try await base.call(client, "archive_messages", ["search": search])
+        #expect(isError != true)
+        #expect(backend.lock.withLock { backend.changes } == ["move Archive 100", "move Archive 50"])
+        guard case .object(let moved)? = done else { Issue.record("No result"); return }
+        #expect(moved["count"] == .int(150))
+
+        let (all, allError) = try await client.callTool(name: "mark_read", arguments: ["search": .object(["mailbox": "Folders/Newsletters"])])
+        #expect(allError == true && base.text(all).contains("at least one condition"))
+        let (hidden, hiddenError) = try await client.callTool(name: "mark_read", arguments: ["search": .object(["mailbox": "Folders/Secret", "unread": true])])
+        #expect(hiddenError == true && base.text(hidden).hasPrefix("scope_hidden"))
+        let (both, bothError) = try await client.callTool(name: "mark_read", arguments: ["search": search, "ids": .array([.string(backend.inbox.opaque)])])
+        #expect(bothError == true && base.text(both).contains("not both"))
+    }
+}

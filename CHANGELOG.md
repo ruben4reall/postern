@@ -12,6 +12,9 @@
   Every draft is checked before any is saved, so a missing value or file stops the batch instead of leaving half of
   it; `dry_run` shows the first draft without saving anything. With `send_drafts`, 500 applications take two calls
   and one Touch ID.
+- **Sort by search.** The organize tools take `search` instead of ids, to archive, move, label, star or mark as read
+  every message a search finds, up to 1,000 at a time, such as the newsletters older than a month. `dry_run` lists
+  them first and changes nothing. A search must name a condition besides its mailbox.
 - **Find the people who have not answered.** `awaiting_reply` lists who you wrote to without an answer, the longest
   wait first: the follow-ups to write, such as job applications with no news. An answer is a reply in the
   conversation, or a later email from the same address or company domain, Spam included.
