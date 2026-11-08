@@ -53,7 +53,8 @@ public struct OutgoingMessage: Codable, Sendable, Equatable {
     public var references: [String]
     public var attachments: [OutgoingAttachment]
     public let messageID: String
-    public let date: Date
+    /// When the message is written; a batch sets it again when the email leaves.
+    public private(set) var date: Date
 
     public static let maxRecipients = 50
     public static let maxBodyCharacters = 200_000
@@ -96,21 +97,31 @@ public struct OutgoingMessage: Codable, Sendable, Equatable {
         return body + "\n\n" + quoted
     }
 
-    /// SHA-256 of the rendered message with Bcc and of the envelope: any change makes a new digest.
+    /// The same message, dated `date`: an email that waited in a batch carries the time it left.
+    public func dated(_ date: Date) -> OutgoingMessage {
+        var copy = self
+        copy.date = date
+        return copy
+    }
+
+    /// SHA-256 of the rendered message with Bcc and of the envelope: any change makes a new digest. The Date header
+    /// alone is left out, so an approved email can carry the time it actually leaves.
     public var digest: String {
-        var data = rfc822(includeBcc: true)
+        var data = rfc822(includeBcc: true, dated: false)
         data.append(Data(("\n" + envelopeRecipients.joined(separator: ",")).utf8))
         return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
     /// RFC 5322 bytes with CRLF line endings. Drafts keep the Bcc header; sent mail never shows it.
-    public func rfc822(includeBcc: Bool) -> Data {
+    public func rfc822(includeBcc: Bool) -> Data { rfc822(includeBcc: includeBcc, dated: true) }
+
+    private func rfc822(includeBcc: Bool, dated: Bool) -> Data {
         var headers: [String] = ["From: " + Self.format(from)]
         if !to.isEmpty { headers.append("To: " + to.map(Self.format).joined(separator: ", ")) }
         if !cc.isEmpty { headers.append("Cc: " + cc.map(Self.format).joined(separator: ", ")) }
         if includeBcc && !bcc.isEmpty { headers.append("Bcc: " + bcc.map(Self.format).joined(separator: ", ")) }
         headers.append("Subject: " + Self.encodeWord(subject))
-        headers.append("Date: " + Self.dateFormatter.string(from: date))
+        if dated { headers.append("Date: " + Self.dateFormatter.string(from: date)) }
         headers.append("Message-ID: " + messageID)
         if let inReplyTo { headers.append("In-Reply-To: " + inReplyTo) }
         if !references.isEmpty { headers.append("References: " + references.joined(separator: " ")) }

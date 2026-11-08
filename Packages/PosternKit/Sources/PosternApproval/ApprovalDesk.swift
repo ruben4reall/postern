@@ -176,6 +176,9 @@ public struct ApprovedMessage: Sendable {
         self.digest = message.digest
     }
 
+    /// The same approved email, dated when it leaves. The digest leaves the Date header out, so it does not change.
+    public func leaving(at date: Date) -> ApprovedMessage { ApprovedMessage(message.dated(date)) }
+
     public var envelopeFrom: String { message.from.email }
     public var recipients: [String] { message.envelopeRecipients }
     /// The bytes that leave: never the Bcc header.

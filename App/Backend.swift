@@ -45,6 +45,7 @@ struct LiveBackend: MailBackend {
     func hasSentTo(_ email: String) async throws -> Bool { try await current().hasSentTo(email) }
     func saveDraft(_ message: OutgoingMessage) async throws -> MessageID { try await current().saveDraft(message) }
     func deleteDraft(_ id: MessageID) async throws { try await current().deleteDraft(id) }
+    func draftExists(_ id: MessageID) async throws -> Bool { try await current().draftExists(id) }
     func send(_ message: ApprovedMessage) async throws { try await current().send(message) }
     func saveAttachment(_ id: MessageID, index: Int) async throws -> SavedAttachment {
         try await current().saveAttachment(id, index: index)
@@ -238,6 +239,18 @@ final class BridgeBackend: MailBackend, Sendable {
 
     func send(_ message: ApprovedMessage) async throws {
         try await bridge { try await self.sender.send(message) }
+    }
+
+    func draftExists(_ id: MessageID) async throws -> Bool {
+        try await bridge {
+            try await self.client.withConnection { connection in
+                let drafts = try await connection.mailbox(named: "Drafts")
+                guard id.mailbox == drafts.raw else { return false }
+                let status = try await connection.examine(drafts)
+                guard status.uidValidity == id.uidValidity else { return false }
+                return !(try await connection.fetchSummaries([id.uid])).isEmpty
+            }
+        }
     }
 
     // MARK: Attachments
@@ -519,13 +532,32 @@ enum PosternFolders {
                 throw PosternError(.notFound, "\(name) is not in Downloads › Postern › Outbox. Put the file there first.")
             }
         }
-        let size = (try? url.resourceValues(forKeys: [.fileSizeKey]).fileSize) ?? 0
-        guard size <= maxOutboxFile else { throw PosternError(.tooLarge, "\(name) is larger than 20 MB.") }
+        let data = try readPlainFile(url, name: name)
         do {
-            return try OutgoingAttachment.make(filename: parts[parts.count - 1], data: try Data(contentsOf: url))
+            return try OutgoingAttachment.make(filename: parts[parts.count - 1], data: data)
         } catch {
             throw PosternError(.invalidArgument, "\(name) could not be attached.")
         }
+    }
+
+    /// Reads the file through a descriptor opened without following a link, and checks that very file: a regular
+    /// file with a single name, so neither a link swapped in after the checks nor a hard link to a file elsewhere
+    /// is read.
+    static func readPlainFile(_ url: URL, name: String) throws -> Data {
+        let values = try? outbox.resourceValues(forKeys: [.isSymbolicLinkKey])
+        guard values?.isSymbolicLink != true else {
+            throw PosternError(.invalidArgument, "The outbox folder is a link; Postern reads only a real folder.")
+        }
+        let descriptor = open(url.path, O_RDONLY | O_NOFOLLOW | O_CLOEXEC)
+        guard descriptor >= 0 else { throw PosternError(.notFound, "\(name) is not in Downloads › Postern › Outbox. Put the file there first.") }
+        let handle = FileHandle(fileDescriptor: descriptor, closeOnDealloc: true)
+        var info = stat()
+        guard fstat(descriptor, &info) == 0, (info.st_mode & S_IFMT) == S_IFREG, info.st_nlink == 1 else {
+            throw PosternError(.invalidArgument, "\(name) is not a plain file of its own; Postern does not read links.")
+        }
+        guard Int(info.st_size) <= maxOutboxFile else { throw PosternError(.tooLarge, "\(name) is larger than 20 MB.") }
+        guard let data = try? handle.readToEnd() else { throw PosternError(.invalidArgument, "\(name) could not be read.") }
+        return data
     }
 
     /// The files of the outbox and its subfolders, three levels deep at most, without hidden files or links.

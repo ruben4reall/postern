@@ -113,24 +113,60 @@ struct VaultHeadStore: HeadStore {
     func save(_ hash: String) { try? vault.write(hash, for: .activityHead) }
 }
 
-/// Recent send times in the Keychain, so a client cannot reset the limits by touching a file.
+/// Recent send times in the Keychain, so a client cannot reset the limits by touching a file. A copy stays in
+/// memory: when the Keychain cannot be read, such as while the screen is locked, the limits keep counting what was
+/// sent instead of starting from zero, and nothing is written over the stored list.
 final class KeychainLedger: SendLedger, @unchecked Sendable {
     private let vault: any SecretStore
     private let lock = NSLock()
+    private var memory: [Date] = []
 
     init(vault: any SecretStore) {
         self.vault = vault
+        memory = ((try? vault.read(.sendLedger, as: [Date].self)) ?? nil) ?? []
     }
 
     func recentSends() -> [Date] {
-        lock.withLock { ((try? vault.read(.sendLedger, as: [Date].self)) ?? []).filter { Date().timeIntervalSince($0) < 86_400 } }
+        lock.withLock { current(Date()).dates }
     }
 
-    func recordSend(at date: Date) {
+    func reserve(at date: Date, allowed: ([Date]) -> Bool) -> Bool {
         lock.withLock {
-            let kept = ((try? vault.read(.sendLedger, as: [Date].self)) ?? []).filter { date.timeIntervalSince($0) < 86_400 }
-            try? vault.write(kept + [date], for: .sendLedger)
+            let (dates, readable) = current(date)
+            guard allowed(dates) else { return false }
+            memory = dates + [date]
+            if readable { try? vault.write(memory, for: .sendLedger) }
+            return true
         }
+    }
+
+    func release(at date: Date) {
+        lock.withLock {
+            let (dates, readable) = current(date)
+            guard let index = dates.firstIndex(where: { abs($0.timeIntervalSince(date)) < 0.001 }) else { return }
+            var kept = dates
+            kept.remove(at: index)
+            memory = kept
+            if readable { try? vault.write(memory, for: .sendLedger) }
+        }
+    }
+
+    /// The sends of the last day: the stored list merged with the copy in memory, each send once.
+    private func current(_ now: Date) -> (dates: [Date], readable: Bool) {
+        var readable = true
+        var all = memory
+        do {
+            all += try vault.read(.sendLedger, as: [Date].self) ?? []
+        } catch {
+            readable = false
+        }
+        var merged: [Date] = []
+        for date in all.filter({ now.timeIntervalSince($0) < 86_400 }).sorted() {
+            if let previous = merged.last, date.timeIntervalSince(previous) < 0.001 { continue }
+            merged.append(date)
+        }
+        memory = merged
+        return (merged, readable)
     }
 }
 

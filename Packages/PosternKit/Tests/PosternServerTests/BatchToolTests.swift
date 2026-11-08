@@ -169,3 +169,81 @@ import PosternCompose
         #expect(quick == now.addingTimeInterval(10))
     }
 }
+
+/// What the independent review of the send queue asked for: no email twice, the limits held, the user's later
+/// changes obeyed.
+@Suite struct SendQueueSafetyTests {
+    let base = SendToolTests()
+    let withAlias = Policy(enabledTools: Set(ToolID.allCases), sendsPerHour: 100, sendsPerDay: 500, senderAddresses: ["pro@example.ch"])
+
+    func soon(_ seconds: Double = 2) -> Value {
+        .string(ISO8601DateFormatter().string(from: Date().addingTimeInterval(seconds)))
+    }
+
+    @Test func draftsHeldByOneBatchAreNotSentByAnother() async throws {
+        let backend = FakeBackend()
+        _ = try base.applicationDraft(backend)
+        let ledger = MemoryLedger()
+        let (client, presenter) = try await base.connect(policy: Policy(enabledTools: Set(ToolID.allCases), sendsPerHour: 1), backend: backend, ledger: ledger)
+        let ids = base.drafts([5, 6]).map { Value.string($0.opaque) }
+        let (_, first, _) = try await base.call(client, "send_drafts", ["ids": .array(ids)])
+        #expect(base.statuses(first) == ["sent", "waiting"])
+        let (again, second, _) = try await base.call(client, "send_drafts", ["ids": .array(ids)])
+        #expect(base.statuses(second) == ["refused", "refused"] && base.text(again).contains("already in batch"))
+        #expect(presenter.lock.withLock { presenter.batches.count } == 1)
+        #expect(backend.lock.withLock { backend.sent }.count == 1 && ledger.recentSends().count == 1)
+    }
+
+    @Test func anUncertainSendStaysCountedAndIsNeverRetried() async throws {
+        let backend = FakeBackend()
+        _ = try base.applicationDraft(backend)
+        backend.lock.withLock { backend.sendFailures = [PosternError(.sendUncertain, "The connection to Bridge broke while the email was handed over.")] }
+        let ledger = MemoryLedger()
+        let (client, _) = try await base.connect(backend: backend, ledger: ledger)
+        let ids = base.drafts([5]).map { Value.string($0.opaque) }
+        let (_, structured, _) = try await base.call(client, "send_drafts", ["ids": .array(ids)])
+        #expect(base.statuses(structured) == ["uncertain"])
+        #expect(ledger.recentSends().count == 1 && backend.lock.withLock { backend.deletedDrafts }.isEmpty)
+        let (_, again, _) = try await base.call(client, "send_drafts", ["ids": .array(ids)])
+        #expect(base.statuses(again) == ["refused"])
+    }
+
+    @Test func aDraftDeletedWhileItWaitsDoesNotLeave() async throws {
+        let backend = FakeBackend()
+        _ = try base.applicationDraft(backend)
+        let (client, _) = try await base.connect(policy: withAlias, backend: backend)
+        let ids = base.drafts([5, 6])
+        let removal = Task {
+            try await Task.sleep(for: .milliseconds(700))
+            backend.lock.withLock { _ = backend.goneDrafts.insert(ids[0]) }
+        }
+        let (_, structured, _) = try await base.call(client, "send_drafts", ["ids": .array(ids.map { .string($0.opaque) }), "start_at": soon()])
+        try await removal.value
+        #expect(base.statuses(structured) == ["skipped", "sent"])
+        #expect(backend.lock.withLock { backend.sent }.count == 1)
+    }
+
+    @Test func anAliasRemovedWhileTheBatchWaitsIsNotUsed() async throws {
+        let backend = FakeBackend()
+        _ = try base.applicationDraft(backend, from: "pro@example.ch")
+        let box = PolicyBox(withAlias)
+        let (client, _) = try await base.connect(backend: backend, live: box)
+        let removal = Task {
+            try await Task.sleep(for: .milliseconds(700))
+            var policy = box.policy
+            policy.senderAddresses = []
+            box.policy = policy
+        }
+        let (_, structured, _) = try await base.call(client, "send_drafts", ["ids": .array(base.drafts([5]).map { .string($0.opaque) }), "start_at": soon()])
+        try await removal.value
+        #expect(base.statuses(structured) == ["refused"] && backend.lock.withLock { backend.sent }.isEmpty)
+    }
+
+    @Test func aValueSplitByTheSeparatorRefusesTheFile() throws {
+        let shifted = "to,name,company,city\na@x.ch,Anna,Acme, SA,Lausanne\n"
+        #expect(throws: PosternError.self) { try DataTable.rows(from: Data(shifted.utf8), named: "list.csv", limit: 10) }
+        let quoted = "to,name,company,city\na@x.ch,Anna, \"Acme, SA\",Lausanne\nb@x.ch,Bo,,\n"
+        let rows = try DataTable.rows(from: Data(quoted.utf8), named: "list.csv", limit: 10)
+        #expect(rows.first?["company"] == "Acme, SA" && rows.first?["city"] == "Lausanne" && rows.count == 2)
+    }
+}

@@ -63,14 +63,26 @@ enum DataTable {
                 throw PosternError(.invalidArgument, "\(name) has two columns named \(column).")
             }
         }
-        return records.dropFirst().compactMap { record in
+        // A row with more cells than the header has a value split in two, such as an unquoted "Acme, SA": every
+        // value after it would land in the wrong column, so the file is refused. Trailing empty cells are fine.
+        var shifted: [Int] = []
+        let rows = records.dropFirst().enumerated().compactMap { offset, record -> [String: String]? in
             guard record.contains(where: { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }) else { return nil }
+            if record.count > columns.count,
+               record[columns.count...].contains(where: { !$0.trimmingCharacters(in: .whitespaces).isEmpty }) {
+                shifted.append(offset + 2)
+            }
             var row: [String: String] = [:]
             for (index, column) in columns.enumerated() where !column.isEmpty && index < record.count {
                 row[column] = record[index]
             }
             return row
         }
+        guard shifted.isEmpty else {
+            let lines = shifted.prefix(5).map(String.init).joined(separator: ", ")
+            throw PosternError(.invalidArgument, "In \(name), row \(lines) (the header is row 1) has more cells than the header: a value holds the separator. Put such values in quotes.")
+        }
+        return rows
     }
 
     static func delimiter(of text: String) -> Character {
@@ -107,7 +119,9 @@ enum DataTable {
                 continue
             }
             switch character {
-            case "\"" where cell.isEmpty:
+            case "\"" where cell.allSatisfy({ $0 == " " || $0 == "\t" }):
+                // A quoted value, even after a space: "Acme, SA" stays one value.
+                cell = ""
                 quoted = true
             case delimiter:
                 record.append(cell)

@@ -247,7 +247,12 @@ extension SendTools {
         var pending: [(id: MessageID, request: ApprovalRequest)] = []
         let pool = DataPool()
         let contacted = ContactCache()
+        let held = await board.heldDrafts()
         for id in ids {
+            if let other = held[id] {
+                refused[id] = "This draft is already in batch \(other), so it is not sent twice."
+                continue
+            }
             do {
                 let draft = try await backend.draftForSending(id)
                 let message = try await compose([:], base: draft.message, baseFiles: draft.files.map(pool.intern))
@@ -292,9 +297,10 @@ extension SendTools {
             let id = await board.open(kind: .sends, client: client, items: items, start: start, spacing: spacing, estimate: estimate)
             let (board, backend, ledger, live, client) = (self.board, self.backend, self.ledger, self.livePolicy, self.client)
             let emails = queue
+            let account = try await backend.ownAddress().email.lowercased()
             await board.run(id) {
                 await Self.sendQueue(emails, batch: id, board: board, backend: backend, ledger: ledger, policy: live,
-                                     spacing: spacing, start: start, client: client)
+                                     account: account, spacing: spacing, start: start, client: client)
             }
             let batch = await board.settle(id, within: inlineWait)
             return sendsAnswer(batch, ids: ids, statuses: (batch?.items ?? items).map { ($0.status, $0.detail) })
@@ -431,10 +437,12 @@ extension SendTools {
     }
 
     /// Sends the approved emails in order, each after the pause, the start time and room in the limits; holds while
-    /// Postern is paused or send_drafts is off; tries again when Bridge does not take an email.
+    /// Postern is paused, send_drafts is off or Bridge cannot take mail. Before each email it checks again that its
+    /// recipients and sender are still allowed and that its draft is still in Drafts (deleting the draft holds the
+    /// email back), reserves its place in the limits, and dates it with the time it leaves.
     static func sendQueue(
         _ queue: [QueuedEmail], batch id: String, board: BatchBoard, backend: any MailBackend, ledger: any SendLedger,
-        policy: @escaping @Sendable () -> Policy, spacing: TimeInterval, start: Date?, client: String
+        policy: @escaping @Sendable () -> Policy, account: String, spacing: TimeInterval, start: Date?, client: String
     ) async {
         let tool = ToolID.sendDrafts.rawValue
         do {
@@ -448,17 +456,53 @@ extension SendTools {
                 guard await board.status(id, email.index) == .waiting else { continue }
                 if let last, spacing > 0 { try await sleep(until: last.addingTimeInterval(spacing)) }
                 var attempt = 0
+                func hold(_ error: PosternError) async throws {
+                    // Bridge, the sign-in or the setup is at fault, not this email: wait, then every ten minutes.
+                    let delay = retryDelays[min(attempt, retryDelays.count - 1)]
+                    attempt += 1
+                    await board.set(id, phase: .waiting(until: Date().addingTimeInterval(delay), reason: "The next email could not be handed to Bridge; Postern tries again. \(error.message)"))
+                    try await sleep(until: Date().addingTimeInterval(delay))
+                }
                 while true {
                     try await waitForTurn(id, board: board, ledger: ledger, policy: policy)
-                    if let barred = email.message.recipients.first(where: { !policy().mayReceive($0) }) {
+                    let live = policy()
+                    if let barred = email.message.recipients.first(where: { !live.mayReceive($0) }) {
                         await board.set(id, email.index, .refused, "\(barred) is no longer among the user's approved recipients; the draft stays in Drafts.")
                         await board.record(client, tool, PosternErrorCode.recipientNotAllowed.rawValue)
                         break
                     }
+                    let sender = email.message.envelopeFrom.lowercased()
+                    guard sender == account || live.senderAddresses.contains(sender) else {
+                        await board.set(id, email.index, .refused, "\(sender) is no longer one of the user's sender addresses; the draft stays in Drafts.")
+                        await board.record(client, tool, PosternErrorCode.senderNotAllowed.rawValue)
+                        break
+                    }
+                    if let draft = email.draft {
+                        do {
+                            guard try await backend.draftExists(draft) else {
+                                await board.set(id, email.index, .skipped, "Its draft was deleted from Drafts, so this email did not leave.")
+                                break
+                            }
+                        } catch let error as PosternError where holdingCodes.contains(error.code) {
+                            try await hold(error)
+                            continue
+                        } catch is CancellationError {
+                            throw CancellationError()
+                        } catch {
+                            await board.set(id, email.index, .failed, detail(error) + " The draft stays in Drafts.")
+                            break
+                        }
+                    }
+                    // The place in the limits is taken in the same step as it is checked: no other send can take it.
+                    let now = Date()
+                    guard ledger.reserve(at: now, allowed: { SendBudget.remaining(live, sends: $0, now: now) > 0 }) else { continue }
+                    guard await board.claim(id, email.index) else {
+                        ledger.release(at: now)
+                        break
+                    }
                     do {
-                        try await backend.send(email.message)
-                        ledger.recordSend(at: Date())
-                        last = Date()
+                        try await backend.send(email.message.leaving(at: now))
+                        last = now
                         var detail = "Sent to \(email.message.recipients.joined(separator: ", "))."
                         if let draft = email.draft {
                             do { try await backend.deleteDraft(draft) } catch {
@@ -468,17 +512,26 @@ extension SendTools {
                         await board.set(id, email.index, .sent, detail)
                         await board.record(client, tool, "ok")
                         break
+                    } catch is CancellationError {
+                        // Stopped before the message was handed over: it did not leave.
+                        ledger.release(at: now)
+                        await board.unclaim(id, email.index)
+                        throw CancellationError()
+                    } catch let error as PosternError where error.code == .sendUncertain {
+                        // It may have left: it stays counted, and no batch sends its draft again.
+                        last = now
+                        await board.set(id, email.index, .uncertain, error.message)
+                        await board.record(client, tool, error.code.rawValue)
+                        break
                     } catch let error as PosternError where holdingCodes.contains(error.code) {
-                        // Nothing left: Bridge, the sign-in or the setup is at fault, not this email. The batch holds
-                        // and tries again, every ten minutes in the end, until it works or the user stops it.
-                        let delay = retryDelays[min(attempt, retryDelays.count - 1)]
-                        attempt += 1
-                        await board.set(id, phase: .waiting(until: Date().addingTimeInterval(delay), reason: "The next email could not be handed to Bridge; Postern tries again. \(error.message)"))
-                        try await sleep(until: Date().addingTimeInterval(delay))
+                        ledger.release(at: now)
+                        await board.unclaim(id, email.index)
+                        try await hold(error)
                     } catch {
+                        ledger.release(at: now)
+                        last = now
                         await board.set(id, email.index, .failed, detail(error) + " The draft stays in Drafts.")
                         await board.record(client, tool, (error as? PosternError)?.code.rawValue ?? "failed")
-                        last = Date()
                         break
                     }
                 }
@@ -539,7 +592,7 @@ extension SendTools {
         let limit = min(100, max(1, int(arguments["limit"]) ?? 100))
         let items = bool(arguments["all"]) == true
             ? Array(batch.items.dropFirst(offset).prefix(limit))
-            : Array(batch.items.filter { [.refused, .failed, .skipped, .cancelled].contains($0.status) }.prefix(limit))
+            : Array(batch.items.filter { [.refused, .failed, .uncertain, .skipped, .cancelled].contains($0.status) }.prefix(limit))
         var lines = ["\(batch.id): \(Self.summary(batch))"]
         lines += items.map { item in
             let draft = item.draft.map { " Draft \($0.opaque)." } ?? ""
@@ -562,9 +615,12 @@ extension SendTools {
         guard let before = await board.batch(id) else { throw PosternError(.notFound, "No batch \(id). Batches last until Postern quits.") }
         if before.isOver { return result("Batch \(id) was already over: \(Self.summary(before)).", Self.fields(before)) }
         let batch = await board.cancel(id) ?? before
-        let text = batch.kind == .sends
+        var text = batch.kind == .sends
             ? "Stopped batch \(id): \(batch.count(.sent)) sent before, \(batch.count(.cancelled)) will not leave; their drafts stay in Drafts."
             : "Stopped batch \(id): \(batch.count(.saved)) drafts saved before, \(batch.count(.cancelled)) not saved."
+        if batch.count(.sending) > 0 {
+            text += " 1 email was being handed to Bridge at that moment: it leaves only if Bridge already had it; batch_status tells."
+        }
         return result(text, Self.fields(batch))
     }
 

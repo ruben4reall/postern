@@ -69,7 +69,7 @@ nobody else can be written to.
 | `reply_to_message` | `id`, `body`, `reply_all` (default `false`), `from` | Replies above a quote of the original. Recipients come from the original; it leaves from your address the original was sent to, unless `from` says otherwise. |
 | `forward_message` | `id`, `to`, `note`, `include_attachments` (default `true`), `from` | Forwards a message with an optional note. |
 | `send_draft` | `id` | Sends a draft as it is, attachments included, then removes it from Drafts. |
-| `send_drafts` | `ids` (1 to 500 draft ids) or `batch` (a `create_drafts` batch id); `spacing_seconds` (1 to 3,600); `start_at` | Sends up to 500 drafts after one panel and one Touch ID, one by one within your limits, and removes each one sent from Drafts. Returns the outcome for each id (`sent`, `waiting`, `skipped` when you unticked it, `refused` with the reason, or `failed`), and a `batch` id while some are still waiting. |
+| `send_drafts` | `ids` (1 to 500 draft ids) or `batch` (a `create_drafts` batch id); `spacing_seconds` (1 to 3,600); `start_at` | Sends up to 500 drafts after one panel and one Touch ID, one by one within your limits, and removes each one sent from Drafts. Returns the outcome for each id (`sent`, `waiting`, `sending`, `skipped` when you unticked it or deleted its draft, `refused` with the reason, `failed`, or `uncertain` when the connection broke as Bridge took it), and a `batch` id while some are still waiting. A draft already held or sent by another batch is refused, so no email leaves twice. |
 | `cancel_batch` | `id` | Stops a batch: the emails not sent yet stay as drafts. On whenever `create_drafts` or `send_drafts` is. |
 
 Recipients are addresses such as `anna@example.com` or `Anna <anna@example.com>`, at most 50 in all.
@@ -95,6 +95,13 @@ Touch ID, and it speeds up. `start_at` delays the first email, up to thirty days
 Postern is paused or `send_drafts` is off, the batch holds. When Bridge does not take an email (not running, signed
 out, or Proton asking to wait), the batch holds too and tries again after 30 seconds, 2 minutes, then every 10
 minutes, instead of failing every email in turn; an email Proton refuses is marked `failed` and the others go on.
+An email whose connection broke while Bridge was taking it is marked `uncertain`: it counts towards your limits, its
+draft stays, and no batch sends that draft again; look in Sent.
+
+Before each email, Postern checks again that its recipients are still allowed, that its sender is still yours or an
+alias you kept, and that its draft is still in Drafts: deleting a draft in Proton holds its email back. Each email
+takes its place in your limits at the moment it leaves, so two batches running at once never go past them, and it
+carries the time it leaves in its Date header (the approval covers every other byte).
 
 Batches live as long as Postern runs. The Overview pane lists them with their progress and a Stop button; quitting
 Postern stops them too. Either way, nothing is lost: a draft leaves Drafts only once its email is sent. Proton applies

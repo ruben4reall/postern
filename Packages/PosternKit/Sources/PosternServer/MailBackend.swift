@@ -39,6 +39,8 @@ public protocol MailBackend: Sendable {
     func outboxAttachment(named name: String) async throws -> OutgoingAttachment
     /// The attachments of a message, to forward them.
     func attachments(of id: MessageID) async throws -> [OutgoingAttachment]
+    /// Whether a draft is still in Drafts: deleting it there holds back an email waiting in a batch.
+    func draftExists(_ id: MessageID) async throws -> Bool
     /// The files of the outbox folder and its subfolders, by path inside it.
     func outboxFiles() async throws -> [OutboxFile]
     /// A draft's text and files at once, to send it.
@@ -90,7 +92,11 @@ public struct SavedAttachment: Sendable, Equatable {
 /// Where recent sends are counted, out of the client's reach.
 public protocol SendLedger: Sendable {
     func recentSends() -> [Date]
-    func recordSend(at date: Date)
+    /// Records a send at `date` only if `allowed` finds room among the sends so far, in one step, so two sends
+    /// running at once cannot both take the last place.
+    func reserve(at date: Date, allowed: ([Date]) -> Bool) -> Bool
+    /// Takes back a reservation whose email did not leave.
+    func release(at date: Date)
 }
 
 public enum MessageFlag: String, Sendable {

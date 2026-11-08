@@ -91,6 +91,11 @@ final class FakeBackend: MailBackend, @unchecked Sendable {
         return MessageID(mailbox: "Drafts", uidValidity: 1, uid: UInt32(drafts.count))
     }
     func deleteDraft(_ id: MessageID) async throws { lock.withLock { deletedDrafts.append(id) } }
+    /// Drafts the user deleted in Proton while a batch waited.
+    var goneDrafts: Set<MessageID> = []
+    func draftExists(_ id: MessageID) async throws -> Bool {
+        lock.withLock { !deletedDrafts.contains(id) && !goneDrafts.contains(id) }
+    }
     /// Errors the next sends throw, one each.
     var sendFailures: [PosternError] = []
     func send(_ message: ApprovedMessage) async throws {
@@ -387,11 +392,30 @@ struct AlwaysAuthenticated: Authenticating {
     func confirm(reason: String) async -> Bool { true }
 }
 
+/// A policy the test changes while a batch runs, as the user would in Postern's window.
+final class PolicyBox: @unchecked Sendable {
+    private let lock = NSLock()
+    private var current: Policy
+    init(_ policy: Policy) { current = policy }
+    var policy: Policy {
+        get { lock.withLock { current } }
+        set { lock.withLock { current = newValue } }
+    }
+}
+
 final class MemoryLedger: SendLedger, @unchecked Sendable {
     let lock = NSLock()
     var dates: [Date] = []
     func recentSends() -> [Date] { lock.withLock { dates } }
     func recordSend(at date: Date) { lock.withLock { dates.append(date) } }
+    func reserve(at date: Date, allowed: ([Date]) -> Bool) -> Bool {
+        lock.withLock {
+            guard allowed(dates) else { return false }
+            dates.append(date)
+            return true
+        }
+    }
+    func release(at date: Date) { lock.withLock { if let index = dates.lastIndex(of: date) { dates.remove(at: index) } } }
 }
 
 @Suite struct SendToolTests {
@@ -399,13 +423,13 @@ final class MemoryLedger: SendLedger, @unchecked Sendable {
 
     func connect(
         policy: Policy? = nil, intent: ApprovalIntent? = .send, backend: FakeBackend = FakeBackend(),
-        ledger: MemoryLedger = MemoryLedger(), timeout: Duration = .seconds(5)
+        ledger: MemoryLedger = MemoryLedger(), timeout: Duration = .seconds(5), live: PolicyBox? = nil
     ) async throws -> (Client, CapturingPresenter) {
         let presenter = CapturingPresenter(intent)
         let desk = ApprovalDesk(presenter: presenter, authenticator: AlwaysAuthenticated(), timeout: timeout)
         let (clientTransport, serverTransport) = await InMemoryTransport.createConnectedPair()
-        let chosen = policy ?? everything
-        let session = Session(transport: serverTransport, backend: backend, version: "test", policy: { chosen },
+        let box = live ?? PolicyBox(policy ?? everything)
+        let session = Session(transport: serverTransport, backend: backend, version: "test", policy: { box.policy },
                               desk: desk, ledger: ledger, clientName: { "Claude Code" }, batchSpacing: .zero,
                               inlineWait: .seconds(5))
         try await session.start()

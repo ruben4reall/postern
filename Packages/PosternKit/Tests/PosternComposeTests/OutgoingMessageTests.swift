@@ -15,6 +15,14 @@ import PosternModel
 
     func text(_ data: Data) -> String { String(decoding: data, as: UTF8.self) }
 
+    @Test func anEmailThatWaitedCarriesTheTimeItLeavesUnderTheSameDigest() throws {
+        let message = try make()
+        let later = message.dated(message.date.addingTimeInterval(3 * 86_400))
+        #expect(later.digest == message.digest)
+        #expect(text(later.rfc822(includeBcc: false)) != text(message.rfc822(includeBcc: false)))
+        #expect(try make(body: "Hi Ana").digest != message.digest)
+    }
+
     @Test func rendersHeadersAndAQuotedPrintableBody() throws {
         let message = try make(subject: "Réunion demain", body: "Café à 10 h ?\nÀ demain")
         let raw = text(message.rfc822(includeBcc: false))

@@ -10,7 +10,8 @@ public actor BatchBoard {
     }
 
     public enum ItemStatus: String, Sendable, CaseIterable {
-        case waiting, saved, sent, refused, skipped, failed, cancelled
+        /// `sending`: being handed to Bridge. `uncertain`: the connection broke as Bridge took it, so it may have left.
+        case waiting, sending, saved, sent, uncertain, refused, skipped, failed, cancelled
     }
 
     public struct Item: Sendable {
@@ -70,12 +71,13 @@ public actor BatchBoard {
 
     public func batch(_ id: String) -> Batch? { batches[id] }
 
-    /// Stops what is left of a batch. What is already saved or sent stays so.
+    /// Stops what is left of a batch. What is already saved or sent stays so; an email being handed to Bridge at
+    /// that moment is stopped if it has not reached Bridge yet, and keeps `sending` until the worker knows.
     @discardableResult
     public func cancel(_ id: String) -> Batch? {
         guard var batch = batches[id] else { return nil }
         guard !batch.isOver else { return batch }
-        tasks.removeValue(forKey: id)?.cancel()
+        tasks[id]?.cancel()
         for index in batch.items.indices where batch.items[index].status == .waiting {
             batch.items[index].status = .cancelled
             batch.items[index].detail = batch.kind == .sends
@@ -90,9 +92,21 @@ public actor BatchBoard {
 
     // MARK: For the tools
 
+    /// Opens a batch. A send batch never takes a draft another send batch holds or sent: such an item is refused
+    /// here, in the same step, so two batches approved for the same drafts cannot both send them.
     func open(
         kind: Kind, client: String, items: [Item], start: Date? = nil, spacing: TimeInterval = 0, estimate: Date? = nil
     ) -> String {
+        var items = items
+        if kind == .sends {
+            let held = heldDrafts()
+            for index in items.indices where items[index].status == .waiting {
+                if let draft = items[index].draft, let other = held[draft] {
+                    items[index].status = .refused
+                    items[index].detail = "This draft is already in batch \(other), so it is not sent twice."
+                }
+            }
+        }
         var id: String
         repeat { id = String(UUID().uuidString.lowercased().prefix(8)) } while batches[id] != nil
         batches[id] = Batch(id: id, kind: kind, client: client, created: Date(), items: items, phase: .running,
@@ -113,6 +127,39 @@ public actor BatchBoard {
 
     func status(_ id: String, _ index: Int) -> ItemStatus? {
         batches[id]?.items.first { $0.index == index }?.status
+    }
+
+    /// Takes an email waiting in a running batch for sending; false when it was cancelled or is no longer waiting.
+    func claim(_ id: String, _ index: Int) -> Bool {
+        guard var batch = batches[id], !batch.isOver,
+              let position = batch.items.firstIndex(where: { $0.index == index }), batch.items[position].status == .waiting else {
+            return false
+        }
+        batch.items[position].status = .sending
+        batches[id] = batch
+        notify()
+        return true
+    }
+
+    /// Puts back an email that did not reach Bridge: waiting again, or cancelled if the batch was stopped meanwhile.
+    func unclaim(_ id: String, _ index: Int) {
+        guard let batch = batches[id], let item = batch.items.first(where: { $0.index == index }), item.status == .sending else { return }
+        if batch.phase == .cancelled {
+            set(id, index, .cancelled, "Stopped before it left; the draft stays in Drafts.")
+        } else {
+            set(id, index, .waiting, "")
+        }
+    }
+
+    /// The drafts that a batch of sends holds, or has sent or may have sent, by the batch that holds each.
+    func heldDrafts() -> [MessageID: String] {
+        var held: [MessageID: String] = [:]
+        for batch in batches.values where batch.kind == .sends {
+            for item in batch.items where [.waiting, .sending, .sent, .uncertain].contains(item.status) {
+                if let draft = item.draft { held[draft] = batch.id }
+            }
+        }
+        return held
     }
 
     func set(_ id: String, _ index: Int, _ status: ItemStatus, _ detail: String, draft: MessageID? = nil) {
@@ -139,7 +186,7 @@ public actor BatchBoard {
     func settle(_ id: String, within limit: Duration) async -> Batch? {
         let deadline = ContinuousClock.now + limit
         while let batch = batches[id], !batch.isOver, ContinuousClock.now < deadline {
-            try? await Task.sleep(for: .milliseconds(50))
+            do { try await Task.sleep(for: .milliseconds(50)) } catch { break }
         }
         return batches[id]
     }

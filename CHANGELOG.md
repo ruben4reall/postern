@@ -24,7 +24,9 @@
   for a long one (`spacing_seconds` changes it), and when your hourly or daily limit is reached they wait for room
   instead of being refused. The panel says when the last should leave; `start_at` schedules the first, up to thirty
   days ahead. The Overview pane follows each batch with a Stop button, and `batch_status` and `cancel_batch` let apps
-  do the same. Pausing Postern holds a batch; a draft leaves Drafts only once its email is sent.
+  do the same. Pausing Postern holds a batch; a draft leaves Drafts only once its email is sent, and deleting a draft
+  holds its email back. No draft is sent by two batches, each email takes its place in the limits as it leaves, and
+  it carries the time it leaves.
 - **Attachments from folders inside the outbox**, such as `Letters/Acme.pdf`, and `list_outbox` lists what is there.
   A file attached to many drafts is read once and held once in memory.
 - **Clearer sending errors.** An email Proton refuses comes back as `send_refused`, and one whose connection broke

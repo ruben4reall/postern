@@ -66,19 +66,25 @@ public struct SMTPClient: Sendable {
             for recipient in approved.recipients {
                 try await reader.command("RCPT TO:<\(recipient)>", expect: 250, on: channel)
             }
+            // A batch stopped now still stops this email: nothing has been handed over yet.
+            try Task.checkCancellation()
             try await reader.command("DATA", expect: 354, on: channel)
+            let payload = Self.dotStuffed(approved.rfc822)
+            // Bridge answers only once Proton has the message: allow a minute, plus a second for each 100 KB.
+            let timeout = TimeAmount.seconds(60 + Int64(payload.count / 100_000))
             do {
-                try await reader.data(Self.dotStuffed(approved.rfc822), expect: 250, on: channel)
-            } catch BridgeError.commandFailed(let reply) {
+                try await reader.data(payload, expect: 250, on: channel, timeout: timeout)
+            } catch BridgeError.commandFailed(let reply) where reply.hasPrefix("SMTP 4") || reply.hasPrefix("SMTP 5") {
                 // A clear refusal: the message did not leave.
                 throw BridgeError.commandFailed(reply)
             } catch {
+                // No answer, or one that says nothing: the message may have left.
                 throw BridgeError.sendInterrupted
             }
             try? await reader.command("QUIT", expect: 221, on: channel)
         } catch {
             if let seen = recorder.seenHash, seen != pin.sha256Hex { throw BridgeError.certificateMismatch(actual: seen) }
-            if error is BridgeError { throw error }
+            if error is BridgeError || error is CancellationError { throw error }
             throw BridgeError.unreachable
         }
     }
@@ -148,11 +154,11 @@ final class SMTPReader: ChannelInboundHandler, @unchecked Sendable {
         }
     }
 
-    func data(_ payload: Data, expect code: Int, on channel: any Channel) async throws {
+    func data(_ payload: Data, expect code: Int, on channel: any Channel, timeout: TimeAmount = .seconds(60)) async throws {
         channel.eventLoop.execute {
             channel.writeAndFlush(channel.allocator.buffer(bytes: payload), promise: nil)
         }
-        let reply = try await nextReply(on: channel)
+        let reply = try await nextReply(on: channel, timeout: timeout)
         guard reply.0 == code else { throw BridgeError.commandFailed("SMTP \(reply.0) \(reply.1)") }
     }
 
@@ -162,14 +168,14 @@ final class SMTPReader: ChannelInboundHandler, @unchecked Sendable {
         }
     }
 
-    private func nextReply(on channel: any Channel) async throws -> (Int, String) {
+    private func nextReply(on channel: any Channel, timeout: TimeAmount = .seconds(60)) async throws -> (Int, String) {
         let promise = channel.eventLoop.makePromise(of: (Int, String).self)
         channel.eventLoop.execute {
             if let failure = self.failure { promise.fail(failure); return }
             self.waiter = promise
             self.deliver()
         }
-        let timer = channel.eventLoop.scheduleTask(in: .seconds(60)) {
+        let timer = channel.eventLoop.scheduleTask(in: timeout) {
             if let waiter = self.waiter, waiter.futureResult === promise.futureResult {
                 self.waiter = nil
                 promise.fail(BridgeError.timeout)

@@ -77,16 +77,21 @@ reads Bridge's own window; a compromised Proton account.
   deletes only an `ApprovedDeletion`. Only the approval desk can make them, after you chose on the panel and passed
   Touch ID. A send approval covers a SHA-256 of every byte that leaves; a deletion approval covers the exact list of
   messages. One panel at a time. A batch of drafts gets one panel and one Touch ID, and each email in it is still
-  bound to its own SHA-256. An approved batch may take hours to leave at your limits: it is the one approval that
-  outlives the panel. It covers only those exact emails, each sent once, it holds while Postern is paused or
-  `send_drafts` is off, it rechecks your allowed recipients before each email, and the Overview pane can stop it at
-  any time. It is kept in memory only, so quitting Postern ends it.
+  bound to its own SHA-256 (all of its bytes but the Date header, set when it leaves). An approved batch may take
+  hours to leave at your limits: it is the one approval that outlives the panel. It covers only those exact emails.
+  A draft that a batch holds, sent or may have sent cannot be taken by another batch, so an email leaves once. The
+  batch holds while Postern is paused or `send_drafts` is off; before each email it rechecks your allowed
+  recipients, your sender addresses and that the draft is still in Drafts. The Overview pane can stop it at any time,
+  and it is kept in memory only, so quitting Postern ends it.
 - **Writing as someone else.** An email leaves from your account's address or from an alias you added under Send
   from, with Touch ID; any other From is refused before the panel, and the panel always shows it.
 - **Sending a lot.** 10 emails per hour and 30 per day by default, counted in the Keychain. Raising them needs
-  Touch ID. You can also restrict recipients to a list. A batch never goes past the limits: it waits for room.
+  Touch ID. You can also restrict recipients to a list. A batch never goes past the limits: it waits for room, and
+  each email takes its place in the count in the same step as the count is checked, so sends running at once cannot
+  share the last place. When the Keychain cannot be read (a locked screen), the count kept in memory still applies.
 - **Attaching a file from elsewhere.** Attachments and spreadsheets are read only from the outbox folder and the
-  folders inside it, by a path that may not contain `..`, a hidden name or a link.
+  folders inside it, by a path that may not contain `..`, a hidden name or a link, and through a descriptor opened
+  without following links, on a plain file with a single name (no hard link to a file elsewhere).
 - **Talking to Postern directly.** Every XPC connection between Postern's processes requires the other side to be
   signed by Postern's developer, in both directions.
 - **Reading the password from a settings file.** Client settings hold the path of the relay, never a secret.

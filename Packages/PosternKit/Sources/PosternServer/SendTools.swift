@@ -151,14 +151,12 @@ struct SendTools {
         let request = try await approvalRequest(message, tool: tool, context: context, extra: extra)
 
         if let approved = await desk.approveTrusted(request, trusted: policy.trustedRecipients) {
-            try await backend.send(approved)
-            ledger.recordSend(at: Date())
+            try await sendCounted(approved)
             return result("Sent to \(approved.recipients.joined(separator: ", ")), all on the user's trusted list.", ["sent": .bool(true)])
         }
         switch await desk.review(request) {
         case .approved(let approved):
-            try await backend.send(approved)
-            ledger.recordSend(at: Date())
+            try await sendCounted(approved)
             return result("The user read the email, approved it with Touch ID, and it was sent to \(approved.recipients.joined(separator: ", ")).", ["sent": .bool(true)])
         case .saveAsDraft(let draft):
             let id = try await backend.saveDraft(draft)
@@ -169,6 +167,23 @@ struct SendTools {
             throw PosternError(.approvalRejected, "The user did not confirm with Touch ID, so nothing was sent.")
         case .expired:
             throw PosternError(.approvalTimeout, "The user did not answer within two minutes, so nothing was sent.")
+        }
+    }
+
+    /// Takes the email's place in the limits and sends it; the place is given back only when the email surely did
+    /// not leave. A batch running at the same time cannot take the same place.
+    private func sendCounted(_ approved: ApprovedMessage) async throws {
+        let now = Date()
+        guard ledger.reserve(at: now, allowed: { SendBudget.remaining(policy, sends: $0, now: now) > 0 }) else {
+            throw PosternError(.quotaExceeded, "The sending limit the user set was reached while the email waited; it was not sent.")
+        }
+        do {
+            try await backend.send(approved)
+        } catch let error as PosternError where error.code == .sendUncertain {
+            throw error
+        } catch {
+            ledger.release(at: now)
+            throw error
         }
     }
 
