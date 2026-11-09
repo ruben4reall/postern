@@ -107,6 +107,15 @@ struct ApprovalView: View {
             header
             fields
             if !cameFromEmail.isEmpty { warning }
+            if let words = message.missingAttachment {
+                Label("The text says “\(words)”, but no file is attached. The app said none is meant.",
+                      systemImage: "paperclip.badge.ellipsis")
+                    .font(.callout)
+                    .foregroundStyle(Theme.warning)
+                    .padding(10)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .background(Theme.warning.opacity(0.1), in: RoundedRectangle(cornerRadius: Theme.radius))
+            }
             bodyText
             if !message.attachments.isEmpty { attachmentList }
             actions
@@ -115,6 +124,7 @@ struct ApprovalView: View {
         .padding(.top, 36)
         .padding(.bottom, 20)
         .frame(width: 620, height: message.attachments.isEmpty ? 680 : 760)
+        .tint(Theme.accent)
     }
 
     private var header: some View {

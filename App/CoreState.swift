@@ -53,42 +53,84 @@ final class CoreState: @unchecked Sendable {
         Task { await board.restore() }
     }
 
-    /// The key that seals batches: made once, kept in Postern's Keychain group. Nil while the Keychain cannot be read.
+    /// The key that seals batches: made once, kept in Postern's Keychain group, and held in memory once read, so a
+    /// batch running while the Mac is locked keeps its file up to date. Nil while the Keychain cannot be read.
     static func batchKey() -> SymmetricKey? {
+        if let known = keyLock.withLock({ knownKey }) { return known }
         let vault = KeychainVault(accessGroup: accessGroup)
         do {
-            if let stored = try vault.data(for: .batchKey), stored.count == 32 { return SymmetricKey(data: stored) }
-            let key = SymmetricKey(size: .bits256)
-            try vault.set(key.withUnsafeBytes { Data($0) }, for: .batchKey)
+            let key: SymmetricKey
+            if let stored = try vault.data(for: .batchKey), stored.count == 32 {
+                key = SymmetricKey(data: stored)
+            } else {
+                key = SymmetricKey(size: .bits256)
+                try vault.set(key.withUnsafeBytes { Data($0) }, for: .batchKey)
+            }
+            keyLock.withLock { knownKey = key }
             return key
         } catch {
             return nil
         }
     }
 
+    private static let keyLock = NSLock()
+    nonisolated(unsafe) private static var knownKey: SymmetricKey?
+
     var policy: Policy { lock.withLock { _policy } }
     var backend: BridgeBackend? { lock.withLock { _backend } }
 
     /// Why tools are unavailable, or nil when Postern can serve.
     var readiness: PosternError? {
-        backend == nil ? PosternError(.notConfigured, "Postern is not set up yet. Open Postern to finish setup.") : nil
+        if backend == nil { retryWhileLocked() }
+        guard backend == nil else { return nil }
+        return lock.withLock { keychainClosed }
+            ? PosternError(.notConfigured, "Postern cannot read its settings while the Mac is locked: macOS keeps the Keychain closed until someone unlocks it. Unlock the Mac, then try again.")
+            : PosternError(.notConfigured, "Postern is not set up yet. Open Postern to finish setup.")
+    }
+
+    /// The Keychain could not be read at the last reload, as when Postern starts while the Mac is locked.
+    private var keychainClosed = false
+    private var lastRetry = Date.distantPast
+
+    /// A Postern started while the Mac was locked could not read its settings. It tries again, at most every five
+    /// seconds while apps ask, so it serves again as soon as the Mac is unlocked, without a restart.
+    private func retryWhileLocked() {
+        let due = lock.withLock { () -> Bool in
+            guard keychainClosed, Date().timeIntervalSince(lastRetry) > 5 else { return false }
+            lastRetry = Date()
+            return true
+        }
+        if due { reload() }
     }
 
     /// Reads the configuration and policy from the Keychain. Anything missing leaves Postern closed.
     func reload() {
         var backend: BridgeBackend?
-        if let endpoint = try? vault.read(.bridgeEndpoint, as: BridgeEndpoint.self),
-           let pin = try? vault.read(.certificatePin, as: CertificatePin.self),
-           let credentials = try? vault.read(.bridgeCredentials, as: BridgeCredentials.self) {
-            backend = BridgeBackend(endpoint: endpoint, pin: pin, credentials: credentials)
+        var closed = false
+        do {
+            if let endpoint = try vault.read(.bridgeEndpoint, as: BridgeEndpoint.self),
+               let pin = try vault.read(.certificatePin, as: CertificatePin.self),
+               let credentials = try vault.read(.bridgeCredentials, as: BridgeCredentials.self) {
+                backend = BridgeBackend(endpoint: endpoint, pin: pin, credentials: credentials)
+            }
+        } catch VaultError.keychain {
+            closed = true
+        } catch {
+            backend = nil
         }
         let previous = lock.withLock { () -> BridgeBackend? in
             let old = _backend
             _backend = backend
+            keychainClosed = closed
             return old
         }
         if let previous { Task { await previous.shutdown() } }
         reloadPolicy()
+        // Batches sealed before a restart open with a key from the Keychain: once it can be read, bring them back.
+        if !closed {
+            let board = self.board
+            Task { await board.restore() }
+        }
     }
 
     /// Re-reads the policy only, keeping the Bridge session, and pushes the new tool list to every client.

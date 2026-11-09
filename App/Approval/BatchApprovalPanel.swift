@@ -69,13 +69,15 @@ struct BatchApprovalView: View {
                     }
                 }
             }
-            .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
+            .background(Theme.lowered, in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous).strokeBorder(Theme.border))
             actions
         }
         .padding(.horizontal, 24)
         .padding(.top, 36)
         .padding(.bottom, 20)
         .frame(width: 720, height: Self.height(for: request))
+        .tint(Theme.accent)
     }
 
     static let filterThreshold = 8
@@ -161,6 +163,7 @@ struct BatchApprovalView: View {
                     chosen = chosen.isEmpty ? Set(request.items.map(\.id)) : []
                 }
                 .buttonStyle(.link)
+                .foregroundStyle(Theme.accent)
             }
         }
     }
@@ -218,6 +221,7 @@ struct BatchApprovalView: View {
                 Label(chosen.count == 1 ? "Send 1 with Touch ID" : "Send \(chosen.count) with Touch ID", systemImage: "touchid")
             }
             .buttonStyle(.borderedProminent)
+            .tint(Theme.interaction)
             .disabled(chosen.isEmpty)
         }
         .controlSize(.large)

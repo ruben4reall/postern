@@ -41,6 +41,16 @@ enum SetupSnapshots {
         NSApp.setActivationPolicy(.accessory)
         let model = sampleModel(pane: ControlModel.Pane(rawValue: pane) ?? .overview)
         if pane == "welcome" { model.configured = false }
+        if seconds < 0 {
+            let view = NSHostingView(rootView: ControlSnapshot(model: model).frame(width: 940, height: 640))
+            view.frame = NSRect(x: 0, y: 0, width: 940, height: 640)
+            let flat = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
+            flat.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
+            flat.contentView = view
+            flat.setFrameOrigin(NSPoint(x: -6000, y: -6000))
+            flat.orderFrontRegardless()
+            return printImage(of: flat, name: "control-\(pane)-\(dark ? "dark" : "light").png")
+        }
         let host = NSHostingController(rootView: ControlView(model: model))
         host.sceneBridgingOptions = [.toolbars, .title]
         let window = NSWindow(contentViewController: host)
@@ -51,9 +61,22 @@ enum SetupSnapshots {
         window.setContentSize(NSSize(width: 940, height: 640))
         window.setFrameOrigin(NSPoint(x: -6000, y: -6000))
         window.orderFrontRegardless()
+        if seconds < 0 { return printImage(of: window, name: "control-\(pane)-\(dark ? "dark" : "light").png") }
         print(window.windowNumber)
         fflush(stdout)
         RunLoop.main.run(until: Date().addingTimeInterval(seconds))
+    }
+
+    /// Draws a window that is off screen into a PNG on stdout, `name<TAB>base64`: no screen recording needed.
+    static func printImage(of window: NSWindow, name: String) {
+        RunLoop.main.run(until: Date().addingTimeInterval(1.2))
+        guard let view = window.contentView?.superview ?? window.contentView,
+              let bitmap = view.bitmapImageRepForCachingDisplay(in: view.bounds) else { return }
+        view.cacheDisplay(in: view.bounds, to: bitmap)
+        if let png = bitmap.representation(using: .png, properties: [:]) {
+            print("\(name)\t\(png.base64EncodedString())")
+            fflush(stdout)
+        }
     }
 
     /// The approval panel with a sample reply, kept outside every display for `screencapture -l`.
@@ -79,6 +102,28 @@ enum SetupSnapshots {
                                           client: "Claude Code", items: items, permanent: kind == "erase")
             rootView = AnyView(DeletionView(request: request, deadline: Date().addingTimeInterval(97)) { _ in })
             title = kind == "erase" ? "Approve Erasing" : "Approve Trash"
+        case "batch":
+            let messages = (0..<6).map { index -> OutgoingMessage in
+                let companies = ["Acme", "Globex", "Initech", "Umbrella", "Hooli", "Stark"]
+                let letter = try! OutgoingAttachment.make(filename: "Lettre-\(companies[index]).pdf", data: samplePDF())
+                let cv = try! OutgoingAttachment.make(filename: "CV.pdf", data: samplePDF())
+                return try! OutgoingMessage.make(
+                    from: Address(name: "Ruben", email: "ruben@pm.me"),
+                    to: [Address(name: "Ressources humaines", email: "rh@\(companies[index].lowercased()).example")],
+                    subject: "Candidature : vendeur chez \(companies[index])",
+                    body: "Madame, Monsieur,\n\nJe vous adresse ma candidature pour le poste de vendeur chez \(companies[index]). Vous trouverez ci-joint mon CV et ma lettre.",
+                    attachments: [cv, letter]
+                )
+            }
+            let items = messages.enumerated().map { index, message in
+                BatchItem(message: message, badges: [message.envelopeRecipients[0]: index == 2 ? [.firstContact] : []], context: nil)
+            }
+            let request = BatchApprovalRequest(
+                tool: "send_drafts", client: "Claude Code", items: items,
+                schedule: BatchSchedule(start: nil, spacing: 30, sendsPerHour: 100, sendsPerDay: 1000, finish: Date().addingTimeInterval(180))
+            )
+            rootView = AnyView(BatchApprovalView(request: request, deadline: Date().addingTimeInterval(840), send: { _ in }, reject: { _ in }))
+            title = "Approve 6 Emails"
         default:
             rootView = AnyView(ApprovalView(request: sampleApproval(attachments: kind == "attachments"),
                                             deadline: Date().addingTimeInterval(97)) { _ in })
@@ -91,6 +136,7 @@ enum SetupSnapshots {
         window.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
         window.setFrameOrigin(NSPoint(x: -6000, y: -6000))
         window.orderFrontRegardless()
+        if seconds < 0 { return printImage(of: window, name: "approval-\(kind)-\(dark ? "dark" : "light").png") }
         print(window.windowNumber)
         fflush(stdout)
         RunLoop.main.run(until: Date().addingTimeInterval(seconds))

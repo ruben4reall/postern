@@ -32,6 +32,9 @@
 - **A Proton look.** Postern's window and panels take Proton Mail's colors: the deep purple sidebar, the purple
   accent, Proton's green, orange and red for states, and its badges.
 - **Updates are named in the window.** When a check finds a new version, a bar at the top of the window says so.
+- **Postern no longer stays closed after starting on a locked Mac.** macOS keeps the Keychain closed until the Mac is
+  unlocked, so a Postern started then, after an update or a crash, said it was not set up until it was restarted. It
+  now says to unlock the Mac and serves again as soon as it can read its settings.
 
 - **Send from your aliases.** Add an alias of your Proton account under Send from in Postern's window (Touch ID);
   `send_message`, `create_draft`, `update_draft` and `forward_message` take `from`, replies leave from the address

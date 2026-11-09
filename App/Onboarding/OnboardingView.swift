@@ -22,6 +22,7 @@ struct OnboardingView: View {
         .padding(.top, 40)
         .padding(.bottom, 28)
         .frame(width: 540, height: 500)
+        .tint(Theme.accent)
     }
 
     @ViewBuilder private var content: some View {

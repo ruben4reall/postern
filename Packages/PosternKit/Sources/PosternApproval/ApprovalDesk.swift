@@ -329,7 +329,9 @@ public actor ApprovalDesk {
         defer { release() }
         guard !request.items.isEmpty else { return .rejected(reason: "Nothing to send.") }
         let presenter = self.presenter
-        let intent = await choice(within: batchTimeout) { deadline in await presenter.presentBatch(request, deadline: deadline) }
+        // Fifteen minutes, and a second more per email past 900, up to an hour: thousands take longer to look over.
+        let limit = max(batchTimeout, .seconds(min(3600, request.items.count)))
+        let intent = await choice(within: limit) { deadline in await presenter.presentBatch(request, deadline: deadline) }
         switch intent {
         case .send(let chosen)?:
             let approved = request.items.filter { chosen.contains($0.id) }

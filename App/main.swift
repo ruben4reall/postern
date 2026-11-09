@@ -21,6 +21,22 @@ if let index = CommandLine.arguments.firstIndex(of: "--hold-control-window"), in
     }
     exit(0)
 }
+// `--render-control-window <pane> <light|dark>` and `--render-approval-panel <light|dark> <kind>` print the image
+// instead of holding the window, for machines where screencapture may not record.
+if let index = CommandLine.arguments.firstIndex(of: "--render-control-window"), index + 2 < CommandLine.arguments.count {
+    let arguments = CommandLine.arguments
+    MainActor.assumeIsolated {
+        SetupSnapshots.holdControlWindow(pane: arguments[index + 1], dark: arguments[index + 2] == "dark", seconds: -1)
+    }
+    exit(0)
+}
+if let index = CommandLine.arguments.firstIndex(of: "--render-approval-panel"), index + 2 < CommandLine.arguments.count {
+    let arguments = CommandLine.arguments
+    MainActor.assumeIsolated {
+        SetupSnapshots.holdApprovalPanel(dark: arguments[index + 1] == "dark", kind: arguments[index + 2], seconds: -1)
+    }
+    exit(0)
+}
 if let index = CommandLine.arguments.firstIndex(of: "--hold-approval-panel"), index + 1 < CommandLine.arguments.count {
     let dark = CommandLine.arguments[index + 1] == "dark"
     let kind = index + 2 < CommandLine.arguments.count ? CommandLine.arguments[index + 2] : "email"

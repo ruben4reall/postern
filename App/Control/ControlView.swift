@@ -65,6 +65,47 @@ struct ControlView: View {
     }
 }
 
+#if DEBUG
+/// The sidebar and the pane side by side, without the split view, which offscreen renders cannot draw.
+struct ControlSnapshot: View {
+    @Bindable var model: ControlModel
+
+    var body: some View {
+        HStack(spacing: 0) {
+            Sidebar(model: model).frame(width: 264)
+            VStack(alignment: .leading, spacing: 0) {
+                VStack(alignment: .leading, spacing: 1) {
+                    Text(model.configured ? model.pane.title : "Postern").font(.headline)
+                    Text(model.statusLine).font(.subheadline).foregroundStyle(Theme.textWeak)
+                }
+                .padding(.horizontal, 20).padding(.vertical, 12)
+                Divider()
+                if let updates = model.updates, let version = updates.pendingVersion {
+                    UpdateBar(version: version) { updates.checkForUpdates() }
+                }
+                Group {
+                    if !model.configured {
+                        WelcomePane(model: model)
+                    } else {
+                        switch model.pane {
+                        case .overview: OverviewPane(model: model)
+                        case .tools: ToolsPane(model: model)
+                        case .mailboxes: MailboxesPane(model: model)
+                        case .clients: ClientsPane(model: model)
+                        case .activity: ActivityPane(model: model)
+                        case .security: SecurityPane(model: model)
+                        }
+                    }
+                }
+                .scrollContentBackground(.hidden)
+            }
+            .background(Theme.canvas)
+        }
+        .tint(Theme.accent)
+    }
+}
+#endif
+
 extension ControlModel {
     var statusLine: String {
         if !configured { return "Not set up" }
