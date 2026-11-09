@@ -61,11 +61,12 @@ public struct OutgoingMessage: Codable, Sendable, Equatable {
     public static let maxAttachmentBytes = 20_000_000
 
     /// Validates and cleans what a client asked for. Invisible characters are removed here, so the approval panel
-    /// shows exactly the text that leaves.
+    /// shows exactly the text that leaves. `messageID` keeps the identity of a message written before, so the same
+    /// draft composed again renders to the same bytes and the same digest.
     public static func make(
         from: Address, to: [Address], cc: [Address] = [], bcc: [Address] = [], subject: String, body: String,
         quoted: String? = nil, inReplyTo: String? = nil, references: [String] = [],
-        attachments: [OutgoingAttachment] = []
+        attachments: [OutgoingAttachment] = [], messageID: String? = nil
     ) throws -> OutgoingMessage {
         let all = to + cc + bcc
         guard !all.isEmpty else { throw ComposeError.noRecipient }
@@ -81,7 +82,8 @@ public struct OutgoingMessage: Codable, Sendable, Equatable {
             subject: UnicodeCleaner.clean(subject, keepNewlines: false),
             body: UnicodeCleaner.clean(body), quoted: quoted.map { UnicodeCleaner.clean($0) },
             inReplyTo: try inReplyTo.map(cleanMessageID), references: try references.map(cleanMessageID),
-            attachments: attachments, messageID: "<\(UUID().uuidString.lowercased())@\(domain)>", date: Date()
+            attachments: attachments, messageID: try messageID.map(cleanMessageID) ?? "<\(UUID().uuidString.lowercased())@\(domain)>",
+            date: Date()
         )
     }
 

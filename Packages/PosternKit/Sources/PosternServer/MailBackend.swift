@@ -50,6 +50,10 @@ public protocol MailBackend: Sendable {
     func outboxFiles() async throws -> [OutboxFile]
     /// A draft's text and files at once, to send it.
     func draftForSending(_ id: MessageID) async throws -> (message: SanitizedMessage, files: [OutgoingAttachment])
+    /// Attachment `index` (as get_message lists it) of a message, to attach it to another email.
+    func attachment(_ id: MessageID, index: Int) async throws -> OutgoingAttachment
+    /// How many files Bridge holds for a message, read from its structure alone; nil when it cannot tell.
+    func attachmentCount(of id: MessageID) async throws -> Int?
 
     // Deleting.
     /// What the deletion panel lists for these messages.
@@ -62,6 +66,17 @@ extension MailBackend {
     public func draftForSending(_ id: MessageID) async throws -> (message: SanitizedMessage, files: [OutgoingAttachment]) {
         (try await message(id, maxChars: OutgoingMessage.maxBodyCharacters), try await attachments(of: id))
     }
+
+    public func attachment(_ id: MessageID, index: Int) async throws -> OutgoingAttachment {
+        let listed = try await message(id, maxChars: 100).attachments
+        let files = try await attachments(of: id)
+        guard let position = listed.firstIndex(where: { $0.index == index }), position < files.count else {
+            throw PosternError(.notFound, "This email has no attachment \(index); get_message lists them.")
+        }
+        return files[position]
+    }
+
+    public func attachmentCount(of id: MessageID) async throws -> Int? { nil }
 }
 
 /// One file waiting in the outbox folder.

@@ -17,6 +17,10 @@ public enum PosternErrorCode: String, Codable, Sendable {
     case quotaExceeded = "quota_exceeded"
     case sendRefused = "send_refused"
     case sendUncertain = "send_uncertain"
+    /// The text announces a file, and none is attached.
+    case attachmentMissing = "attachment_missing"
+    /// Bridge saved a draft without every file it was given.
+    case attachmentsLost = "attachments_lost"
     case approvalRejected = "approval_rejected"
     case approvalTimeout = "approval_timeout"
 }

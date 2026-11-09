@@ -30,7 +30,17 @@ final class FakeBackend: MailBackend, @unchecked Sendable {
 
     func message(_ id: MessageID, maxChars: Int) async throws -> SanitizedMessage {
         if id.mailbox == "INBOX" && id.uid == 77 { return lock.withLock { original } }
-        if id.mailbox == "Drafts", let draft = lock.withLock({ draft }) { return draft }
+        if id.mailbox == "Drafts", lock.withLock({ goneDrafts.contains(id) || deletedDrafts.contains(id) }) {
+            throw PosternError(.notFound, "This draft is no longer in Drafts.")
+        }
+        if id.mailbox == "Drafts", var draft = lock.withLock({ draft }) {
+            if let changed = lock.withLock({ editedDrafts[id] }) {
+                draft = SanitizedMessage(headers: draft.headers, body: changed, bodyTruncated: false, bodyWasHTML: false,
+                                         hiddenElementsRemoved: 0, imagesOmitted: 0, links: [], attachments: draft.attachments,
+                                         verdict: draft.verdict)
+            }
+            return draft
+        }
         if id.mailbox == "Drafts", let saved = savedDraft(id) {
             return SanitizedMessage(
                 headers: SanitizedHeaders(from: [saved.from], to: saved.to, cc: saved.cc, bcc: saved.bcc, subject: saved.subject),
@@ -103,6 +113,18 @@ final class FakeBackend: MailBackend, @unchecked Sendable {
     func deleteDraft(_ id: MessageID) async throws { lock.withLock { deletedDrafts.append(id) } }
     /// Drafts the user deleted in Proton while a batch waited.
     var goneDrafts: Set<MessageID> = []
+    /// Drafts the user rewrote in Proton after approving them: their new text.
+    var editedDrafts: [MessageID: String] = [:]
+    /// How many files Bridge keeps of each draft saved, when it loses some.
+    var keptFiles: Int?
+    func attachmentCount(of id: MessageID) async throws -> Int? {
+        guard let kept = lock.withLock({ keptFiles }) else { return savedDraft(id)?.attachments.count }
+        return kept
+    }
+    func attachment(_ id: MessageID, index: Int) async throws -> OutgoingAttachment {
+        guard index == 2 else { throw PosternError(.notFound, "This email has no attachment \(index).") }
+        return try OutgoingAttachment.make(filename: "facture.pdf", data: Data("%PDF-facture".utf8))
+    }
     func draftExists(_ id: MessageID) async throws -> Bool {
         lock.withLock { !deletedDrafts.contains(id) && !goneDrafts.contains(id) }
     }
@@ -142,7 +164,9 @@ final class FakeBackend: MailBackend, @unchecked Sendable {
     }
 
     func attachments(of id: MessageID) async throws -> [OutgoingAttachment] {
-        if id.mailbox == "Drafts", lock.withLock({ draft }) == nil, let saved = savedDraft(id) { return saved.attachments }
+        if id.mailbox == "Drafts", lock.withLock({ draft }) == nil, let saved = savedDraft(id) {
+            return Array(saved.attachments.prefix(lock.withLock { keptFiles } ?? saved.attachments.count))
+        }
         if id.mailbox == "Drafts" { return lock.withLock { draftFiles } }
         return [try OutgoingAttachment.make(filename: "invoice.pdf", data: Data("%PDF-invoice".utf8))]
     }
@@ -383,11 +407,14 @@ final class CapturingPresenter: ApprovalPresenter, @unchecked Sendable {
     var batches: [BatchApprovalRequest] = []
     /// How many emails at the top of a batch the person unticks before choosing Send.
     var leaveOut = 0
+    /// How long the person reads a batch before answering.
+    var batchDelay: Duration = .zero
 
     init(_ intent: ApprovalIntent?) { self.intent = intent }
 
     func presentBatch(_ request: BatchApprovalRequest, deadline: Date) async -> BatchIntent {
-        let leaveOut = lock.withLock { batches.append(request); return self.leaveOut }
+        let (leaveOut, delay) = lock.withLock { batches.append(request); return (self.leaveOut, batchDelay) }
+        if delay > .zero { try? await Task.sleep(for: delay) }
         return intent == .send ? .send(Set(request.items.dropFirst(leaveOut).map(\.id))) : .reject(reason: "Not today")
     }
 
@@ -441,15 +468,17 @@ final class MemoryLedger: SendLedger, @unchecked Sendable {
 
     func connect(
         policy: Policy? = nil, intent: ApprovalIntent? = .send, backend: FakeBackend = FakeBackend(),
-        ledger: MemoryLedger = MemoryLedger(), timeout: Duration = .seconds(5), live: PolicyBox? = nil
+        ledger: MemoryLedger = MemoryLedger(), timeout: Duration = .seconds(5), live: PolicyBox? = nil,
+        inlineWait: Duration = .seconds(5), batchDelay: Duration = .zero
     ) async throws -> (Client, CapturingPresenter) {
         let presenter = CapturingPresenter(intent)
+        presenter.batchDelay = batchDelay
         let desk = ApprovalDesk(presenter: presenter, authenticator: AlwaysAuthenticated(), timeout: timeout)
         let (clientTransport, serverTransport) = await InMemoryTransport.createConnectedPair()
         let box = live ?? PolicyBox(policy ?? everything)
         let session = Session(transport: serverTransport, backend: backend, version: "test", policy: { box.policy },
                               desk: desk, ledger: ledger, clientName: { "Claude Code" }, batchSpacing: .zero,
-                              inlineWait: .seconds(5))
+                              inlineWait: inlineWait)
         try await session.start()
         let client = Client(name: "test", version: "1")
         _ = try await client.connect(transport: clientTransport)
@@ -614,6 +643,7 @@ final class MemoryLedger: SendLedger, @unchecked Sendable {
         _ = try await client.callTool(name: "update_draft", arguments: ["id": .string(id), "subject": .string("Candidature, poste de vendeur")])
         let kept = try #require(backend.lock.withLock { backend.drafts.last })
         #expect(kept.subject == "Candidature, poste de vendeur" && kept.attachments == files)
+        backend.lock.withLock { backend.deletedDrafts = [] }
         _ = try await client.callTool(name: "update_draft", arguments: ["id": .string(id), "attachments": .array([.string("contract.pdf")])])
         #expect(backend.lock.withLock { backend.drafts.last }?.attachments.map(\.filename) == ["contract.pdf"])
     }
@@ -642,7 +672,7 @@ final class MemoryLedger: SendLedger, @unchecked Sendable {
         #expect(isError != true, "\(text(content))")
         let batch = try #require(presenter.lock.withLock { presenter.batches.first })
         #expect(presenter.lock.withLock { presenter.batches.count } == 1 && presenter.lock.withLock { presenter.requests }.isEmpty)
-        #expect(batch.items.count == 3 && batch.items.allSatisfy { $0.message.attachments == files })
+        #expect(batch.items.count == 3 && batch.items.allSatisfy { $0.files.map(\.sha256) == files.map(\.sha256) })
         let sent = backend.lock.withLock { backend.sent }
         #expect(sent.map(\.digest) == batch.items.map(\.digest))
         #expect(backend.lock.withLock { backend.deletedDrafts } == ids && ledger.recentSends().count == 3)
@@ -686,7 +716,7 @@ final class MemoryLedger: SendLedger, @unchecked Sendable {
         let (content, isError) = try await client.callTool(name: "send_drafts", arguments: ["ids": .array(drafts([5, 6]).map { .string($0.opaque) })])
         #expect(isError == true && text(content).hasPrefix("approval_rejected"))
         #expect(backend.lock.withLock { backend.sent }.isEmpty && backend.lock.withLock { backend.deletedDrafts }.isEmpty)
-        let (tooMany, refused) = try await client.callTool(name: "send_drafts", arguments: ["ids": .array(drafts(Array(1...501)).map { .string($0.opaque) })])
+        let (tooMany, refused) = try await client.callTool(name: "send_drafts", arguments: ["ids": .array(drafts(Array(1...5001)).map { .string($0.opaque) })])
         #expect(refused == true && text(tooMany).hasPrefix("invalid_argument"))
     }
 
@@ -777,7 +807,7 @@ final class MemoryLedger: SendLedger, @unchecked Sendable {
         #expect(text(content).contains("{{contact}}"))
         #expect(presenter.lock.withLock { presenter.requests }.isEmpty)
         let (tooMany, refused) = try await client.callTool(name: "create_drafts", arguments: [
-            "drafts": .array(Array(repeating: application("a@example.com", [:]), count: 501)),
+            "drafts": .array(Array(repeating: application("a@example.com", [:]), count: 5001)),
         ])
         #expect(refused == true && text(tooMany).hasPrefix("invalid_argument"))
     }

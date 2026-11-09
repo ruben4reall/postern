@@ -8,7 +8,7 @@ import PosternPolicy
 /// Drafts and sending. Nothing leaves without an `ApprovedMessage`, which only the approval desk produces.
 struct SendTools {
     let backend: any MailBackend
-    let policy: Policy
+    var policy: Policy
     let desk: ApprovalDesk
     let ledger: any SendLedger
     let provenance: Provenance
@@ -23,7 +23,7 @@ struct SendTools {
     var inlineWait: Duration = .seconds(45)
 
     static let quoteLimit = 20_000
-    static let batchLimit = 500
+    static let batchLimit = 5000
 
     func call(_ tool: ToolID, _ arguments: [String: Value]) async throws -> CallTool.Result {
         switch tool {
@@ -31,17 +31,18 @@ struct SendTools {
             return try await createDrafts(arguments)
         case .createDraft:
             let message = try await compose(arguments)
-            let id = try await backend.saveDraft(message)
-            return result("Saved a draft to \(message.envelopeRecipients.joined(separator: ", ")). It waits in Drafts until someone sends it.",
-                          ["draft_id": .string(id.opaque)])
+            let id = try await saveVerified(message)
+            return result("Saved a draft to \(message.envelopeRecipients.joined(separator: ", "))\(Self.withFiles(message)). It waits in Drafts until someone sends it.",
+                          ["draft_id": .string(id.opaque), "attachments": Self.fileList(message)])
         case .updateDraft:
             let id = try await draftID(arguments["id"])
             let current = try await backend.message(id, maxChars: OutgoingMessage.maxBodyCharacters)
-            let kept = arguments["attachments"] == nil ? try await backend.attachments(of: id) : []
+            let kept = Self.givesFiles(arguments) ? [] : try await backend.attachments(of: id)
             let message = try await compose(arguments, base: current, baseFiles: kept)
-            let newID = try await backend.saveDraft(message)
+            let newID = try await saveVerified(message)
             try await backend.deleteDraft(id)
-            return result("Updated the draft. Use the new id from now on.", ["draft_id": .string(newID.opaque)])
+            return result("Updated the draft\(Self.withFiles(message)). Use the new id from now on.",
+                          ["draft_id": .string(newID.opaque), "attachments": Self.fileList(message)])
         case .deleteDraft:
             let id = try await draftID(arguments["id"])
             try await backend.deleteDraft(id)
@@ -55,7 +56,8 @@ struct SendTools {
         case .sendDraft:
             let id = try await draftID(arguments["id"])
             let draft = try await backend.message(id, maxChars: OutgoingMessage.maxBodyCharacters)
-            let message = try await compose([:], base: draft, baseFiles: try await backend.attachments(of: id))
+            let message = try await compose(arguments.filter { $0.key == "no_attachment" }, base: draft,
+                                            baseFiles: try await backend.attachments(of: id))
             let outcome = try await deliver(message, tool: tool, context: "A draft saved in Drafts", extra: [:])
             if outcome.isError != true, case .object(let fields)? = outcome.structuredContent, fields["sent"] == .bool(true) {
                 try? await backend.deleteDraft(id)
@@ -100,11 +102,18 @@ struct SendTools {
             .map { "> " + $0 }.joined(separator: "\n")
         var references = headers.references
         if let messageID = headers.messageID { references.append(messageID) }
-        let message = try OutgoingMessage.make(
-            from: try await self.sender(arguments["from"], preferred: headers.to + headers.cc), to: to, cc: cc,
-            subject: subject, body: body, quoted: quoted,
-            inReplyTo: headers.messageID, references: Array(references.suffix(20))
-        )
+        let message: OutgoingMessage
+        do {
+            message = try OutgoingMessage.make(
+                from: try await self.sender(arguments["from"], preferred: headers.to + headers.cc), to: to, cc: cc,
+                subject: subject, body: body, quoted: quoted,
+                inReplyTo: headers.messageID, references: Array(references.suffix(20)),
+                attachments: try await files(arguments)
+            )
+        } catch let error as ComposeError {
+            throw PosternError(.invalidArgument, Self.explain(error))
+        }
+        try requireAnnouncedFiles(message, arguments)
         var extra: [String: [ApprovalBadge]] = [:]
         if let replyTo = headers.replyTo.first, let from = headers.from.first,
            replyTo.email.lowercased() != from.email.lowercased() {
@@ -124,16 +133,17 @@ struct SendTools {
         quoted += "From: \(headers.from.map(Self.describe).joined(separator: ", "))\n"
         if let date = headers.date { quoted += "Date: \(Self.dateText(date))\n" }
         quoted += "Subject: \(headers.subject)\nTo: \(headers.to.map(Self.describe).joined(separator: ", "))\n\n" + original.body
-        let files = bool(arguments["include_attachments"]) == false ? [] : try await backend.attachments(of: id)
+        let originalFiles = bool(arguments["include_attachments"]) == false ? [] : try await backend.attachments(of: id)
         let message: OutgoingMessage
         do {
             message = try OutgoingMessage.make(
                 from: try await sender(arguments["from"]), to: recipients, subject: subject, body: string(arguments["note"]) ?? "",
-                quoted: quoted, attachments: files
+                quoted: quoted, attachments: originalFiles + (try await files(arguments))
             )
         } catch let error as ComposeError {
             throw PosternError(.invalidArgument, Self.explain(error))
         }
+        try requireAnnouncedFiles(message, arguments)
         let sender = headers.from.first.map(Self.describe) ?? "someone"
         return try await deliver(message, tool: .forwardMessage, context: "Forward of \(sender): \(headers.subject)", extra: [:])
     }
@@ -152,14 +162,16 @@ struct SendTools {
 
         if let approved = await desk.approveTrusted(request, trusted: policy.trustedRecipients) {
             try await sendCounted(approved)
-            return result("Sent to \(approved.recipients.joined(separator: ", ")), all on the user's trusted list.", ["sent": .bool(true)])
+            return result("Sent to \(approved.recipients.joined(separator: ", "))\(Self.withFiles(approved.message)), all on the user's trusted list.",
+                          ["sent": .bool(true), "attachments": Self.fileList(approved.message)])
         }
         switch await desk.review(request) {
         case .approved(let approved):
             try await sendCounted(approved)
-            return result("The user read the email, approved it with Touch ID, and it was sent to \(approved.recipients.joined(separator: ", ")).", ["sent": .bool(true)])
+            return result("The user read the email, approved it with Touch ID, and it was sent to \(approved.recipients.joined(separator: ", "))\(Self.withFiles(approved.message)).",
+                          ["sent": .bool(true), "attachments": Self.fileList(approved.message)])
         case .saveAsDraft(let draft):
-            let id = try await backend.saveDraft(draft)
+            let id = try await saveVerified(draft)
             return result("The user chose to keep it as a draft instead of sending it now.", ["sent": .bool(false), "draft_id": .string(id.opaque)])
         case .rejected(let reason):
             throw PosternError(.approvalRejected, "The user rejected this email" + (reason.map { ": \($0)" } ?? "."))
@@ -249,23 +261,144 @@ struct SendTools {
     /// Builds the message from the arguments; a draft being changed or sent gives the fields and files left out.
     func compose(
         _ arguments: [String: Value], base: SanitizedMessage? = nil, baseFiles: [OutgoingAttachment] = [],
-        cache: AttachmentCache? = nil
+        cache: AttachmentCache? = nil, messageID: String? = nil
     ) async throws -> OutgoingMessage {
         let to = arguments["to"] == nil ? base?.headers.to ?? [] : try addresses(arguments["to"])
         let cc = arguments["cc"] == nil ? base?.headers.cc ?? [] : try addresses(arguments["cc"])
         let bcc = arguments["bcc"] == nil ? base?.headers.bcc ?? [] : try addresses(arguments["bcc"])
         let subject = string(arguments["subject"]) ?? base?.headers.subject ?? ""
         let body = arguments["body"] == nil ? base?.body ?? "" : (string(arguments["body"]) ?? "")
-        let files = arguments["attachments"] == nil ? baseFiles : try await outboxFiles(arguments["attachments"], cache: cache)
+        let files = Self.givesFiles(arguments) ? try await self.files(arguments, cache: cache) : baseFiles
         let from = try await sender(arguments["from"], draft: base?.headers.from.first)
+        let message: OutgoingMessage
         do {
-            return try OutgoingMessage.make(
+            message = try OutgoingMessage.make(
                 from: from, to: to, cc: cc, bcc: bcc, subject: subject, body: body,
-                inReplyTo: base?.headers.inReplyTo, references: base?.headers.references ?? [], attachments: files
+                inReplyTo: base?.headers.inReplyTo, references: base?.headers.references ?? [], attachments: files,
+                messageID: messageID
             )
         } catch let error as ComposeError {
             throw PosternError(.invalidArgument, Self.explain(error))
         }
+        try requireAnnouncedFiles(message, arguments)
+        return message
+    }
+
+    /// The three ways a client gives files: outbox names, content it wrote, and attachments of emails it read.
+    static let fileArguments = ["attachments", "inline_attachments", "email_attachments"]
+
+    static func givesFiles(_ arguments: [String: Value]) -> Bool {
+        fileArguments.contains { arguments[$0] != nil }
+    }
+
+    /// Every file the arguments give, in that order.
+    func files(_ arguments: [String: Value], cache: AttachmentCache? = nil) async throws -> [OutgoingAttachment] {
+        try await outboxFiles(arguments["attachments"], cache: cache)
+            + inlineFiles(arguments["inline_attachments"])
+            + emailFiles(arguments["email_attachments"], cache: cache)
+    }
+
+    /// An email whose text announces a file ("ci-joint", "attached", "anbei"…) and carries none is stopped: the
+    /// client forgot the files. It passes no_attachment when the text means it.
+    func requireAnnouncedFiles(_ message: OutgoingMessage, _ arguments: [String: Value]) throws {
+        guard bool(arguments["no_attachment"]) != true, let words = message.missingAttachment else { return }
+        throw PosternError(.attachmentMissing, "The email says \"\(words)\" but no file is attached, so nothing was done. Attach the files (attachments from the outbox, inline_attachments, or email_attachments), or pass no_attachment: true if no file is meant.")
+    }
+
+    /// Files the client wrote itself: text, or base64 for anything else, 10 MB at most in all.
+    func inlineFiles(_ value: Value?) throws -> [OutgoingAttachment] {
+        guard let value else { return [] }
+        guard case .array(let list) = value, list.count <= 20 else {
+            throw PosternError(.invalidArgument, "inline_attachments is a list of at most 20 files, each with name and text or base64.")
+        }
+        var total = 0
+        return try list.map { item in
+            guard case .object(let fields) = item, case .string(let name)? = fields["name"] else {
+                throw PosternError(.invalidArgument, "Each inline attachment needs a name, such as report.csv.")
+            }
+            let data: Data
+            switch (fields["text"], fields["base64"]) {
+            case (.string(let text)?, nil):
+                data = Data(text.utf8)
+            case (nil, .string(let encoded)?):
+                guard let decoded = Data(base64Encoded: encoded.filter { !$0.isWhitespace }) else {
+                    throw PosternError(.invalidArgument, "The base64 of \(name) does not decode.")
+                }
+                data = decoded
+            default:
+                throw PosternError(.invalidArgument, "Give \(name) either text or base64.")
+            }
+            guard !data.isEmpty else { throw PosternError(.invalidArgument, "\(name) is empty.") }
+            total += data.count
+            guard total <= Self.inlineLimit else { throw PosternError(.tooLarge, "Inline attachments hold 10 MB at most; put bigger files in the outbox.") }
+            do {
+                return try OutgoingAttachment.make(filename: name, data: data)
+            } catch let error as ComposeError {
+                throw PosternError(.invalidArgument, Self.explain(error))
+            }
+        }
+    }
+
+    static let inlineLimit = 10_000_000
+
+    /// Attachments of emails the client can read, by message id and the index get_message gives.
+    func emailFiles(_ value: Value?, cache: AttachmentCache? = nil) async throws -> [OutgoingAttachment] {
+        guard let value else { return [] }
+        guard case .array(let list) = value, list.count <= 20 else {
+            throw PosternError(.invalidArgument, "email_attachments is a list of at most 20 items, each with id and index.")
+        }
+        var files: [OutgoingAttachment] = []
+        for item in list {
+            guard case .object(let fields) = item, let index = Self.integer(fields["index"]) else {
+                throw PosternError(.invalidArgument, "Each email attachment needs the email's id and the attachment's index from get_message.")
+            }
+            let id = try await messageID(fields["id"])
+            let key = "email:\(id.opaque):\(index)"
+            if let known = cache?.file(key) {
+                files.append(known)
+            } else {
+                let file = try await backend.attachment(id, index: index)
+                cache?.keep(file, as: key)
+                files.append(file)
+            }
+        }
+        return files
+    }
+
+    static func integer(_ value: Value?) -> Int? {
+        switch value {
+        case .int(let number)?: number
+        case .double(let number)? where number == number.rounded(): Int(number)
+        case .string(let text)?: Int(text)
+        default: nil
+        }
+    }
+
+    /// Saves a draft, then reads back how many files Bridge kept: a draft that lost one is removed and the call
+    /// fails, so no email leaves later without the files it was written with.
+    func saveVerified(_ message: OutgoingMessage) async throws -> MessageID {
+        try await Self.saveVerified(message, backend: backend)
+    }
+
+    static func saveVerified(_ message: OutgoingMessage, backend: any MailBackend) async throws -> MessageID {
+        let id = try await backend.saveDraft(message)
+        let expected = message.attachments.count
+        guard expected > 0, let count = try? await backend.attachmentCount(of: id), count < expected else { return id }
+        // The structure alone can miscount: the files themselves decide.
+        if let files = try? await backend.attachments(of: id), files.count >= expected { return id }
+        try? await backend.deleteDraft(id)
+        throw PosternError(.attachmentsLost, "Bridge kept \(count) of the \(expected) files of this draft, so the draft was removed and nothing was saved. Try again; if it happens again, attach fewer or smaller files.")
+    }
+
+    /// ", with CV.pdf (240 KB) and Letter.pdf (80 KB)", or nothing.
+    static func withFiles(_ message: OutgoingMessage) -> String {
+        guard !message.attachments.isEmpty else { return "" }
+        let names = message.attachments.map { "\($0.filename) (\(size($0.data.count)))" }
+        return ", with " + (names.count == 1 ? names[0] : names.dropLast().joined(separator: ", ") + " and " + names.last!)
+    }
+
+    static func fileList(_ message: OutgoingMessage) -> Value {
+        .array(message.attachments.map { .object(["name": .string($0.filename), "size": .int($0.data.count)]) })
     }
 
     /// Files named by the client, taken only from the Postern outbox folder; the panel shows each one. A batch

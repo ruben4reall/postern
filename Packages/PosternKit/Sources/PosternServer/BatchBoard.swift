@@ -32,6 +32,16 @@ public actor BatchBoard {
         case cancelled
     }
 
+    /// What the user decided on the approval panel of a send batch.
+    public enum Decision: Sendable, Equatable {
+        /// The drafts are being read, or the panel is open.
+        case pending
+        case approved
+        case rejected(reason: String?)
+        case notAuthenticated
+        case expired
+    }
+
     public struct Batch: Sendable, Identifiable {
         public let id: String
         public let kind: Kind
@@ -43,6 +53,8 @@ public actor BatchBoard {
         public var spacing: TimeInterval
         /// When the last email should leave, as estimated when the batch was approved.
         public var estimate: Date?
+        /// For sends: the user's answer on the panel. Drafts batches need none.
+        public var decision: Decision = .pending
 
         public var isOver: Bool { phase == .finished || phase == .cancelled }
         public func count(_ status: ItemStatus) -> Int { items.lazy.filter { $0.status == status }.count }
@@ -95,7 +107,8 @@ public actor BatchBoard {
     /// Opens a batch. A send batch never takes a draft another send batch holds or sent: such an item is refused
     /// here, in the same step, so two batches approved for the same drafts cannot both send them.
     func open(
-        kind: Kind, client: String, items: [Item], start: Date? = nil, spacing: TimeInterval = 0, estimate: Date? = nil
+        kind: Kind, client: String, items: [Item], start: Date? = nil, spacing: TimeInterval = 0, estimate: Date? = nil,
+        phase: Phase = .running
     ) -> String {
         var items = items
         if kind == .sends {
@@ -109,7 +122,7 @@ public actor BatchBoard {
         }
         var id: String
         repeat { id = String(UUID().uuidString.lowercased().prefix(8)) } while batches[id] != nil
-        batches[id] = Batch(id: id, kind: kind, client: client, created: Date(), items: items, phase: .running,
+        batches[id] = Batch(id: id, kind: kind, client: client, created: Date(), items: items, phase: phase,
                             start: start, spacing: spacing, estimate: estimate)
         order.append(id)
         trim()
@@ -167,6 +180,39 @@ public actor BatchBoard {
         batch.items[position].status = status
         batch.items[position].detail = detail
         if let draft { batch.items[position].draft = draft }
+        batches[id] = batch
+        notify()
+    }
+
+    /// Names an email once its draft is read: who it goes to and its subject.
+    func describe(_ id: String, _ index: Int, recipients: String, subject: String) {
+        guard var batch = batches[id], let position = batch.items.firstIndex(where: { $0.index == index }) else { return }
+        batch.items[position] = Item(index: index, recipients: recipients, subject: subject,
+                                     status: batch.items[position].status, detail: batch.items[position].detail,
+                                     draft: batch.items[position].draft)
+        batches[id] = batch
+        notify()
+    }
+
+    /// Records the user's answer. Anything but an approval ends the batch: its emails stay drafts.
+    func decide(_ id: String, _ decision: Decision, estimate: Date? = nil) {
+        guard var batch = batches[id], !batch.isOver else { return }
+        batch.decision = decision
+        if let estimate { batch.estimate = estimate }
+        if decision != .approved {
+            let why: String = switch decision {
+            case .rejected(let reason): "The user rejected the batch" + (reason.map { ": \($0)" } ?? "") + "; the draft stays in Drafts."
+            case .notAuthenticated: "The user did not confirm with Touch ID; the draft stays in Drafts."
+            case .expired: "The user did not answer in time; the draft stays in Drafts."
+            default: "The draft stays in Drafts."
+            }
+            for index in batch.items.indices where batch.items[index].status == .waiting {
+                batch.items[index].status = .skipped
+                batch.items[index].detail = why
+            }
+            batch.phase = .cancelled
+            tasks[id] = nil
+        }
         batches[id] = batch
         notify()
     }

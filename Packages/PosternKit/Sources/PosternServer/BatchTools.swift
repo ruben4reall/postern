@@ -5,11 +5,11 @@ import PosternCompose
 import PosternModel
 import PosternPolicy
 
-/// Batches: up to 500 drafts written from a template or a spreadsheet, and up to 500 drafts sent after one panel
+/// Batches: up to 5000 drafts written from a template or a spreadsheet, and up to 5000 drafts sent after one panel
 /// and one Touch ID, at a pace the user's limits allow. Both run on the board, so a call never has to last as long
 /// as the batch.
 extension SendTools {
-    static let templateFields: Set<String> = ["subject", "body", "attachments", "from", "cc", "bcc"]
+    static let templateFields: Set<String> = ["subject", "body", "attachments", "inline_attachments", "email_attachments", "from", "cc", "bcc"]
     /// A batch answer lists every item up to this many; longer batches list only the items that need attention.
     static let listedItems = 50
     /// How long a batch waits before trying an email Bridge did not take again: then every ten minutes.
@@ -22,20 +22,27 @@ extension SendTools {
     /// Each draft is checked before any is saved: one draft with a problem stops the batch, unless the client asks
     /// to skip such drafts. Nothing leaves, so nothing asks the user.
     func createDrafts(_ arguments: [String: Value]) async throws -> CallTool.Result {
-        let template = try templateArgument(arguments["template"])
+        var template = try templateArgument(arguments["template"])
+        if let flag = arguments["no_attachment"] { template["no_attachment"] = flag }
         let rows = try await draftRows(arguments)
         let cache = AttachmentCache()
-        var prepared: [(index: Int, message: OutgoingMessage)] = []
+        // Every draft is composed once to check it, then dropped: it is composed again when its turn to be saved
+        // comes, so thousands of drafts never sit in memory at once.
+        var ready: [(index: Int, recipients: String, subject: String, bytes: Int)] = []
+        var first: OutgoingMessage?
         var problems: [Int: String] = [:]
         for (index, row) in rows.enumerated() {
             do {
-                prepared.append((index, try await draftMessage(template: template, row: row, cache: cache)))
+                let message = try await draftMessage(template: template, row: row, cache: cache)
+                if first == nil { first = message }
+                ready.append((index, message.envelopeRecipients.joined(separator: ", "), message.subject,
+                              message.attachments.reduce(0) { $0 + $1.data.count }))
             } catch {
                 problems[index] = Self.detail(error)
             }
         }
         if bool(arguments["dry_run"]) == true {
-            return dryRun(total: rows.count, prepared: prepared.map(\.message), problems: problems)
+            return dryRun(total: rows.count, ready: ready.count, bytes: ready.reduce(0) { $0 + $1.bytes }, first: first, problems: problems)
         }
         if !problems.isEmpty && bool(arguments["skip_invalid"]) != true {
             let listed = problems.sorted { $0.key < $1.key }.prefix(20).map { "\($0.key + 1). \($0.value)" }
@@ -44,19 +51,18 @@ extension SendTools {
                     + listed
             ).joined(separator: "\n"))
         }
-        let messages = Dictionary(uniqueKeysWithValues: prepared.map { ($0.index, $0.message) })
+        let described = Dictionary(uniqueKeysWithValues: ready.map { ($0.index, $0) })
         let items = rows.indices.map { index in
             BatchBoard.Item(
-                index: index, recipients: messages[index]?.envelopeRecipients.joined(separator: ", ") ?? "",
-                subject: messages[index]?.subject ?? "", status: messages[index] == nil ? .refused : .waiting,
-                detail: problems[index] ?? "", draft: nil
+                index: index, recipients: described[index]?.recipients ?? "", subject: described[index]?.subject ?? "",
+                status: described[index] == nil ? .refused : .waiting, detail: problems[index] ?? "", draft: nil
             )
         }
         let id = await board.open(kind: .drafts, client: client, items: items)
-        let backend = self.backend
-        let board = self.board
-        let work = prepared
-        await board.run(id) { await Self.saveDrafts(work, batch: id, board: board, backend: backend) }
+        let tools = self
+        let work = ready.map { ($0.index, rows[$0.index]) }
+        let shared = template
+        await board.run(id) { await tools.saveDrafts(work, template: shared, batch: id, cache: cache) }
         guard let batch = await board.settle(id, within: inlineWait) else {
             throw PosternError(.notFound, "The batch disappeared.")
         }
@@ -135,6 +141,7 @@ extension SendTools {
             })
         }
         guard merged["to"] != nil else { throw PosternError(.invalidArgument, "This draft has no recipient.") }
+        if let flag = template["no_attachment"] { merged["no_attachment"] = flag }
         return try await compose(merged, cache: cache)
     }
 
@@ -153,16 +160,15 @@ extension SendTools {
         return filled
     }
 
-    private func dryRun(total: Int, prepared: [OutgoingMessage], problems: [Int: String]) -> CallTool.Result {
-        var lines = ["Checked \(total) drafts: \(prepared.count) ready, \(problems.count) with a problem. Nothing was saved."]
+    private func dryRun(total: Int, ready: Int, bytes: Int, first: OutgoingMessage?, problems: [Int: String]) -> CallTool.Result {
+        var lines = ["Checked \(total) drafts: \(ready) ready, \(problems.count) with a problem. Nothing was saved."]
         lines += problems.sorted { $0.key < $1.key }.prefix(Self.listedItems).map { "\($0.key + 1). \($0.value)" }
-        let bytes = prepared.reduce(0) { total, message in total + message.attachments.reduce(0) { $0 + $1.data.count } }
         var fields: [String: Value] = [
-            "ready": .int(prepared.count),
+            "ready": .int(ready),
             "attachment_bytes": .int(bytes),
             "problems": .array(problems.sorted { $0.key < $1.key }.map { .object(["index": .int($0.key), "detail": .string($0.value)]) }),
         ]
-        if let first = prepared.first {
+        if let first {
             let files = first.attachments.map { "\($0.filename) (\(Self.size($0.data.count)))" }
             lines.append("")
             lines.append("The first one reads:")
@@ -181,20 +187,25 @@ extension SendTools {
         return result(lines.joined(separator: "\n"), fields)
     }
 
-    static func saveDrafts(
-        _ prepared: [(index: Int, message: OutgoingMessage)], batch id: String, board: BatchBoard, backend: any MailBackend
+    /// Composes each checked draft again and saves it, checking Bridge kept its files.
+    func saveDrafts(
+        _ rows: [(index: Int, row: (fields: [String: Value], values: [String: String]))], template: [String: Value],
+        batch id: String, cache: AttachmentCache
     ) async {
-        for entry in prepared {
+        for entry in rows {
             if Task.isCancelled { return }
             var attempt = 0
             while true {
                 do {
-                    let draft = try await backend.saveDraft(entry.message)
-                    await board.set(id, entry.index, .saved, "Saved in Drafts.", draft: draft)
+                    let message = try await draftMessage(template: template, row: entry.row, cache: cache)
+                    let draft = try await saveVerified(message)
+                    await board.set(id, entry.index, .saved, "Saved in Drafts\(Self.withFiles(message)).", draft: draft)
                     break
                 } catch let error as PosternError where error.code == .bridgeUnreachable && attempt < 2 {
                     attempt += 1
                     do { try await Task.sleep(for: .seconds(5 * attempt)) } catch { return }
+                } catch is CancellationError {
+                    return
                 } catch {
                     await board.set(id, entry.index, .failed, Self.detail(error))
                     break
@@ -237,80 +248,109 @@ extension SendTools {
 
     // MARK: Drafts sent together
 
-    /// One panel and one Touch ID for up to 500 drafts; each approved email stays bound to its own digest. They
-    /// leave one by one, spaced out and within the user's limits, waiting for room when a limit is reached.
+    /// One panel and one Touch ID for up to 5000 drafts; each approved email stays bound to its own digest. The batch
+    /// exists from the first moment, so a client that calls again after a timeout finds its drafts taken instead of
+    /// opening a second panel. Reading the drafts, the panel and the sending all run on the board; the call answers
+    /// once the batch is over, or after a while with where it stands.
     func sendDrafts(_ arguments: [String: Value]) async throws -> CallTool.Result {
         let ids = try await batchDraftIDs(arguments)
         let spacing = try spacingArgument(arguments["spacing_seconds"], count: ids.count)
         let start = try startArgument(arguments["start_at"])
-        var refused: [MessageID: String] = [:]
-        var pending: [(id: MessageID, request: ApprovalRequest)] = []
-        let pool = DataPool()
-        let contacted = ContactCache()
-        let held = await board.heldDrafts()
-        for id in ids {
-            if let other = held[id] {
-                refused[id] = "This draft is already in batch \(other), so it is not sent twice."
-                continue
-            }
-            do {
-                let draft = try await backend.draftForSending(id)
-                let message = try await compose([:], base: draft.message, baseFiles: draft.files.map(pool.intern))
-                try checkRecipients(message)
-                pending.append((id, try await approvalRequest(message, tool: .sendDrafts, context: "A draft saved in Drafts", extra: [:], contacted: contacted)))
-            } catch {
-                refused[id] = Self.detail(error)
-            }
+        let flags = arguments.filter { $0.key == "no_attachment" }
+        let items = ids.enumerated().map { index, draft in
+            BatchBoard.Item(index: index, recipients: "", subject: "", status: .waiting, detail: "", draft: draft)
         }
-        guard !pending.isEmpty else {
-            return sendsAnswer(nil, ids: ids, statuses: ids.map { (.refused, refused[$0] ?? "") })
+        let id = await board.open(kind: .sends, client: client, items: items, start: start, spacing: spacing,
+                                  phase: .waiting(until: nil, reason: "Postern is reading the drafts for the approval panel."))
+        let tools = self
+        await board.run(id) { await tools.prepareAndSend(batch: id, spacing: spacing, start: start, flags: flags) }
+        guard let batch = await board.settle(id, within: inlineWait) else {
+            throw PosternError(.notFound, "The batch disappeared.")
         }
-        let sends = ledger.recentSends()
-        let schedule = BatchSchedule(
-            start: start, spacing: spacing, sendsPerHour: policy.sendsPerHour, sendsPerDay: policy.sendsPerDay,
-            finish: SendBudget.finish(count: pending.count, start: start ?? Date(), spacing: spacing, policy: policy, sends: sends)
-        )
-        let request = BatchApprovalRequest(tool: ToolID.sendDrafts.rawValue, client: client, items: pending.map(\.request), schedule: schedule)
-        switch await desk.reviewBatch(request) {
-        case .approved(let approved):
-            var queue: [QueuedEmail] = []
-            var items: [BatchBoard.Item] = []
-            let requests = Dictionary(uniqueKeysWithValues: pending.map { ($0.id, $0.request) })
-            for (index, id) in ids.enumerated() {
-                let message = requests[id]?.message
-                var item = BatchBoard.Item(
-                    index: index, recipients: message?.envelopeRecipients.joined(separator: ", ") ?? "",
-                    subject: message?.subject ?? "", status: .waiting, detail: "", draft: id
-                )
-                if let reason = refused[id] {
-                    item.status = .refused
-                    item.detail = reason
-                } else if let request = requests[id], let email = approved[request.id] {
-                    queue.append(QueuedEmail(index: index, draft: id, message: email))
-                } else {
-                    item.status = .skipped
-                    item.detail = "The user left this email out; the draft stays in Drafts."
-                }
-                items.append(item)
-            }
-            let estimate = SendBudget.finish(count: queue.count, start: start ?? Date(), spacing: spacing, policy: policy, sends: ledger.recentSends())
-            let id = await board.open(kind: .sends, client: client, items: items, start: start, spacing: spacing, estimate: estimate)
-            let (board, backend, ledger, live, client) = (self.board, self.backend, self.ledger, self.livePolicy, self.client)
-            let emails = queue
-            let account = try await backend.ownAddress().email.lowercased()
-            await board.run(id) {
-                await Self.sendQueue(emails, batch: id, board: board, backend: backend, ledger: ledger, policy: live,
-                                     account: account, spacing: spacing, start: start, client: client)
-            }
-            let batch = await board.settle(id, within: inlineWait)
-            return sendsAnswer(batch, ids: ids, statuses: (batch?.items ?? items).map { ($0.status, $0.detail) })
-        case .rejected(let reason):
+        switch batch.decision {
+        case .rejected(let reason) where batch.count(.sent) == 0:
             throw PosternError(.approvalRejected, "The user rejected these emails, so nothing was sent" + (reason.map { ": \($0)" } ?? "."))
         case .notAuthenticated:
             throw PosternError(.approvalRejected, "The user did not confirm with Touch ID, so nothing was sent.")
         case .expired:
             throw PosternError(.approvalTimeout, "The user did not answer in time, so nothing was sent.")
+        default:
+            return sendsAnswer(batch)
         }
+    }
+
+    /// The same draft composed the same way, when the panel is prepared and again when its email leaves.
+    func composeDraft(_ id: MessageID, messageID: String?, flags: [String: Value], policy: Policy? = nil) async throws -> OutgoingMessage {
+        var tools = self
+        if let policy { tools.policy = policy }
+        let draft = try await backend.draftForSending(id)
+        return try await tools.compose(flags, base: draft.message, baseFiles: draft.files, messageID: messageID)
+    }
+
+    /// Reads every draft for the panel, keeping only what the panel shows and each email's digest, then asks the user
+    /// and queues what they approved. An email is composed again from its draft when it leaves, and leaves only if
+    /// it is still the one approved.
+    func prepareAndSend(batch id: String, spacing: TimeInterval, start: Date?, flags: [String: Value]) async {
+        guard let opened = await board.batch(id) else { return }
+        let contacted = ContactCache()
+        var items: [BatchItem] = []
+        var prepared: [(index: Int, draft: MessageID, item: BatchItem, messageID: String)] = []
+        for entry in opened.items where entry.status == .waiting {
+            if Task.isCancelled { return }
+            guard let draft = entry.draft else { continue }
+            do {
+                let message = try await composeDraft(draft, messageID: nil, flags: flags)
+                try checkRecipients(message)
+                let request = try await approvalRequest(message, tool: .sendDrafts, context: "A draft saved in Drafts", extra: [:], contacted: contacted)
+                let item = BatchItem(message: message, badges: request.badges, context: request.context)
+                items.append(item)
+                prepared.append((entry.index, draft, item, message.messageID))
+                await board.describe(id, entry.index, recipients: item.recipients.joined(separator: ", "), subject: item.subject)
+            } catch is CancellationError {
+                return
+            } catch {
+                await board.set(id, entry.index, .refused, Self.detail(error))
+            }
+        }
+        guard !items.isEmpty else { return }
+        let schedule = BatchSchedule(
+            start: start, spacing: spacing, sendsPerHour: policy.sendsPerHour, sendsPerDay: policy.sendsPerDay,
+            finish: SendBudget.finish(count: items.count, start: start ?? Date(), spacing: spacing, policy: policy, sends: ledger.recentSends())
+        )
+        await board.set(id, phase: .waiting(until: nil, reason: "The approval panel is open on the Mac: \(items.count) emails wait for the user's answer."))
+        let request = BatchApprovalRequest(tool: ToolID.sendDrafts.rawValue, client: client, items: items, schedule: schedule)
+        items = []
+        let outcome = await desk.reviewBatch(request)
+        guard case .approved(let claims) = outcome else {
+            let decision: BatchBoard.Decision = switch outcome {
+            case .rejected(let reason): .rejected(reason: reason)
+            case .notAuthenticated: .notAuthenticated
+            default: .expired
+            }
+            await board.decide(id, decision)
+            return
+        }
+        var queue: [QueuedEmail] = []
+        for entry in prepared {
+            if let claim = claims[entry.item.id] {
+                queue.append(QueuedEmail(index: entry.index, draft: entry.draft, claim: claim, messageID: entry.messageID,
+                                         recipients: entry.item.recipients, sender: entry.item.from.email.lowercased()))
+            } else {
+                await board.set(id, entry.index, .skipped, "The user left this email out; the draft stays in Drafts.")
+            }
+        }
+        let estimate = SendBudget.finish(count: queue.count, start: start ?? Date(), spacing: spacing, policy: policy, sends: ledger.recentSends())
+        await board.decide(id, .approved, estimate: estimate)
+        let account = (try? await backend.ownAddress().email.lowercased()) ?? ""
+        let live = livePolicy
+        let tools = self
+        await Self.sendQueue(
+            queue, batch: id, board: board, ledger: ledger, policy: live, account: account, spacing: spacing,
+            start: start, client: client,
+            recompose: { draft, messageID in try await tools.composeDraft(draft, messageID: messageID, flags: flags, policy: live()) },
+            send: { approved in try await tools.backend.send(approved) },
+            deleteDraft: { draft in try await tools.backend.deleteDraft(draft) }
+        )
     }
 
     /// The draft ids given, or every draft a create_drafts batch saved.
@@ -397,52 +437,74 @@ extension SendTools {
         return nil
     }
 
-    private func sendsAnswer(
-        _ batch: BatchBoard.Batch?, ids: [MessageID], statuses: [(status: BatchBoard.ItemStatus, detail: String)]
-    ) -> CallTool.Result {
-        let sent = statuses.filter { $0.status == .sent }.count
-        let waiting = statuses.filter { $0.status == .waiting }.count
+    private func sendsAnswer(_ batch: BatchBoard.Batch) -> CallTool.Result {
+        let sent = batch.count(.sent)
+        let waiting = batch.count(.waiting) + batch.count(.sending)
         var lines: [String]
-        if let batch, !batch.isOver {
-            let approved = sent + waiting + statuses.filter { $0.status == .failed }.count
+        switch (batch.decision, batch.isOver) {
+        case (.pending, false):
+            let read = batch.items.filter { !$0.recipients.isEmpty || $0.status != .waiting }.count
+            lines = [
+                read < batch.items.count
+                    ? "Postern is reading the drafts for the approval panel (\(read) of \(batch.items.count)). Nothing is sent before the user approves them with Touch ID."
+                    : "The approval panel is open on the Mac with \(batch.items.count - batch.count(.refused)) emails. Nothing is sent before the user approves them with Touch ID.",
+                "batch_status with id \"\(batch.id)\" tells what the user decided and follows the sending. These drafts are held by this batch: do not call send_drafts for them again.",
+            ]
+        case (_, false):
             var plan = "The others leave one every \(Self.seconds(batch.spacing)) within the user's limits (\(livePolicy().sendsPerHour) per hour, \(livePolicy().sendsPerDay) per day)"
             if let start = batch.start, start > Date() { plan += ", starting \(Self.dateText(start))" }
             if let estimate = batch.estimate { plan += "; the last should leave around \(Self.dateText(estimate))" }
             lines = [
-                "The user approved \(approved) emails with Touch ID. \(sent) sent so far. \(plan).",
+                "The user approved \(sent + waiting + batch.count(.failed) + batch.count(.uncertain)) emails with Touch ID. \(sent) sent so far. \(plan).",
                 "batch_status with id \"\(batch.id)\" follows them; cancel_batch stops the ones not sent yet, and their drafts stay in Drafts.",
             ]
-        } else {
-            lines = [sent == 0 ? "Nothing was sent." : "The user approved the batch with Touch ID; \(sent) of \(ids.count) emails were sent."]
+        default:
+            lines = [sent == 0 ? "Nothing was sent." : "The user approved the batch with Touch ID; \(sent) of \(batch.items.count) emails were sent."]
         }
-        let listed = ids.indices.filter { index in
-            ids.count <= Self.listedItems || (statuses[index].status != .sent && statuses[index].status != .waiting)
+        let listed = batch.items.filter { item in
+            batch.items.count <= Self.listedItems || (item.status != .sent && item.status != .waiting)
         }.prefix(Self.listedItems)
-        lines += listed.map { "\(ids[$0].opaque): \(statuses[$0].status.rawValue). \(statuses[$0].detail)" }
-        var fields: [String: Value] = [
-            "sent": .int(sent), "waiting": .int(waiting),
-            "results": .array(listed.map { index in
-                .object(["id": .string(ids[index].opaque), "status": .string(statuses[index].status.rawValue),
-                         "detail": .string(statuses[index].detail)])
+        lines += listed.map { "\($0.draft?.opaque ?? "\($0.index + 1)"): \($0.status.rawValue). \($0.detail)" }
+        return result(lines.joined(separator: "\n"), [
+            "batch": .string(batch.id), "sent": .int(sent), "waiting": .int(waiting),
+            "decision": .string(Self.decisionText(batch.decision)),
+            "results": .array(listed.map { item in
+                .object(["id": .string(item.draft?.opaque ?? ""), "status": .string(item.status.rawValue), "detail": .string(item.detail)])
             }),
-        ]
-        if let batch { fields["batch"] = .string(batch.id) }
-        return result(lines.joined(separator: "\n"), fields)
+        ])
     }
 
+    static func decisionText(_ decision: BatchBoard.Decision) -> String {
+        switch decision {
+        case .pending: "pending"
+        case .approved: "approved"
+        case .rejected: "rejected"
+        case .notAuthenticated: "not_authenticated"
+        case .expired: "expired"
+        }
+    }
+
+    /// An approved email waiting for its turn: its claim and how to compose it again, not its bytes.
     struct QueuedEmail: Sendable {
         let index: Int
-        let draft: MessageID?
-        let message: ApprovedMessage
+        let draft: MessageID
+        let claim: ApprovedClaim
+        let messageID: String
+        let recipients: [String]
+        let sender: String
     }
 
     /// Sends the approved emails in order, each after the pause, the start time and room in the limits; holds while
     /// Postern is paused, send_drafts is off or Bridge cannot take mail. Before each email it checks again that its
-    /// recipients and sender are still allowed and that its draft is still in Drafts (deleting the draft holds the
-    /// email back), reserves its place in the limits, and dates it with the time it leaves.
+    /// recipients and sender are still allowed, composes it again from its draft and sends it only if it is the very
+    /// email the user approved (a draft deleted or changed since holds its email back), reserves its place in the
+    /// limits, and dates it with the time it leaves.
     static func sendQueue(
-        _ queue: [QueuedEmail], batch id: String, board: BatchBoard, backend: any MailBackend, ledger: any SendLedger,
-        policy: @escaping @Sendable () -> Policy, account: String, spacing: TimeInterval, start: Date?, client: String
+        _ queue: [QueuedEmail], batch id: String, board: BatchBoard, ledger: any SendLedger,
+        policy: @escaping @Sendable () -> Policy, account: String, spacing: TimeInterval, start: Date?, client: String,
+        recompose: @escaping @Sendable (MessageID, String) async throws -> OutgoingMessage,
+        send: @escaping @Sendable (ApprovedMessage) async throws -> Void,
+        deleteDraft: @escaping @Sendable (MessageID) async throws -> Void
     ) async {
         let tool = ToolID.sendDrafts.rawValue
         do {
@@ -466,32 +528,37 @@ extension SendTools {
                 while true {
                     try await waitForTurn(id, board: board, ledger: ledger, policy: policy)
                     let live = policy()
-                    if let barred = email.message.recipients.first(where: { !live.mayReceive($0) }) {
+                    if let barred = email.recipients.first(where: { !live.mayReceive($0) }) {
                         await board.set(id, email.index, .refused, "\(barred) is no longer among the user's approved recipients; the draft stays in Drafts.")
                         await board.record(client, tool, PosternErrorCode.recipientNotAllowed.rawValue)
                         break
                     }
-                    let sender = email.message.envelopeFrom.lowercased()
-                    guard sender == account || live.senderAddresses.contains(sender) else {
-                        await board.set(id, email.index, .refused, "\(sender) is no longer one of the user's sender addresses; the draft stays in Drafts.")
+                    guard email.sender == account || live.senderAddresses.contains(email.sender) else {
+                        await board.set(id, email.index, .refused, "\(email.sender) is no longer one of the user's sender addresses; the draft stays in Drafts.")
                         await board.record(client, tool, PosternErrorCode.senderNotAllowed.rawValue)
                         break
                     }
-                    if let draft = email.draft {
-                        do {
-                            guard try await backend.draftExists(draft) else {
-                                await board.set(id, email.index, .skipped, "Its draft was deleted from Drafts, so this email did not leave.")
-                                break
-                            }
-                        } catch let error as PosternError where holdingCodes.contains(error.code) {
-                            try await hold(error)
-                            continue
-                        } catch is CancellationError {
-                            throw CancellationError()
-                        } catch {
-                            await board.set(id, email.index, .failed, detail(error) + " The draft stays in Drafts.")
+                    let approved: ApprovedMessage
+                    do {
+                        let message = try await recompose(email.draft, email.messageID)
+                        guard let redeemed = email.claim.redeem(message) else {
+                            await board.set(id, email.index, .refused, "The draft changed after the user approved it, so this email did not leave; the draft stays in Drafts.")
+                            await board.record(client, tool, "draft_changed")
                             break
                         }
+                        approved = redeemed
+                    } catch let error as PosternError where error.code == .notFound || error.code == .staleID {
+                        await board.set(id, email.index, .skipped, "Its draft is no longer in Drafts, so this email did not leave.")
+                        break
+                    } catch let error as PosternError where holdingCodes.contains(error.code) {
+                        try await hold(error)
+                        continue
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        await board.set(id, email.index, .failed, detail(error) + " The draft stays in Drafts.")
+                        await board.record(client, tool, (error as? PosternError)?.code.rawValue ?? "failed")
+                        break
                     }
                     // The place in the limits is taken in the same step as it is checked: no other send can take it.
                     let now = Date()
@@ -501,13 +568,11 @@ extension SendTools {
                         break
                     }
                     do {
-                        try await backend.send(email.message.leaving(at: now))
+                        try await send(approved.leaving(at: now))
                         last = now
-                        var detail = "Sent to \(email.message.recipients.joined(separator: ", "))."
-                        if let draft = email.draft {
-                            do { try await backend.deleteDraft(draft) } catch {
-                                detail += " Its draft could not be removed from Drafts: delete it there so it is not sent twice."
-                            }
+                        var detail = "Sent to \(email.recipients.joined(separator: ", "))\(SendTools.withFiles(approved.message))."
+                        do { try await deleteDraft(email.draft) } catch {
+                            detail += " Its draft could not be removed from Drafts: delete it there so it is not sent twice."
                         }
                         await board.set(id, email.index, .sent, detail)
                         await board.record(client, tool, "ok")
@@ -704,13 +769,23 @@ extension SendTools {
     }
 }
 
-/// The outbox files a batch has read, by name, so each is read once and its bytes are shared by every draft.
+/// The files a batch has read, by name, so a file shared by many drafts is read once and its bytes are shared. It
+/// keeps 128 MB at most: past that, a file is read again each time, so thousands of distinct files never fill memory.
 final class AttachmentCache: @unchecked Sendable {
+    static let budget = 128_000_000
     private let lock = NSLock()
     private var files: [String: OutgoingAttachment] = [:]
+    private var bytes = 0
 
     func file(_ name: String) -> OutgoingAttachment? { lock.withLock { files[name] } }
-    func keep(_ file: OutgoingAttachment, as name: String) { lock.withLock { files[name] = file } }
+
+    func keep(_ file: OutgoingAttachment, as name: String) {
+        lock.withLock {
+            guard files[name] == nil, bytes + file.data.count <= Self.budget else { return }
+            files[name] = file
+            bytes += file.data.count
+        }
+    }
 }
 
 /// Whether Sent holds mail to an address, asked once per address in a batch.
@@ -720,20 +795,4 @@ final class ContactCache: @unchecked Sendable {
 
     func known(_ email: String) -> Bool? { lock.withLock { answers[email] } }
     func remember(_ email: String, _ known: Bool) { lock.withLock { answers[email] = known } }
-}
-
-/// Identical attachments of many drafts held once in memory: a CV attached to 500 drafts takes the room of one.
-final class DataPool: @unchecked Sendable {
-    private let lock = NSLock()
-    private var pool: [String: Data] = [:]
-
-    func intern(_ file: OutgoingAttachment) -> OutgoingAttachment {
-        let key = file.sha256
-        let data = lock.withLock { () -> Data in
-            if let known = pool[key] { return known }
-            pool[key] = file.data
-            return file.data
-        }
-        return (try? OutgoingAttachment.make(filename: file.filename, data: data, mimeType: file.mimeType)) ?? file
-    }
 }

@@ -43,17 +43,62 @@ public enum ApprovalIntent: Sendable, Equatable {
     case saveAsDraft
 }
 
-/// Several emails reviewed on one panel and approved with one Touch ID. Each keeps its own request, and so its own
-/// digest: approving the batch approves those exact messages, never others.
+/// A file as a batch panel lists it: its name, type and size, and the digest of its bytes.
+public struct FileSummary: Sendable, Hashable {
+    public let filename: String
+    public let mimeType: String
+    public let size: Int
+    public let sha256: String
+}
+
+/// One email of a batch as its panel shows it: who it goes to, from whom, its text and its files, but not the bytes
+/// of the files. It is made from the whole message and keeps that message's digest, so a batch of thousands of
+/// emails is reviewed without holding thousands of messages in memory.
+public struct BatchItem: Sendable, Identifiable {
+    public let id = UUID()
+    public let from: Address
+    public let to: [Address]
+    public let cc: [Address]
+    public let bcc: [Address]
+    /// Everyone the email reaches, Bcc included.
+    public let recipients: [String]
+    public let subject: String
+    /// The whole text that leaves.
+    public let text: String
+    public let files: [FileSummary]
+    public let badges: [String: [ApprovalBadge]]
+    public let context: String?
+    /// The words announcing a file when the email has none.
+    public let missingAttachment: String?
+    public let digest: String
+
+    public init(message: OutgoingMessage, badges: [String: [ApprovalBadge]], context: String?) {
+        from = message.from
+        to = message.to
+        cc = message.cc
+        bcc = message.bcc
+        recipients = message.envelopeRecipients
+        subject = message.subject
+        text = message.fullText
+        files = message.attachments.map { FileSummary(filename: $0.filename, mimeType: $0.mimeType, size: $0.data.count, sha256: $0.sha256) }
+        self.badges = badges
+        self.context = context
+        missingAttachment = message.missingAttachment
+        digest = message.digest
+    }
+}
+
+/// Several emails reviewed on one panel and approved with one Touch ID. Each keeps its own digest: approving the
+/// batch approves those exact messages, never others.
 public struct BatchApprovalRequest: Sendable, Identifiable {
     public let id = UUID()
     public let tool: String
     public let client: String
-    public let items: [ApprovalRequest]
+    public let items: [BatchItem]
     /// When and how fast the emails leave.
     public let schedule: BatchSchedule?
 
-    public init(tool: String, client: String, items: [ApprovalRequest], schedule: BatchSchedule? = nil) {
+    public init(tool: String, client: String, items: [BatchItem], schedule: BatchSchedule? = nil) {
         self.tool = tool
         self.client = client
         self.items = items
@@ -87,8 +132,8 @@ public enum BatchIntent: Sendable, Equatable {
 }
 
 public enum BatchOutcome: Sendable {
-    /// The approved emails, keyed by the id of their request. The ones the person unticked are absent.
-    case approved([UUID: ApprovedMessage])
+    /// The approved emails, keyed by the id of their item. The ones the person unticked are absent.
+    case approved([UUID: ApprovedClaim])
     case rejected(reason: String?)
     case expired
     case notAuthenticated
@@ -185,6 +230,19 @@ public struct ApprovedMessage: Sendable {
     public var rfc822: Data { message.rfc822(includeBcc: false) }
 }
 
+/// An email of a batch the user approved, kept as its digest alone. `redeem` gives back an `ApprovedMessage` for
+/// that exact message, composed again when its turn comes, and for no other. Only `ApprovalDesk` makes one.
+public struct ApprovedClaim: Sendable, Hashable {
+    public let digest: String
+
+    init(digest: String) { self.digest = digest }
+
+    /// The approved email, if `message` is the one the user approved: same bytes but the Date, same envelope.
+    public func redeem(_ message: OutgoingMessage) -> ApprovedMessage? {
+        message.digest == digest ? ApprovedMessage(message) : nil
+    }
+}
+
 public enum ApprovalOutcome: Sendable {
     case approved(ApprovedMessage)
     case rejected(reason: String?)
@@ -269,9 +327,7 @@ public actor ApprovalDesk {
     public func reviewBatch(_ request: BatchApprovalRequest) async -> BatchOutcome {
         await acquire()
         defer { release() }
-        guard !request.items.isEmpty, request.items.allSatisfy({ $0.digest == $0.message.digest }) else {
-            return .rejected(reason: "The messages changed.")
-        }
+        guard !request.items.isEmpty else { return .rejected(reason: "Nothing to send.") }
         let presenter = self.presenter
         let intent = await choice(within: batchTimeout) { deadline in await presenter.presentBatch(request, deadline: deadline) }
         switch intent {
@@ -280,7 +336,7 @@ public actor ApprovalDesk {
             guard !approved.isEmpty else { return .rejected(reason: nil) }
             let reason = approved.count == 1 ? "send 1 email" : "send \(approved.count) emails"
             guard await authenticator.confirm(reason: reason) else { return .notAuthenticated }
-            return .approved(Dictionary(uniqueKeysWithValues: approved.map { ($0.id, ApprovedMessage($0.message)) }))
+            return .approved(Dictionary(uniqueKeysWithValues: approved.map { ($0.id, ApprovedClaim(digest: $0.digest)) }))
         case .reject(let reason)?:
             return .rejected(reason: reason)
         case nil:
