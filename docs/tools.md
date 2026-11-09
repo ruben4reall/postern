@@ -77,8 +77,8 @@ nobody else can be written to.
 | `send_message` | `to`, `cc`, `bcc`, `from`, `subject`, `body` (plain text), files (`attachments`, `inline_attachments`, `email_attachments`), `no_attachment` | Writes and sends a new email. |
 | `reply_to_message` | `id`, `body`, `reply_all` (default `false`), `from`, files, `no_attachment` | Replies above a quote of the original, with files if given. Recipients come from the original; it leaves from your address the original was sent to, unless `from` says otherwise. |
 | `forward_message` | `id`, `to`, `note`, `include_attachments` (default `true`), `from`, files, `no_attachment` | Forwards a message with an optional note, its attachments and any files given. |
-| `send_draft` | `id`, `no_attachment` | Sends a draft as it is, attachments included, then removes it from Drafts. |
-| `send_drafts` | `ids` (1 to 5,000 draft ids) or `batch` (a `create_drafts` batch id); `spacing_seconds` (1 to 3,600); `start_at`; `no_attachment` | Sends up to 5,000 drafts after one panel and one Touch ID, one by one within your limits, and removes each one sent from Drafts. The batch exists from the first moment: the call answers within about 45 seconds, with the outcome, or with the `batch` id and `decision` (`pending` while the drafts are read or the panel is open, then `approved`). Outcomes per id: `sent`, `waiting`, `sending`, `skipped` when you unticked it or deleted its draft, `refused` with the reason (another batch holds it, or the draft changed after you approved it), `failed`, or `uncertain` when the connection broke as Bridge took it. A draft already held or sent by another batch is refused, so no email leaves twice, even when an app calls again after a timeout. |
+| `send_draft` | `id` | Sends a draft as it is, attachments included, then removes it from Drafts. A draft a batch holds is refused (`duplicate`). |
+| `send_drafts` | `ids` (1 to 5,000 draft ids) or `batch` (a `create_drafts` batch id); `spacing_seconds` (1 to 3,600); `start_at` | Sends up to 5,000 drafts after one panel and one Touch ID, one by one within your limits, and removes each one sent from Drafts. The batch exists from the first moment: the call answers within about 45 seconds, with the outcome, or with the `batch` id and `decision` (`pending` while the drafts are read or the panel is open, then `approved`). Outcomes per id: `sent`, `waiting`, `sending`, `skipped` when you unticked it or deleted its draft, `refused` with the reason (another batch holds it, or the draft changed after you approved it), `failed`, or `uncertain` when the connection broke as Bridge took it. A draft already held or sent by another batch is refused, so no email leaves twice, even when an app calls again after a timeout. |
 | `cancel_batch` | `id` | Stops a batch: the emails not sent yet stay as drafts. On whenever `create_drafts` or `send_drafts` is. |
 
 Recipients are addresses such as `anna@example.com` or `Anna <anna@example.com>`, at most 50 in all.
@@ -97,8 +97,11 @@ Files come three ways, at most 20 files and 20 MB in all per email:
 An email whose subject or text announces a file (`ci-joint`, `pièce jointe`, `en PJ`, `attached`, `anbei`,
 `adjunto`, `in allegato`, `em anexo`, `bijlage` and their variants) and carries none is refused with
 `attachment_missing` before anything is saved or shown: the app forgot the files. It passes `no_attachment: true`
-when the text means it; the panel then says so in orange. The quoted original of a reply is not checked. Every
-answer names the files that left or were saved, with their sizes.
+when the text means it; the panel then says so in orange. Only what the app wrote is read: not the subject a reply
+or forward inherits, not quoted lines or what follows a quote header, not confidentiality footers. A draft is sent
+as it is: its panel marks the text that announces a missing file. Every answer says how many files left or were
+saved and their size; their names, which can come from an email, are listed apart, marked untrusted, and in the
+fields as `untrusted_name`.
 
 On the panel, you can also choose **Keep as Draft**: the email is saved in Drafts instead, and the client hears so.
 
@@ -170,6 +173,7 @@ When Postern refuses, the client gets a code and a sentence it can repeat to you
 | `send_uncertain` | The connection to Bridge broke while the email was handed over; check Sent before sending it again. |
 | `attachment_missing` | The text announces a file and none is attached; attach it, or pass `no_attachment: true`. |
 | `attachments_lost` | Bridge saved a draft without all its files; the draft was removed and nothing was saved. |
+| `duplicate` | The same email already waits for you on the panel, left in the last ten minutes, or its draft is held by a batch. |
 | `approval_rejected` | You chose not to send or delete, or Touch ID did not pass. |
 | `approval_timeout` | Nobody answered the panel within two minutes. |
 | `bridge_unreachable` | Proton Mail Bridge is not running or not answering. |

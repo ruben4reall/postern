@@ -63,7 +63,8 @@ public struct BatchItem: Sendable, Identifiable {
     /// Everyone the email reaches, Bcc included.
     public let recipients: [String]
     public let subject: String
-    /// The whole text that leaves.
+    /// The start of the text that leaves, as the panel shows it: 2,000 characters at most, so thousands of emails
+    /// do not fill memory. The digest covers all of it.
     public let text: String
     public let files: [FileSummary]
     public let badges: [String: [ApprovalBadge]]
@@ -79,7 +80,7 @@ public struct BatchItem: Sendable, Identifiable {
         bcc = message.bcc
         recipients = message.envelopeRecipients
         subject = message.subject
-        text = message.fullText
+        text = String(message.fullText.prefix(2000))
         files = message.attachments.map { FileSummary(filename: $0.filename, mimeType: $0.mimeType, size: $0.data.count, sha256: $0.sha256) }
         self.badges = badges
         self.context = context

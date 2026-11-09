@@ -18,13 +18,19 @@ import Testing
     @Test(arguments: [
         "Je souhaite rejoindre votre équipe.", "Mon attachement à votre entreprise est fort.", "Un joint venture à Genève.",
         "Merci pour votre réponse.", "The attachment style of the toddler", "Je me suis attaché à ce projet.",
+        "Je joins Marc en copie.", "Subdirector Adjunto de ventas", "Comme prévu en annexe 2 du contrat.",
+        "Merci.\n\nCe message et ses pièces jointes éventuelles sont confidentiels.",
+        "Thanks!\nThis email and any attachments are confidential.",
+        "Merci, bien reçu.\n\nLe 3 nov. 2026 à 10:00, Anna a écrit :\n> Vous trouverez ci-joint la facture.",
+        "Noted.\n\nOn Mon, 3 Nov 2026, Anna wrote:\n> Please find the invoice attached.",
+        "Bien reçu.\n> Ci-joint le devis.",
     ])
     func leavesOrdinaryTextAlone(_ text: String) {
         if text.hasPrefix("The attachment") {
             // "attachment" alone is announced: the client says no_attachment when it means something else.
-            #expect(AttachmentMention.found(in: text) != nil)
+            #expect(AttachmentMention.found(in: AttachmentMention.ownText(text)) != nil)
         } else {
-            #expect(AttachmentMention.found(in: text) == nil, "\(text)")
+            #expect(AttachmentMention.found(in: AttachmentMention.ownText(text)) == nil, "\(text)")
         }
     }
 

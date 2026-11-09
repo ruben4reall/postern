@@ -30,7 +30,8 @@ final class CoreState: @unchecked Sendable {
         store: SealedBatchStore(
             folder: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
                 .appendingPathComponent("Postern/Batches", isDirectory: true),
-            key: { CoreState.batchKey() }
+            key: { CoreState.batchKey() },
+            index: KeychainBatchIndex(vault: KeychainVault(accessGroup: CoreState.accessGroup))
         )
     )
     private let lock = NSLock()
@@ -232,6 +233,20 @@ final class KeychainLedger: SendLedger, @unchecked Sendable {
         }
         memory = merged
         return (merged, readable)
+    }
+}
+
+/// The digests of the sealed batch files, in Postern's Keychain group: no other program can change them.
+struct KeychainBatchIndex: BatchIndex {
+    let vault: any SecretStore
+
+    func read() -> [String: String]? {
+        do { return try vault.read(.batchIndex, as: [String: String].self) ?? [:] } catch { return nil }
+    }
+
+    @discardableResult
+    func write(_ index: [String: String]) -> Bool {
+        (try? vault.write(index, for: .batchIndex)) != nil
     }
 }
 

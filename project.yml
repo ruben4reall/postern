@@ -68,12 +68,19 @@ targets:
           - D8HG34L8XK.ch.rubencatalao.postern
         keychain-access-groups:
           - $(AppIdentifierPrefix)ch.rubencatalao.postern
-        # The Connect buttons: the configuration files of Claude Code, Claude Desktop and Codex, and any other
-        # Claude Code profile folder the user picks.
+        # The Connect buttons: each app's settings file by its exact path, never the folder around it, where some
+        # apps keep their sign-in tokens (~/.codex/auth.json, ~/.gemini/oauth_creds.json). Postern rewrites these
+        # files in place. Any other Claude Code profile folder is one the user picks.
         com.apple.security.temporary-exception.files.home-relative-path.read-write:
           - /.claude.json
-          - /Library/Application Support/Claude/
-          - /.codex/
+          - /Library/Application Support/Claude/claude_desktop_config.json
+          - /.codex/config.toml
+          - /.cursor/mcp.json
+          - /Library/Application Support/Code/User/mcp.json
+          - /.codeium/windsurf/mcp_config.json
+          - /.gemini/settings.json
+          - /.kiro/settings/mcp.json
+          - /Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json
         com.apple.security.files.user-selected.read-write: true
         # Saved attachments and the outbox, both in Downloads › Postern.
         com.apple.security.files.downloads.read-write: true

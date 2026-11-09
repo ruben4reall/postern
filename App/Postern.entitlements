@@ -19,8 +19,14 @@
 	<key>com.apple.security.temporary-exception.files.home-relative-path.read-write</key>
 	<array>
 		<string>/.claude.json</string>
-		<string>/Library/Application Support/Claude/</string>
-		<string>/.codex/</string>
+		<string>/Library/Application Support/Claude/claude_desktop_config.json</string>
+		<string>/.codex/config.toml</string>
+		<string>/.cursor/mcp.json</string>
+		<string>/Library/Application Support/Code/User/mcp.json</string>
+		<string>/.codeium/windsurf/mcp_config.json</string>
+		<string>/.gemini/settings.json</string>
+		<string>/.kiro/settings/mcp.json</string>
+		<string>/Library/Application Support/Code/User/globalStorage/saoudrizwan.claude-dev/settings/cline_mcp_settings.json</string>
 	</array>
 	<key>com.apple.security.temporary-exception.mach-lookup.global-name</key>
 	<array>

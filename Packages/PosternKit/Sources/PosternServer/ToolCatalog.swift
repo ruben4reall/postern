@@ -350,7 +350,7 @@ public enum ToolCatalog {
             Tool(
                 name: id.rawValue, title: "Send a draft",
                 description: "Sends a draft as it is, attachments included, after the user approves it on Postern's panel, then removes it from Drafts.",
-                inputSchema: schema(["id": .object(["type": "string", "description": "Draft id."]), "no_attachment": noAttachment], required: ["id"]),
+                inputSchema: schema(["id": .object(["type": "string", "description": "Draft id."])], required: ["id"]),
                 annotations: sendAnnotations, _meta: askEveryTime
             )
         case .sendDrafts:
@@ -378,7 +378,6 @@ public enum ToolCatalog {
                         "type": "string",
                         "description": "When the first email leaves, within 30 days, such as 2026-11-10T08:00 (the Mac's time zone). Default now.",
                     ]),
-                    "no_attachment": noAttachment,
                 ]),
                 annotations: sendAnnotations, _meta: askEveryTime
             )

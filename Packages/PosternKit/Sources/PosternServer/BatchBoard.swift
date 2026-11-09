@@ -78,6 +78,12 @@ public actor BatchBoard {
     /// Batches found on disk at launch, until the user resumes them.
     private var restored: [String: BatchRecord] = [:]
     private var dirty: Set<String> = []
+    /// The batches written whole in this run: from then on, only their statuses are written.
+    private var written: Set<String> = []
+    /// Interrupted batches between the Resume click and Touch ID.
+    private var resuming: Set<String> = []
+    /// Drafts saved by drafts batches, by fingerprint, so a client that calls again does not save them twice.
+    private var savedDrafts: [String: (batch: String, draft: MessageID)] = [:]
     /// Single emails waiting for the user's answer, and those sent in the last ten minutes, by fingerprint.
     private var pendingSingles: Set<String> = []
     private var recentSingles: [String: Date] = [:]
@@ -130,8 +136,19 @@ public actor BatchBoard {
         return restored[id]
     }
 
+    /// Takes an interrupted batch to resume it: a second click while Touch ID is asked gets nothing.
+    func beginResume(_ id: String) -> BatchRecord? {
+        guard batches[id]?.interrupted == true, !(batches[id]?.isOver ?? true), !resuming.contains(id),
+              let record = restored[id] else { return nil }
+        resuming.insert(id)
+        return record
+    }
+
+    func endResume(_ id: String) { resuming.remove(id) }
+
     /// An approved queue, kept on disk from now on.
     func keep(_ id: String, queue: [SendTools.QueuedEmail], noAttachment: Bool) {
+        guard let batch = batches[id], !batch.isOver else { return }
         queues[id] = (queue, noAttachment)
         restored[id] = nil
         if var batch = batches[id], batch.interrupted {
@@ -162,14 +179,12 @@ public actor BatchBoard {
     }
 
     private func persist() {
-        guard let store else { dirty = []; return }
         for id in dirty {
-            if batches[id]?.isOver ?? true {
-                store.delete(id)
-                queues[id] = nil
+            if restored[id] != nil, batches[id]?.isOver ?? true {
+                store?.delete(id)
                 restored[id] = nil
-            } else if let record = record(id) {
-                store.save(record)
+            } else {
+                _ = persistNow(id)
             }
         }
         dirty = []
@@ -194,8 +209,20 @@ public actor BatchBoard {
         }
         batch.phase = .cancelled
         batches[id] = batch
-        touch(id)
+        _ = persistNow(id)
+        restored[id] = nil
+        store?.delete(id)
+        notify()
         return batch
+    }
+
+    // MARK: Drafts saved
+
+    /// The draft a drafts batch already saved for the same email, with that batch.
+    func savedDraft(_ fingerprint: String) -> (batch: String, draft: MessageID)? { savedDrafts[fingerprint] }
+
+    func rememberSaved(_ fingerprint: String, batch: String, draft: MessageID) {
+        savedDrafts[fingerprint] = (batch, draft)
     }
 
     // MARK: Single emails
@@ -249,8 +276,10 @@ public actor BatchBoard {
         return id
     }
 
-    /// Runs the work of a batch; the batch is finished when the work returns, unless it was cancelled.
+    /// Runs the work of a batch; the batch is finished when the work returns, unless it was cancelled. A batch
+    /// already running or over gets no second worker.
     func run(_ id: String, _ work: @escaping @Sendable () async -> Void) {
+        guard tasks[id] == nil, let batch = batches[id], !batch.isOver else { return }
         tasks[id] = Task {
             await work()
             self.finish(id)
@@ -261,16 +290,54 @@ public actor BatchBoard {
         batches[id]?.items.first { $0.index == index }?.status
     }
 
-    /// Takes an email waiting in a running batch for sending; false when it was cancelled or is no longer waiting.
-    func claim(_ id: String, _ index: Int) -> Bool {
+    enum Claim: Equatable {
+        case claimed
+        /// Cancelled, or no longer waiting.
+        case gone
+        /// The batch could not be written to disk first: sending now could, after a crash, send it again.
+        case unsaved
+    }
+
+    /// Takes an email waiting in a running batch for sending. A kept batch is written to disk before the email goes
+    /// to Bridge, so a crash at any moment brings it back as uncertain, never as waiting.
+    func claim(_ id: String, _ index: Int) -> Claim {
         guard var batch = batches[id], !batch.isOver,
               let position = batch.items.firstIndex(where: { $0.index == index }), batch.items[position].status == .waiting else {
-            return false
+            return .gone
         }
         batch.items[position].status = .sending
         batches[id] = batch
-        touch(id)
+        guard persistNow(id) else {
+            batch.items[position].status = .waiting
+            batches[id] = batch
+            return .unsaved
+        }
+        notify()
+        return .claimed
+    }
+
+    /// Writes a kept batch at once, whole the first time and then only its statuses; true when it is written or
+    /// nothing needs keeping.
+    private func persistNow(_ id: String) -> Bool {
+        guard let store, queues[id] != nil else { return true }
+        dirty.remove(id)
+        guard let batch = batches[id], !batch.isOver else {
+            store.delete(id)
+            queues[id] = nil
+            written.remove(id)
+            return true
+        }
+        if written.contains(id) {
+            return store.saveStatuses(id, batch.items.map(\.status.rawValue))
+        }
+        guard let record = record(id), store.save(record) else { return false }
+        written.insert(id)
         return true
+    }
+
+    /// Writes every batch waiting to be written, as Postern quits.
+    public func flush() {
+        persist()
     }
 
     /// Puts back an email that did not reach Bridge: waiting again, or cancelled if the batch was stopped meanwhile.
@@ -300,7 +367,13 @@ public actor BatchBoard {
         batch.items[position].detail = detail
         if let draft { batch.items[position].draft = draft }
         batches[id] = batch
-        touch(id)
+        // An email that left, may have left, or will not leave is written at once, before the next one goes.
+        if [.sent, .uncertain, .cancelled, .refused, .failed, .skipped].contains(status), queues[id] != nil {
+            _ = persistNow(id)
+            notify()
+        } else {
+            touch(id)
+        }
     }
 
     /// Names an email once its draft is read: who it goes to and its subject.
@@ -370,11 +443,11 @@ public actor BatchBoard {
         notifying = true
         Task {
             try? await Task.sleep(for: .milliseconds(250))
-            self.flush()
+            self.deliver()
         }
     }
 
-    private func flush() {
+    private func deliver() {
         notifying = false
         persist()
         onChange()

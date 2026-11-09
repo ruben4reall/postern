@@ -61,7 +61,7 @@ enum ClientConnector {
             }
             // Most of these files sit in folders where the sandbox allows that one file only: no temporary file can
             // be created beside it, so it is rewritten in place, and restored if that fails.
-            let atomic = target.bookmark != nil || [.claudeDesktop, .codex].contains(target.kind)
+            let atomic = target.bookmark != nil
             do {
                 try updated.write(to: target.fileURL, options: atomic ? .atomic : [])
             } catch {

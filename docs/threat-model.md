@@ -88,9 +88,16 @@ reads Bridge's own window; a compromised Proton account.
 - **A batch kept across restarts.** An approved send batch is written to disk as it goes, so one of thousands of
   emails that takes days can survive a restart. Each file is sealed with ChaCha20-Poly1305 under a 256-bit key kept
   in Postern's Keychain group: no other program can read who the emails go to, and a changed file does not open and
-  is dropped. A batch found at launch never resumes on its own: it waits for **Resume with Touch ID** in the window,
-  and the desk gives back the claims only then. An email that was being handed to Bridge when Postern stopped comes
-  back `uncertain` and is never sent again.
+  is dropped. The digest of each batch's latest files is kept in the Keychain too, so an older copy put back (with
+  emails since sent, cancelled or uncertain shown as waiting) or the file of a batch that ended is refused. An email
+  is written as `sending` before it goes to Bridge, so a crash at any moment brings it back `uncertain`, never sent
+  again. A batch found at launch never resumes on its own: it waits for **Resume with Touch ID** in the window, and
+  the desk gives back the claims only then. While the Mac is locked the Keychain cannot be written: files are still
+  saved, and a restart before the Mac is unlocked finds them out of date and drops them; the drafts left stay in
+  Drafts.
+- **File names from emails.** An attachment's name can be written by a stranger. Postern's own sentences give only
+  how many files and their size; the names come wrapped as untrusted in the text, and as `untrusted_name` in the
+  fields. A file type read from an email is accepted only as plain `type/subtype`.
 - **Writing as someone else.** An email leaves from your account's address or from an alias you added under Send
   from, with Touch ID; any other From is refused before the panel, and the panel always shows it.
 - **Sending a lot.** 10 emails per hour and 30 per day by default, counted in the Keychain. Raising them needs
@@ -109,9 +116,9 @@ reads Bridge's own window; a compromised Proton account.
 - **Talking to Postern directly.** Every XPC connection between Postern's processes requires the other side to be
   signed by Postern's developer, in both directions.
 - **Reading the password from a settings file.** Client settings hold the path of the relay, never a secret. To
-  write them, the sandbox allows Postern each app's settings file by its exact path (Cursor, VS Code, Windsurf,
-  Gemini CLI, Kiro, Cline), never the folder around it, so Postern cannot read the tokens these apps keep beside it;
-  Claude Desktop's and Codex's folders are allowed as before.
+  write them, the sandbox allows Postern each app's settings file by its exact path (Claude Code, Claude Desktop,
+  Codex, Cursor, VS Code, Windsurf, Gemini CLI, Kiro, Cline), never the folder around it, so Postern cannot read the
+  tokens some of these apps keep beside it, such as `~/.codex/auth.json` or `~/.gemini/oauth_creds.json`.
 - **Clicking the panel for you.** Touch ID cannot be typed by a program. The Mac password fallback is off by default,
   and turning it on needs Touch ID.
 

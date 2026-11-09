@@ -31,7 +31,11 @@ public struct OutgoingAttachment: Codable, Sendable, Equatable {
               !OutgoingMessage.hasLineBreak(filename) else {
             throw ComposeError.invalidFileName(filename)
         }
-        let type = mimeType ?? UTType(filenameExtension: (name as NSString).pathExtension)?.preferredMIMEType
+        // A type read from an email is untrusted: anything but type/subtype in plain characters would write its own
+        // header into the part that leaves.
+        let given = mimeType?.lowercased()
+        let valid = given.flatMap { $0.wholeMatch(of: #/[a-z0-9][a-z0-9!#$&^_.+-]{0,63}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,63}/#) != nil ? $0 : nil }
+        let type = valid ?? UTType(filenameExtension: (name as NSString).pathExtension)?.preferredMIMEType
             ?? "application/octet-stream"
         return OutgoingAttachment(filename: name, mimeType: type, data: data)
     }

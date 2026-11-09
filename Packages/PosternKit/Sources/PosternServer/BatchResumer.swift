@@ -26,7 +26,14 @@ public struct BatchResumer: Sendable {
     /// True once the batch goes on; false when it cannot, or the user did not confirm.
     @discardableResult
     public func resume(_ id: String) async -> Bool {
-        guard let record = await board.interruptedRecord(id), let batch = await board.batch(id) else { return false }
+        guard let record = await board.beginResume(id) else { return false }
+        let resumed = await go(id, record)
+        await board.endResume(id)
+        return resumed
+    }
+
+    private func go(_ id: String, _ record: BatchRecord) async -> Bool {
+        guard let batch = await board.batch(id) else { return false }
         let waiting = Set(batch.items.filter { $0.status == .waiting }.map(\.index))
         let entries = record.queue.filter { waiting.contains($0.index) }
         guard !entries.isEmpty else {
@@ -46,6 +53,8 @@ public struct BatchResumer: Sendable {
         let flags: [String: Value] = record.noAttachment ? ["no_attachment": .bool(true)] : [:]
         let tools = SendTools(backend: backend, policy: policy(), desk: desk, ledger: ledger, provenance: Provenance(),
                               client: record.client, board: board, livePolicy: policy)
+        // Cancelled while Touch ID was asked: nothing goes on.
+        guard let current = await board.batch(id), !current.isOver else { return false }
         await board.keep(id, queue: queue, noAttachment: record.noAttachment)
         await board.run(id) { await tools.runQueue(queue, batch: id, spacing: record.spacing, start: record.start, flags: flags) }
         return true

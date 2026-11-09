@@ -33,7 +33,7 @@ struct SendTools {
             let message = try await compose(arguments)
             let id = try await saveVerified(message)
             return result("Saved a draft to \(message.envelopeRecipients.joined(separator: ", "))\(Self.withFiles(message)). It waits in Drafts until someone sends it.",
-                          ["draft_id": .string(id.opaque), "attachments": Self.fileList(message)])
+                          ["draft_id": .string(id.opaque), "attachments": Self.fileList(message)], untrusted: Self.fileNames(message))
         case .updateDraft:
             let id = try await draftID(arguments["id"])
             let current = try await backend.message(id, maxChars: OutgoingMessage.maxBodyCharacters)
@@ -42,7 +42,7 @@ struct SendTools {
             let newID = try await saveVerified(message)
             try await backend.deleteDraft(id)
             return result("Updated the draft\(Self.withFiles(message)). Use the new id from now on.",
-                          ["draft_id": .string(newID.opaque), "attachments": Self.fileList(message)])
+                          ["draft_id": .string(newID.opaque), "attachments": Self.fileList(message)], untrusted: Self.fileNames(message))
         case .deleteDraft:
             let id = try await draftID(arguments["id"])
             try await backend.deleteDraft(id)
@@ -55,8 +55,12 @@ struct SendTools {
             return try await forward(arguments)
         case .sendDraft:
             let id = try await draftID(arguments["id"])
+            if let batch = await board.heldDrafts()[id] {
+                throw PosternError(.duplicate, "This draft is in batch \(batch), which sends it or already did; it is not sent twice.")
+            }
             let draft = try await backend.message(id, maxChars: OutgoingMessage.maxBodyCharacters)
-            let message = try await compose(arguments.filter { $0.key == "no_attachment" }, base: draft,
+            // A draft is sent as it is: the panel says when its text announces a file it does not carry.
+            let message = try await compose(["no_attachment": .bool(true)], base: draft,
                                             baseFiles: try await backend.attachments(of: id))
             let outcome = try await deliver(message, tool: tool, context: "A draft saved in Drafts", extra: [:])
             if outcome.isError != true, case .object(let fields)? = outcome.structuredContent, fields["sent"] == .bool(true) {
@@ -113,7 +117,8 @@ struct SendTools {
         } catch let error as ComposeError {
             throw PosternError(.invalidArgument, Self.explain(error))
         }
-        try requireAnnouncedFiles(message, arguments)
+        // The subject is the original's: only the text the client wrote is read.
+        try requireAnnouncedFiles(message, arguments, subject: false)
         var extra: [String: [ApprovalBadge]] = [:]
         if let replyTo = headers.replyTo.first, let from = headers.from.first,
            replyTo.email.lowercased() != from.email.lowercased() {
@@ -143,7 +148,7 @@ struct SendTools {
         } catch let error as ComposeError {
             throw PosternError(.invalidArgument, Self.explain(error))
         }
-        try requireAnnouncedFiles(message, arguments)
+        try requireAnnouncedFiles(message, arguments, subject: false)
         let sender = headers.from.first.map(Self.describe) ?? "someone"
         return try await deliver(message, tool: .forwardMessage, context: "Forward of \(sender): \(headers.subject)", extra: [:])
     }
@@ -184,14 +189,14 @@ struct SendTools {
             try await sendCounted(approved)
             left = true
             return result("Sent to \(approved.recipients.joined(separator: ", "))\(Self.withFiles(approved.message)), all on the user's trusted list.",
-                          ["sent": .bool(true), "attachments": Self.fileList(approved.message)])
+                          ["sent": .bool(true), "attachments": Self.fileList(approved.message)], untrusted: Self.fileNames(approved.message))
         }
         switch await desk.review(request) {
         case .approved(let approved):
             try await sendCounted(approved)
             left = true
             return result("The user read the email, approved it with Touch ID, and it was sent to \(approved.recipients.joined(separator: ", "))\(Self.withFiles(approved.message)).",
-                          ["sent": .bool(true), "attachments": Self.fileList(approved.message)])
+                          ["sent": .bool(true), "attachments": Self.fileList(approved.message)], untrusted: Self.fileNames(approved.message))
         case .saveAsDraft(let draft):
             let id = try await saveVerified(draft)
             return result("The user chose to keep it as a draft instead of sending it now.", ["sent": .bool(false), "draft_id": .string(id.opaque)])
@@ -302,7 +307,8 @@ struct SendTools {
         } catch let error as ComposeError {
             throw PosternError(.invalidArgument, Self.explain(error))
         }
-        try requireAnnouncedFiles(message, arguments)
+        // A draft's own subject may be the original's, as in a reply saved as a draft: only a subject given now is read.
+        try requireAnnouncedFiles(message, arguments, subject: base == nil || arguments["subject"] != nil)
         return message
     }
 
@@ -322,8 +328,9 @@ struct SendTools {
 
     /// An email whose text announces a file ("ci-joint", "attached", "anbei"…) and carries none is stopped: the
     /// client forgot the files. It passes no_attachment when the text means it.
-    func requireAnnouncedFiles(_ message: OutgoingMessage, _ arguments: [String: Value]) throws {
-        guard bool(arguments["no_attachment"]) != true, let words = message.missingAttachment else { return }
+    func requireAnnouncedFiles(_ message: OutgoingMessage, _ arguments: [String: Value], subject: Bool = true) throws {
+        guard bool(arguments["no_attachment"]) != true, message.attachments.isEmpty else { return }
+        guard let words = (subject ? AttachmentMention.found(in: message.subject) : nil) ?? AttachmentMention.found(in: AttachmentMention.ownText(message.body)) else { return }
         throw PosternError(.attachmentMissing, "The email says \"\(words)\" but no file is attached, so nothing was done. Attach the files (attachments from the outbox, inline_attachments, or email_attachments), or pass no_attachment: true if no file is meant.")
     }
 
@@ -343,6 +350,9 @@ struct SendTools {
             case (.string(let text)?, nil):
                 data = Data(text.utf8)
             case (nil, .string(let encoded)?):
+                guard encoded.utf8.count / 4 * 3 <= Self.inlineLimit - total else {
+                    throw PosternError(.tooLarge, "Inline attachments hold 10 MB at most; put bigger files in the outbox.")
+                }
                 guard let decoded = Data(base64Encoded: encoded.filter { !$0.isWhitespace }) else {
                     throw PosternError(.invalidArgument, "The base64 of \(name) does not decode.")
                 }
@@ -406,21 +416,37 @@ struct SendTools {
         let id = try await backend.saveDraft(message)
         let expected = message.attachments.count
         guard expected > 0, let count = try? await backend.attachmentCount(of: id), count < expected else { return id }
-        // The structure alone can miscount: the files themselves decide.
-        if let files = try? await backend.attachments(of: id), files.count >= expected { return id }
-        try? await backend.deleteDraft(id)
-        throw PosternError(.attachmentsLost, "Bridge kept \(count) of the \(expected) files of this draft, so the draft was removed and nothing was saved. Try again; if it happens again, attach fewer or smaller files.")
+        // The structure alone can miscount: the files themselves decide. When they cannot be read, the draft stays.
+        guard let files = try? await backend.attachments(of: id) else { return id }
+        if files.count >= expected { return id }
+        do {
+            try await backend.deleteDraft(id)
+        } catch {
+            throw PosternError(.attachmentsLost, "Bridge kept \(files.count) of the \(expected) files of this draft, and Postern could not remove it: delete draft \(id.opaque) before anything sends it, then try again.")
+        }
+        throw PosternError(.attachmentsLost, "Bridge kept \(files.count) of the \(expected) files of this draft, so the draft was removed and nothing was saved. Try again; if it happens again, attach fewer or smaller files.")
     }
 
-    /// ", with CV.pdf (240 KB) and Letter.pdf (80 KB)", or nothing.
+    /// ", with 2 files (320 KB)", or nothing. File names can come from an email, so they stay out of Postern's own
+    /// sentences: `fileNames` gives them, marked untrusted.
     static func withFiles(_ message: OutgoingMessage) -> String {
         guard !message.attachments.isEmpty else { return "" }
-        let names = message.attachments.map { "\($0.filename) (\(size($0.data.count)))" }
-        return ", with " + (names.count == 1 ? names[0] : names.dropLast().joined(separator: ", ") + " and " + names.last!)
+        let count = message.attachments.count
+        let bytes = message.attachments.reduce(0) { $0 + $1.data.count }
+        return ", with " + (count == 1 ? "1 file" : "\(count) files") + " (\(size(bytes)))"
+    }
+
+    /// The names and sizes of the files, wrapped as untrusted, to add below Postern's sentence.
+    static func fileNames(_ message: OutgoingMessage) -> String {
+        guard !message.attachments.isEmpty else { return "" }
+        let listing = message.attachments.map { "- \($0.filename) (\(size($0.data.count)))" }.joined(separator: "\n")
+        return "\n" + UntrustedRenderer().wrap(listing, source: "file names")
     }
 
     static func fileList(_ message: OutgoingMessage) -> Value {
-        .array(message.attachments.map { .object(["name": .string($0.filename), "size": .int($0.data.count)]) })
+        .array(message.attachments.map {
+            .object(["untrusted_name": .string(UntrustedRenderer.defuse($0.filename)), "size": .int($0.data.count)])
+        })
     }
 
     /// Files named by the client, taken only from the Postern outbox folder; the panel shows each one. A batch
@@ -496,8 +522,9 @@ struct SendTools {
 
     /// The text, and the same facts as fields. Several clients give the model only the fields, others only the
     /// text, so the fields carry the text too, as `summary`.
-    func result(_ text: String, _ fields: [String: Value]) -> CallTool.Result {
-        CallTool.Result(content: [.text(text: text, annotations: nil, _meta: nil)],
+    /// `untrusted` is added to the text only, already wrapped: it never becomes part of the summary.
+    func result(_ text: String, _ fields: [String: Value], untrusted: String = "") -> CallTool.Result {
+        CallTool.Result(content: [.text(text: text + untrusted, annotations: nil, _meta: nil)],
                         structuredContent: Optional<Value>.some(.object(fields.merging(["summary": .string(text)]) { own, _ in own })),
                         isError: false)
     }
@@ -514,10 +541,10 @@ struct SendTools {
         switch error {
         case .noRecipient: "At least one recipient is required."
         case .tooManyRecipients: "At most \(OutgoingMessage.maxRecipients) recipients per email."
-        case .invalidAddress(let address): "\(address) is not a valid email address."
+        case .invalidAddress(let address): "\(UntrustedRenderer.defuse(String(address.prefix(120)))) is not a valid email address."
         case .headerInjection: "Subjects and names cannot contain line breaks."
         case .tooLong: "The text or the attachments are too large (20 MB of attachments at most)."
-        case .invalidFileName(let name): "\(name) is not a file name Postern accepts."
+        case .invalidFileName: "A file name Postern does not accept: no folders, line breaks or leading dot, 200 characters at most."
         }
     }
 }

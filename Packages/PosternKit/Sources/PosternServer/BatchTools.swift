@@ -140,7 +140,7 @@ extension SendTools {
         return (fields, row)
     }
 
-    private func draftMessage(
+    func draftMessage(
         template: [String: Value], row: (fields: [String: Value], values: [String: String]), cache: AttachmentCache
     ) async throws -> OutgoingMessage {
         var merged = template.merging(row.fields) { _, own in own }
@@ -188,13 +188,13 @@ extension SendTools {
             lines.append("From: \(Self.describe(first.from))")
             lines.append("To: \(first.envelopeRecipients.joined(separator: ", "))")
             lines.append("Subject: \(first.subject)")
-            if !files.isEmpty { lines.append("Attachments: \(files.joined(separator: ", "))") }
+            if !files.isEmpty { lines.append("Attachments:\n" + UntrustedRenderer().wrap(files.joined(separator: "\n"), source: "file names")) }
             lines.append("")
             lines.append(first.body.count > 1500 ? String(first.body.prefix(1500)) + "…" : first.body)
             fields["preview"] = .object([
                 "from": .string(first.from.email), "to": .array(first.envelopeRecipients.map { .string($0) }),
                 "subject": .string(first.subject), "body": .string(String(first.body.prefix(1500))),
-                "attachments": .array(first.attachments.map { .object(["name": .string($0.filename), "size": .int($0.data.count)]) }),
+                "attachments": Self.fileList(first),
             ])
         }
         return result(lines.joined(separator: "\n"), fields)
@@ -207,11 +207,21 @@ extension SendTools {
     ) async {
         for entry in rows {
             if Task.isCancelled { return }
+            guard await board.status(id, entry.index) == .waiting else { continue }
             var attempt = 0
             while true {
                 do {
-                    let message = try await draftMessage(template: template, row: entry.row, cache: cache)
+                    // The policy as it is now: a mailbox hidden meanwhile is out of reach of email_attachments.
+                    var tools = self
+                    tools.policy = livePolicy()
+                    let message = try await tools.draftMessage(template: template, row: entry.row, cache: cache)
+                    let fingerprint = message.contentFingerprint
+                    if let earlier = await board.savedDraft(fingerprint) {
+                        await board.set(id, entry.index, .skipped, "The same draft was already saved by batch \(earlier.batch); it is not saved twice.", draft: earlier.draft)
+                        break
+                    }
                     let draft = try await saveVerified(message)
+                    await board.rememberSaved(fingerprint, batch: id, draft: draft)
                     await board.set(id, entry.index, .saved, "Saved in Drafts\(Self.withFiles(message)).", draft: draft)
                     break
                 } catch let error as PosternError where error.code == .bridgeUnreachable && attempt < 2 {
@@ -297,7 +307,9 @@ extension SendTools {
         var tools = self
         if let policy { tools.policy = policy }
         let draft = try await backend.draftForSending(id)
-        return try await tools.compose(flags, base: draft.message, baseFiles: draft.files, messageID: messageID)
+        // A draft leaves as it is: the panel marks one whose text announces a file it does not carry.
+        return try await tools.compose(flags.merging(["no_attachment": .bool(true)]) { $1 }, base: draft.message,
+                                       baseFiles: draft.files, messageID: messageID)
     }
 
     /// Reads every draft for the panel, keeping only what the panel shows and each email's digest, then asks the user
@@ -312,9 +324,11 @@ extension SendTools {
             if Task.isCancelled { return }
             guard let draft = entry.draft else { continue }
             do {
-                let message = try await composeDraft(draft, messageID: nil, flags: flags)
-                try checkRecipients(message)
-                let request = try await approvalRequest(message, tool: .sendDrafts, context: "A draft saved in Drafts", extra: [:], contacted: contacted)
+                let (message, request) = try await Self.retrying {
+                    let message = try await composeDraft(draft, messageID: nil, flags: flags)
+                    try checkRecipients(message)
+                    return (message, try await approvalRequest(message, tool: .sendDrafts, context: "A draft saved in Drafts", extra: [:], contacted: contacted))
+                }
                 let item = BatchItem(message: message, badges: request.badges, context: request.context)
                 items.append(item)
                 prepared.append((entry.index, draft, item, message.messageID))
@@ -358,13 +372,26 @@ extension SendTools {
         await runQueue(queue, batch: id, spacing: spacing, start: start, flags: flags)
     }
 
+    /// Tries again, after 2, 5 and 10 seconds, what failed because Bridge or the reader stumbled.
+    static func retrying<T>(_ work: () async throws -> T) async throws -> T {
+        var attempt = 0
+        while true {
+            do {
+                return try await work()
+            } catch let error as PosternError where (holdingCodes.contains(error.code) || error.code == .parseFailed) && attempt < 3 {
+                try await Task.sleep(for: .seconds([2, 5, 10][attempt]))
+                attempt += 1
+            }
+        }
+    }
+
     /// Sends an approved queue, composing each email again from its draft.
     func runQueue(_ queue: [QueuedEmail], batch id: String, spacing: TimeInterval, start: Date?, flags: [String: Value]) async {
-        let account = (try? await backend.ownAddress().email.lowercased()) ?? ""
         let live = livePolicy
         let tools = self
         await Self.sendQueue(
-            queue, batch: id, board: board, ledger: ledger, policy: live, account: account, spacing: spacing,
+            queue, batch: id, board: board, ledger: ledger, policy: live,
+            account: { try await tools.backend.ownAddress().email.lowercased() }, spacing: spacing,
             start: start, client: client,
             recompose: { draft, messageID in try await tools.composeDraft(draft, messageID: messageID, flags: flags, policy: live()) },
             send: { approved in try await tools.backend.send(approved) },
@@ -520,7 +547,8 @@ extension SendTools {
     /// limits, and dates it with the time it leaves.
     static func sendQueue(
         _ queue: [QueuedEmail], batch id: String, board: BatchBoard, ledger: any SendLedger,
-        policy: @escaping @Sendable () -> Policy, account: String, spacing: TimeInterval, start: Date?, client: String,
+        policy: @escaping @Sendable () -> Policy, account: @escaping @Sendable () async throws -> String,
+        spacing: TimeInterval, start: Date?, client: String,
         recompose: @escaping @Sendable (MessageID, String) async throws -> OutgoingMessage,
         send: @escaping @Sendable (ApprovedMessage) async throws -> Void,
         deleteDraft: @escaping @Sendable (MessageID) async throws -> Void
@@ -544,7 +572,7 @@ extension SendTools {
                     await board.set(id, phase: .waiting(until: Date().addingTimeInterval(delay), reason: "The next email could not be handed to Bridge; Postern tries again. \(error.message)"))
                     try await sleep(until: Date().addingTimeInterval(delay))
                 }
-                while true {
+                emailLoop: while true {
                     try await waitForTurn(id, board: board, ledger: ledger, policy: policy)
                     let live = policy()
                     if let barred = email.recipients.first(where: { !live.mayReceive($0) }) {
@@ -552,7 +580,17 @@ extension SendTools {
                         await board.record(client, tool, PosternErrorCode.recipientNotAllowed.rawValue)
                         break
                     }
-                    guard email.sender == account || live.senderAddresses.contains(email.sender) else {
+                    let me: String
+                    do {
+                        me = try await account()
+                    } catch is CancellationError {
+                        throw CancellationError()
+                    } catch {
+                        // Not set up yet, as on a Mac still locked after a restart: wait, do not refuse.
+                        try await hold(error as? PosternError ?? PosternError(.notConfigured, "Postern cannot read the account yet."))
+                        continue
+                    }
+                    guard email.sender == me || live.senderAddresses.contains(email.sender) else {
                         await board.set(id, email.index, .refused, "\(email.sender) is no longer one of the user's sender addresses; the draft stays in Drafts.")
                         await board.record(client, tool, PosternErrorCode.senderNotAllowed.rawValue)
                         break
@@ -569,7 +607,8 @@ extension SendTools {
                     } catch let error as PosternError where error.code == .notFound || error.code == .staleID {
                         await board.set(id, email.index, .skipped, "Its draft is no longer in Drafts, so this email did not leave.")
                         break
-                    } catch let error as PosternError where holdingCodes.contains(error.code) {
+                    } catch let error as PosternError where holdingCodes.contains(error.code) || error.code == .parseFailed {
+                        // Bridge or the message reader is at fault, not the draft: wait and try again.
                         try await hold(error)
                         continue
                     } catch is CancellationError {
@@ -582,9 +621,16 @@ extension SendTools {
                     // The place in the limits is taken in the same step as it is checked: no other send can take it.
                     let now = Date()
                     guard ledger.reserve(at: now, allowed: { SendBudget.remaining(live, sends: $0, now: now) > 0 }) else { continue }
-                    guard await board.claim(id, email.index) else {
-                        ledger.release(at: now)
+                    switch await board.claim(id, email.index) {
+                    case .claimed:
                         break
+                    case .gone:
+                        ledger.release(at: now)
+                        break emailLoop
+                    case .unsaved:
+                        ledger.release(at: now)
+                        try await hold(PosternError(.notConfigured, "Postern cannot write the batch's progress to disk right now, so it waits: an email sent without it could leave twice after a restart."))
+                        continue
                     }
                     do {
                         try await send(approved.leaving(at: now))

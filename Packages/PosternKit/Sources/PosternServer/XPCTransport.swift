@@ -36,6 +36,10 @@ public actor XPCTransport: Transport {
     /// A message from the client, as the relay received it on stdin. Nonisolated so messages keep the order in
     /// which XPC delivers them.
     public nonisolated func deliver(_ data: Data) {
+        guard data.count <= Self.maxMessage else { return }
         continuation.yield(data)
     }
+
+    /// No request is larger: inline files hold 10 MB, so 40 MB leaves room for base64 and the rest.
+    public static let maxMessage = 40_000_000
 }

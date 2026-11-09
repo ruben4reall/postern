@@ -13,6 +13,8 @@ public enum VaultKey: String, CaseIterable, Sendable {
     case sendLedger = "send-ledger"
     /// The key that seals approved batches on disk, so they can be resumed after a restart.
     case batchKey = "batch-key"
+    /// The digest of each batch's latest files, so an older copy put back is refused.
+    case batchIndex = "batch-index"
 }
 
 public enum VaultError: Error, Equatable, Sendable {

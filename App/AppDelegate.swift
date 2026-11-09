@@ -50,6 +50,17 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
     /// Closing the window keeps Postern serving apps in the background; it leaves the Dock until the next opening.
     func applicationShouldTerminateAfterLastWindowClosed(_ sender: NSApplication) -> Bool { !launchedByAgent }
 
+    /// Writes what batches still have to write before Postern quits, a second at most.
+    func applicationWillTerminate(_ notification: Notification) {
+        let done = DispatchSemaphore(value: 0)
+        let board = CoreState.shared.board
+        Task.detached {
+            await board.flush()
+            done.signal()
+        }
+        _ = done.wait(timeout: .now() + 1)
+    }
+
     // MARK: Main window
 
     func showMain() {

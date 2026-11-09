@@ -45,7 +45,78 @@ import Testing
             "email_attachments": .array([.object(["id": .string(MessageID(mailbox: "INBOX", uidValidity: 1, uid: 10).opaque), "index": .int(2)])]),
         ])
         #expect(sentError != true, "\(base.text(sent))")
-        #expect(base.text(sent).contains("facture.pdf"))
+        #expect(base.text(sent).contains("facture.pdf") && base.text(sent).contains("postern-untrusted"))
+    }
+
+    @Test func aReplyIsNotJudgedOnTheOriginalsSubjectOrQuote() async throws {
+        let backend = FakeBackend()
+        backend.lock.withLock {
+            backend.original = SanitizedMessage(
+                headers: SanitizedHeaders(from: [Address(name: "Anna", email: "anna@example.com")], to: [Address(name: nil, email: "me@example.ch")],
+                                          subject: "Facture ci-jointe", messageID: "<orig@example.com>"),
+                body: "Vous trouverez ci-joint la facture.", bodyTruncated: false, bodyWasHTML: false, hiddenElementsRemoved: 0,
+                imagesOmitted: 0, links: [], attachments: [],
+                verdict: SenderVerdict(level: .verified, spf: nil, dkim: nil, dmarc: nil, origin: nil, reasons: [], forgedHeaderSeen: false, authservIDsSeen: [])
+            )
+        }
+        let (client, _) = try await base.connect(backend: backend)
+        let (content, _, isError) = try await base.call(client, "reply_to_message", [
+            "id": .string(MessageID(mailbox: "INBOX", uidValidity: 1, uid: 77).opaque), "body": .string("Merci, bien reçu."),
+        ])
+        #expect(isError != true, "\(base.text(content))")
+    }
+
+    @Test func aDraftIsSentAsItIsAndThePanelSaysItMissesAFile() async throws {
+        let backend = FakeBackend()
+        _ = try base.applicationDraft(backend)
+        backend.lock.withLock {
+            backend.draftFiles = []
+            backend.editedDrafts[MessageID(mailbox: "Drafts", uidValidity: 1, uid: 5)] = "Bonjour, ci-joint mon CV."
+        }
+        let (client, presenter) = try await base.connect(backend: backend)
+        let (content, _, isError) = try await base.call(client, "send_draft", ["id": .string(MessageID(mailbox: "Drafts", uidValidity: 1, uid: 5).opaque)])
+        #expect(isError != true, "\(base.text(content))")
+        #expect(presenter.lock.withLock { presenter.requests.first }?.message.missingAttachment == "ci-joint")
+    }
+
+    @Test func fileNamesFromEmailsStayMarkedUntrusted() async throws {
+        let backend = FakeBackend()
+        let (client, _) = try await base.connect(backend: backend)
+        let (content, structured, _) = try await base.call(client, "create_draft", [
+            "to": .array([.string("compta@example.com")]), "subject": .string("Facture"), "body": .string("La voici."),
+            "email_attachments": .array([.object(["id": .string(backend.inbox.opaque), "index": .int(2)])]),
+        ])
+        guard case .object(let fields)? = structured, case .string(let summary)? = fields["summary"],
+              case .array(let files)? = fields["attachments"], case .object(let file)? = files.first else {
+            Issue.record("No fields")
+            return
+        }
+        #expect(!summary.contains("facture.pdf") && summary.contains("1 file"))
+        #expect(file["untrusted_name"] == "facture.pdf" && file["name"] == nil)
+        #expect(base.text(content).contains("postern-untrusted"))
+    }
+
+    @Test func aDraftHeldByABatchIsNotSentAlone() async throws {
+        let backend = FakeBackend()
+        _ = try base.applicationDraft(backend)
+        let (client, _) = try await base.connect(policy: Policy(enabledTools: Set(ToolID.allCases), sendsPerHour: 1), backend: backend)
+        let ids = base.drafts([5, 6])
+        _ = try await base.call(client, "send_drafts", ["ids": .array(ids.map { .string($0.opaque) })])
+        let (content, _, isError) = try await base.call(client, "send_draft", ["id": .string(ids[1].opaque)])
+        #expect(isError == true && base.text(content).hasPrefix("duplicate"), "\(base.text(content))")
+    }
+
+    @Test func callingCreateDraftsAgainSavesNothingTwice() async throws {
+        let backend = FakeBackend()
+        let (client, _) = try await base.connect(backend: backend)
+        let drafts: Value = .array([
+            .object(["to": .array([.string("a@example.com")]), "subject": .string("Un"), "body": .string("A")]),
+            .object(["to": .array([.string("b@example.com")]), "subject": .string("Deux"), "body": .string("B")]),
+        ])
+        _ = try await base.call(client, "create_drafts", ["drafts": drafts])
+        let (_, again, _) = try await base.call(client, "create_drafts", ["drafts": drafts])
+        #expect(base.statuses(again) == ["skipped", "skipped"])
+        #expect(backend.lock.withLock { backend.drafts }.count == 2)
     }
 
     @Test func filesTheAppWroteAndFilesOfOtherEmailsAreAttached() async throws {
@@ -66,7 +137,7 @@ import Testing
         let saved = try #require(backend.lock.withLock { backend.drafts.last })
         #expect(saved.attachments.map(\.filename) == ["releve.csv", "note.pdf", "facture.pdf"])
         #expect(saved.attachments[0].data == Data(csv.utf8) && saved.attachments[1].data == pdf)
-        #expect(base.text(content).contains("releve.csv"))
+        #expect(base.text(content).contains("releve.csv") && base.text(content).contains("3 files"))
         guard case .object(let fields)? = structured, case .array(let files)? = fields["attachments"] else {
             Issue.record("No attachment list")
             return

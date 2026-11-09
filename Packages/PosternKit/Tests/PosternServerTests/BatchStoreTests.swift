@@ -75,31 +75,97 @@ import Testing
         #expect(held.isEmpty)
     }
 
+    func record(_ id: String = "deadbeef", statuses: [String] = ["waiting", "waiting"]) -> BatchRecord {
+        BatchRecord(
+            id: id, client: "Codex", created: Date(timeIntervalSince1970: 1_800_000_000), start: nil, spacing: 30,
+            estimate: nil,
+            items: statuses.enumerated().map { .init(index: $0.offset, recipients: "a@example.com", subject: "Candidature", status: $0.element, detail: "", draft: "x\($0.offset)") },
+            queue: statuses.indices.map { .init(index: $0, draft: "x\($0)", digest: String(repeating: "a", count: 64), messageID: "<m\($0)@x>", recipients: ["a@example.com"], sender: "me@example.ch") },
+            noAttachment: false
+        )
+    }
+
     @Test func aSealedBatchOpensOnlyWithItsKeyAndUnchanged() throws {
         let folder = FileManager.default.temporaryDirectory.appendingPathComponent("postern-batches-\(UUID().uuidString)")
         defer { try? FileManager.default.removeItem(at: folder) }
         let key = SymmetricKey(size: .bits256)
-        let store = SealedBatchStore(folder: folder, key: { key })
-        let record = BatchRecord(
-            id: "deadbeef", client: "Codex", created: Date(timeIntervalSince1970: 1_800_000_000), start: nil, spacing: 30,
-            estimate: nil,
-            items: [.init(index: 0, recipients: "a@example.com", subject: "Candidature", status: "waiting", detail: "", draft: "x")],
-            queue: [.init(index: 0, draft: "x", digest: String(repeating: "a", count: 64), messageID: "<m@x>", recipients: ["a@example.com"], sender: "me@example.ch")],
-            noAttachment: false
-        )
-        store.save(record)
-        #expect(store.load() == [record])
+        let index = MemoryBatchIndex()
+        let store = SealedBatchStore(folder: folder, key: { key }, index: index)
+        store.save(record())
+        #expect(store.load() == [record()])
+        #expect(store.saveStatuses("deadbeef", ["sent", "waiting"]))
+        #expect(store.load().first?.items.map(\.status) == ["sent", "waiting"])
         let file = folder.appendingPathComponent("deadbeef.batch")
-        let bytes = try Data(contentsOf: file)
-        #expect(!String(decoding: bytes, as: UTF8.self).contains("a@example.com"))
+        #expect(!String(decoding: try Data(contentsOf: file), as: UTF8.self).contains("a@example.com"))
 
-        #expect(SealedBatchStore(folder: folder, key: { SymmetricKey(size: .bits256) }).load().isEmpty)
-        store.save(record)
+        #expect(SealedBatchStore(folder: folder, key: { SymmetricKey(size: .bits256) }, index: index).load().isEmpty)
+        store.save(record())
         var tampered = try Data(contentsOf: file)
         tampered[tampered.count / 2] ^= 0x01
         try tampered.write(to: file)
         #expect(store.load().isEmpty && !FileManager.default.fileExists(atPath: file.path))
-        #expect(SealedBatchStore(folder: folder, key: { nil }).load().isEmpty)
+        #expect(SealedBatchStore(folder: folder, key: { nil }, index: index).load().isEmpty)
+    }
+
+    @Test func anOlderCopyPutBackIsRefused() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("postern-batches-\(UUID().uuidString)")
+        let copies = folder.appendingPathComponent("copies")
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let key = SymmetricKey(size: .bits256)
+        let index = MemoryBatchIndex()
+        let store = SealedBatchStore(folder: folder, key: { key }, index: index)
+        store.save(record())
+        try FileManager.default.createDirectory(at: copies, withIntermediateDirectories: true)
+        for kind in ["batch", "state"] {
+            try FileManager.default.copyItem(at: folder.appendingPathComponent("deadbeef.\(kind)"), to: copies.appendingPathComponent("deadbeef.\(kind)"))
+        }
+        store.saveStatuses("deadbeef", ["sent", "uncertain"])
+        for kind in ["batch", "state"] {
+            let live = folder.appendingPathComponent("deadbeef.\(kind)")
+            try FileManager.default.removeItem(at: live)
+            try FileManager.default.copyItem(at: copies.appendingPathComponent("deadbeef.\(kind)"), to: live)
+        }
+        #expect(SealedBatchStore(folder: folder, key: { key }, index: index).load().isEmpty)
+
+        // A batch that ended is gone from the index: its file put back does not come back either.
+        let other = SealedBatchStore(folder: folder, key: { key }, index: index)
+        other.save(record("cafe1234"))
+        let saved = try Data(contentsOf: folder.appendingPathComponent("cafe1234.batch"))
+        let state = try Data(contentsOf: folder.appendingPathComponent("cafe1234.state"))
+        other.delete("cafe1234")
+        try saved.write(to: folder.appendingPathComponent("cafe1234.batch"))
+        try state.write(to: folder.appendingPathComponent("cafe1234.state"))
+        #expect(SealedBatchStore(folder: folder, key: { key }, index: index).load().isEmpty)
+
+        // While the index cannot be read, nothing loads; while it cannot be written, files still save.
+        let locked = MemoryBatchIndex()
+        let lockedStore = SealedBatchStore(folder: folder, key: { key }, index: locked)
+        locked.writable = false
+        #expect(lockedStore.save(record("beef5678")))
+        locked.readable = false
+        #expect(lockedStore.load().isEmpty)
+    }
+
+    @Test func resumingTwiceAtOnceRunsOneQueue() async throws {
+        let backend = FakeBackend()
+        _ = try base.applicationDraft(backend)
+        let store = MemoryBatchStore()
+        var kept = record("abcd1234", statuses: ["waiting"])
+        kept = BatchRecord(id: kept.id, client: kept.client, created: kept.created, start: nil, spacing: 0, estimate: nil,
+                           items: [.init(index: 0, recipients: "known@example.com", subject: "Candidature", status: "waiting", detail: "", draft: MessageID(mailbox: "Drafts", uidValidity: 1, uid: 5).opaque)],
+                           queue: [.init(index: 0, draft: MessageID(mailbox: "Drafts", uidValidity: 1, uid: 5).opaque, digest: String(repeating: "a", count: 64),
+                                         messageID: "<m@x>", recipients: ["known@example.com"], sender: "me@example.ch")],
+                           noAttachment: false)
+        store.save(kept)
+        let board = BatchBoard(store: store)
+        await board.restore()
+        let desk = ApprovalDesk(presenter: CapturingPresenter(.send), authenticator: AlwaysAuthenticated())
+        let resumer = BatchResumer(board: board, desk: desk, backend: backend, ledger: MemoryLedger(),
+                                   policy: { Policy(enabledTools: Set(ToolID.allCases)) })
+        async let first = resumer.resume("abcd1234")
+        async let second = resumer.resume("abcd1234")
+        let results = await [first, second]
+        #expect(results.filter { $0 }.count == 1)
     }
 }
 
