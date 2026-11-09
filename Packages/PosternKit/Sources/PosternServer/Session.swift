@@ -45,7 +45,7 @@ public actor Session {
         self.board = board ?? BatchBoard()
         self.server = Server(
             name: Self.serverName, version: version, title: "Postern",
-            instructions: ServerInstructions.text,
+            instructions: ServerInstructions.text(for: policy()),
             capabilities: Server.Capabilities(tools: .init(listChanged: true))
         )
     }

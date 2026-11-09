@@ -55,6 +55,8 @@ public actor BatchBoard {
         public var estimate: Date?
         /// For sends: the user's answer on the panel. Drafts batches need none.
         public var decision: Decision = .pending
+        /// Approved before Postern last quit, and waiting for the user to resume it with Touch ID.
+        public var interrupted = false
 
         public var isOver: Bool { phase == .finished || phase == .cancelled }
         public func count(_ status: ItemStatus) -> Int { items.lazy.filter { $0.status == status }.count }
@@ -70,13 +72,107 @@ public actor BatchBoard {
     private var notifying = false
     /// Finished batches kept for batch_status and the window.
     static let kept = 20
+    private let store: (any BatchStore)?
+    /// The queues of approved send batches, kept on disk as they go.
+    private var queues: [String: (emails: [SendTools.QueuedEmail], noAttachment: Bool)] = [:]
+    /// Batches found on disk at launch, until the user resumes them.
+    private var restored: [String: BatchRecord] = [:]
+    private var dirty: Set<String> = []
+    /// Single emails waiting for the user's answer, and those sent in the last ten minutes, by fingerprint.
+    private var pendingSingles: Set<String> = []
+    private var recentSingles: [String: Date] = [:]
 
     /// - Parameters:
     ///   - onChange: called after every change, for the window.
     ///   - record: writes one line of the activity log for each email a batch sends or fails to send.
-    public init(onChange: @escaping @Sendable () -> Void = {}, record: @escaping Recorder = { _, _, _ in }) {
+    ///   - store: where approved send batches are kept, so they can be resumed after Postern restarts.
+    public init(
+        onChange: @escaping @Sendable () -> Void = {}, record: @escaping Recorder = { _, _, _ in },
+        store: (any BatchStore)? = nil
+    ) {
         self.onChange = onChange
         self.recorder = record
+        self.store = store
+    }
+
+    // MARK: Across launches
+
+    /// Brings back the batches approved before Postern quit. They wait for the user to resume them: an email that
+    /// was being handed to Bridge at that moment may have left, so it is marked uncertain and never sent again.
+    public func restore() {
+        guard let store else { return }
+        for record in store.load() where batches[record.id] == nil {
+            let items = record.items.map { item -> Item in
+                let status = ItemStatus(rawValue: item.status) ?? .failed
+                return status == .sending
+                    ? Item(index: item.index, recipients: item.recipients, subject: item.subject, status: .uncertain,
+                           detail: "Postern stopped while this email was being handed to Bridge: it may have left. Look in Sent before sending it again.",
+                           draft: item.draft.flatMap(MessageID.init(opaque:)))
+                    : Item(index: item.index, recipients: item.recipients, subject: item.subject, status: status,
+                           detail: item.detail, draft: item.draft.flatMap(MessageID.init(opaque:)))
+            }
+            var batch = Batch(id: record.id, kind: .sends, client: record.client, created: record.created, items: items,
+                              phase: .waiting(until: nil, reason: "Postern restarted. Resume the batch in Postern's window to send the \(record.left) emails left."),
+                              start: record.start, spacing: record.spacing, estimate: record.estimate)
+            batch.decision = .approved
+            batch.interrupted = true
+            batches[record.id] = batch
+            order.append(record.id)
+            restored[record.id] = record
+        }
+        order.sort { (batches[$0]?.created ?? .distantPast) < (batches[$1]?.created ?? .distantPast) }
+        notify()
+    }
+
+    /// The batch as kept on disk, while it waits to be resumed.
+    public func interruptedRecord(_ id: String) -> BatchRecord? {
+        guard batches[id]?.interrupted == true else { return nil }
+        return restored[id]
+    }
+
+    /// An approved queue, kept on disk from now on.
+    func keep(_ id: String, queue: [SendTools.QueuedEmail], noAttachment: Bool) {
+        queues[id] = (queue, noAttachment)
+        restored[id] = nil
+        if var batch = batches[id], batch.interrupted {
+            batch.interrupted = false
+            batch.phase = .running
+            batches[id] = batch
+        }
+        touch(id)
+    }
+
+    private func record(_ id: String) -> BatchRecord? {
+        guard let batch = batches[id], let queue = queues[id] else { return nil }
+        return BatchRecord(
+            id: id, client: batch.client, created: batch.created, start: batch.start, spacing: batch.spacing,
+            estimate: batch.estimate,
+            items: batch.items.map { BatchRecord.Item(index: $0.index, recipients: $0.recipients, subject: $0.subject,
+                                                      status: $0.status.rawValue, detail: $0.detail, draft: $0.draft?.opaque) },
+            queue: queue.emails.map { BatchRecord.Queued(index: $0.index, draft: $0.draft.opaque, digest: $0.claim.digest,
+                                                         messageID: $0.messageID, recipients: $0.recipients, sender: $0.sender) },
+            noAttachment: queue.noAttachment
+        )
+    }
+
+    /// Marks a batch to write to disk with the next notice.
+    private func touch(_ id: String) {
+        if queues[id] != nil || restored[id] != nil { dirty.insert(id) }
+        notify()
+    }
+
+    private func persist() {
+        guard let store else { dirty = []; return }
+        for id in dirty {
+            if batches[id]?.isOver ?? true {
+                store.delete(id)
+                queues[id] = nil
+                restored[id] = nil
+            } else if let record = record(id) {
+                store.save(record)
+            }
+        }
+        dirty = []
     }
 
     public func all() -> [Batch] { order.reversed().compactMap { batches[$0] } }
@@ -98,8 +194,31 @@ public actor BatchBoard {
         }
         batch.phase = .cancelled
         batches[id] = batch
-        notify()
+        touch(id)
         return batch
+    }
+
+    // MARK: Single emails
+
+    /// Takes an email for its panel, or says why it should not be shown again: the same email already waits for the
+    /// user, or left in the last ten minutes. An app whose call timed out while the panel was open calls again.
+    func holdSingle(_ fingerprint: String, now: Date = Date()) -> String? {
+        recentSingles = recentSingles.filter { now.timeIntervalSince($0.value) < 600 }
+        if pendingSingles.contains(fingerprint) {
+            return "This same email is already waiting for the user's answer on Postern's panel, so it is not shown twice. Wait for that answer; do not send it again."
+        }
+        if let sent = recentSingles[fingerprint] {
+            let time = sent.formatted(date: .omitted, time: .shortened)
+            return "This same email was sent at \(time). Postern does not send the same email twice within ten minutes."
+        }
+        pendingSingles.insert(fingerprint)
+        return nil
+    }
+
+    /// The user answered: an email that left, or may have, is remembered for ten minutes.
+    func releaseSingle(_ fingerprint: String, sent: Bool) {
+        pendingSingles.remove(fingerprint)
+        if sent { recentSingles[fingerprint] = Date() }
     }
 
     // MARK: For the tools
@@ -150,7 +269,7 @@ public actor BatchBoard {
         }
         batch.items[position].status = .sending
         batches[id] = batch
-        notify()
+        touch(id)
         return true
     }
 
@@ -181,7 +300,7 @@ public actor BatchBoard {
         batch.items[position].detail = detail
         if let draft { batch.items[position].draft = draft }
         batches[id] = batch
-        notify()
+        touch(id)
     }
 
     /// Names an email once its draft is read: who it goes to and its subject.
@@ -214,14 +333,14 @@ public actor BatchBoard {
             tasks[id] = nil
         }
         batches[id] = batch
-        notify()
+        touch(id)
     }
 
     func set(_ id: String, phase: Phase) {
         guard var batch = batches[id], !batch.isOver, batch.phase != phase else { return }
         batch.phase = phase
         batches[id] = batch
-        notify()
+        touch(id)
     }
 
     func record(_ client: String, _ tool: String, _ outcome: String) {
@@ -242,7 +361,7 @@ public actor BatchBoard {
         guard var batch = batches[id], !batch.isOver else { return }
         batch.phase = .finished
         batches[id] = batch
-        notify()
+        touch(id)
     }
 
     /// Tells the window at most a few times a second, however fast a batch moves.
@@ -257,6 +376,7 @@ public actor BatchBoard {
 
     private func flush() {
         notifying = false
+        persist()
         onChange()
     }
 

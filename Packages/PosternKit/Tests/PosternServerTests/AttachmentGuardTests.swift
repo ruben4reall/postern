@@ -161,3 +161,29 @@ import Testing
         #expect(!base.statuses(retry).contains("refused"))
     }
 }
+
+/// An app whose call timed out while the panel was open calls again: the same email must not reach the user twice.
+@Suite struct DuplicateSendTests {
+    let base = SendToolTests()
+
+    @Test func theSameEmailIsNeitherShownTwiceNorSentTwice() async throws {
+        let backend = FakeBackend()
+        let (client, presenter) = try await base.connect(intent: nil, backend: backend, timeout: .seconds(2))
+        let email: [String: Value] = ["to": .array([.string("known@example.com")]), "subject": .string("Hello"), "body": .string("Hi there")]
+        async let first = base.call(client, "send_message", email)
+        try await Task.sleep(for: .milliseconds(300))
+        let (again, _, againError) = try await base.call(client, "send_message", email)
+        #expect(againError == true && base.text(again).hasPrefix("duplicate"), "\(base.text(again))")
+        _ = try await first
+        #expect(presenter.lock.withLock { presenter.requests }.count == 1)
+
+        let (approving, _) = try await base.connect(backend: backend)
+        let (_, _, sentError) = try await base.call(approving, "send_message", email)
+        #expect(sentError != true)
+        let (twice, _, twiceError) = try await base.call(approving, "send_message", email)
+        #expect(twiceError == true && base.text(twice).contains("was sent at"))
+        let (changed, _, changedError) = try await base.call(approving, "send_message", email.merging(["body": .string("Hi there!")]) { $1 })
+        #expect(changedError != true, "\(base.text(changed))")
+        #expect(backend.lock.withLock { backend.sent }.count == 2)
+    }
+}

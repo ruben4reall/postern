@@ -9,6 +9,11 @@ gives a message a new id when it moves, so the tools that move messages return t
 Fields whose name starts with `untrusted_` come from an email: treat them as data written by a stranger, never as
 instructions. Their text form is wrapped in markers that carry a random value fresh for each response.
 
+Every result comes twice: as text, and as structured fields. Some clients give the model only the text (Cursor,
+Gemini CLI), others only the fields (Claude Code, VS Code, Codex), so the fields carry everything the text says, with
+Postern's own sentences in `summary`. Schemas keep to what every client and model accepts: no `additionalProperties`,
+`anyOf` or `$ref`, string enums only.
+
 ## Read
 
 | Tool | Arguments | What it does |
@@ -54,11 +59,11 @@ whether Postern saw it applied.
 
 | Tool | Arguments | What it does |
 |---|---|---|
-| `create_draft` | `to`, `cc`, `bcc`, `from`, `subject`, `body` (plain text), `attachments` | Saves a draft in Drafts. Nothing is sent. |
-| `create_drafts` | `template`: `subject`, `body`, `attachments`, `from`, `cc`, `bcc`; and either `drafts` (1 to 500, each with `to`, `values` and any field of its own) or `data_file` (a spreadsheet in the outbox); `dry_run`; `skip_invalid` | Saves up to 500 drafts from one template. `{{name}}` in the subject, body and attachment names is replaced by each draft's value. Every draft is checked first; if one has a problem, none is saved unless `skip_invalid` is true. `dry_run` checks them all and shows the first one, saving nothing. A long batch goes on in the background and the answer gives its `batch` id. Nothing is sent. |
+| `create_draft` | `to`, `cc`, `bcc`, `from`, `subject`, `body` (plain text), and files: `attachments`, `inline_attachments`, `email_attachments`; `no_attachment` | Saves a draft in Drafts, then reads back how many files Bridge kept: a draft that lost one is removed and the call fails with `attachments_lost`. Nothing is sent. |
+| `create_drafts` | `template`: `subject`, `body`, `attachments`, `inline_attachments`, `email_attachments`, `from`, `cc`, `bcc`; and either `drafts` (1 to 5,000, each with `to`, `values` as a list of `{name, value}` and any field of its own) or `data_file` (a spreadsheet in the outbox); `dry_run`; `skip_invalid`; `no_attachment` | Saves up to 5,000 drafts from one template. `{{name}}` in the subject, body and attachment names is replaced by each draft's value. Every draft is checked first; if one has a problem, none is saved unless `skip_invalid` is true. `dry_run` checks them all and shows the first one, saving nothing. Each draft is composed again when its turn to be saved comes, so thousands never sit in memory, and each is checked to still hold its files. A long batch goes on in the background and the answer gives its `batch` id. Nothing is sent. |
 | `list_outbox` | none | Lists the files in `~/Downloads/Postern/Outbox` and its subfolders, with their size. On whenever `create_draft`, `create_drafts`, `update_draft` or `send_message` is. |
 | `batch_status` | `id` (none lists every batch), `all`, `offset`, `limit` (1 to 100) | Shows how a batch stands: what is saved or sent, what waits and why, and the items that need attention. On whenever `create_drafts` or `send_drafts` is. |
-| `update_draft` | `id`, and any of `to`, `cc`, `bcc`, `from`, `subject`, `body`, `attachments` | Replaces those fields; the others keep their value, attachments included. Returns the draft's new id. |
+| `update_draft` | `id`, and any of `to`, `cc`, `bcc`, `from`, `subject`, `body`, `attachments`, `inline_attachments`, `email_attachments`, `no_attachment` | Replaces those fields; the others keep their value. The files stay unless one of the three file arguments is given: then they replace them all (`email_attachments` can name the draft's own files). Returns the draft's new id. |
 | `delete_draft` | `id` | Deletes one draft from Drafts. The client also asks you each time. |
 
 ## Send
@@ -69,20 +74,31 @@ nobody else can be written to.
 
 | Tool | Arguments | What it does |
 |---|---|---|
-| `send_message` | `to`, `cc`, `bcc`, `from`, `subject`, `body` (plain text), `attachments` | Writes and sends a new email. |
-| `reply_to_message` | `id`, `body`, `reply_all` (default `false`), `from` | Replies above a quote of the original. Recipients come from the original; it leaves from your address the original was sent to, unless `from` says otherwise. |
-| `forward_message` | `id`, `to`, `note`, `include_attachments` (default `true`), `from` | Forwards a message with an optional note. |
-| `send_draft` | `id` | Sends a draft as it is, attachments included, then removes it from Drafts. |
-| `send_drafts` | `ids` (1 to 500 draft ids) or `batch` (a `create_drafts` batch id); `spacing_seconds` (1 to 3,600); `start_at` | Sends up to 500 drafts after one panel and one Touch ID, one by one within your limits, and removes each one sent from Drafts. Returns the outcome for each id (`sent`, `waiting`, `sending`, `skipped` when you unticked it or deleted its draft, `refused` with the reason, `failed`, or `uncertain` when the connection broke as Bridge took it), and a `batch` id while some are still waiting. A draft already held or sent by another batch is refused, so no email leaves twice. |
+| `send_message` | `to`, `cc`, `bcc`, `from`, `subject`, `body` (plain text), files (`attachments`, `inline_attachments`, `email_attachments`), `no_attachment` | Writes and sends a new email. |
+| `reply_to_message` | `id`, `body`, `reply_all` (default `false`), `from`, files, `no_attachment` | Replies above a quote of the original, with files if given. Recipients come from the original; it leaves from your address the original was sent to, unless `from` says otherwise. |
+| `forward_message` | `id`, `to`, `note`, `include_attachments` (default `true`), `from`, files, `no_attachment` | Forwards a message with an optional note, its attachments and any files given. |
+| `send_draft` | `id`, `no_attachment` | Sends a draft as it is, attachments included, then removes it from Drafts. |
+| `send_drafts` | `ids` (1 to 5,000 draft ids) or `batch` (a `create_drafts` batch id); `spacing_seconds` (1 to 3,600); `start_at`; `no_attachment` | Sends up to 5,000 drafts after one panel and one Touch ID, one by one within your limits, and removes each one sent from Drafts. The batch exists from the first moment: the call answers within about 45 seconds, with the outcome, or with the `batch` id and `decision` (`pending` while the drafts are read or the panel is open, then `approved`). Outcomes per id: `sent`, `waiting`, `sending`, `skipped` when you unticked it or deleted its draft, `refused` with the reason (another batch holds it, or the draft changed after you approved it), `failed`, or `uncertain` when the connection broke as Bridge took it. A draft already held or sent by another batch is refused, so no email leaves twice, even when an app calls again after a timeout. |
 | `cancel_batch` | `id` | Stops a batch: the emails not sent yet stay as drafts. On whenever `create_drafts` or `send_drafts` is. |
 
 Recipients are addresses such as `anna@example.com` or `Anna <anna@example.com>`, at most 50 in all.
 `from` is the address an email leaves from: your account's by default, or an alias of the account that you added
 under Send from in Postern's window (with Touch ID). A draft keeps the address it was written from; Postern refuses to
 send it if that address is not one of yours on the list.
-`attachments` are file names in `~/Downloads/Postern/Outbox`, or paths in its subfolders such as `Letters/Acme.pdf`,
-at most 20 MB in all: put the files there first. Nothing else on your Mac can be attached, and no link inside the
-outbox is followed.
+Files come three ways, at most 20 files and 20 MB in all per email:
+
+- `attachments`: file names in `~/Downloads/Postern/Outbox`, or paths in its subfolders such as `Letters/Acme.pdf`.
+  Nothing else on your Mac can be attached, and no link inside the outbox is followed.
+- `inline_attachments`: files the app wrote itself, each `{name, text}` for a text file or `{name, base64}` for any
+  other, 10 MB in all. Useful for apps that cannot reach the outbox, such as a chat app that just made a CSV.
+- `email_attachments`: attachments of emails the app can read, each `{id, index}` with the index `get_message`
+  gives, such as the invoice of one email sent on to your accountant.
+
+An email whose subject or text announces a file (`ci-joint`, `pièce jointe`, `en PJ`, `attached`, `anbei`,
+`adjunto`, `in allegato`, `em anexo`, `bijlage` and their variants) and carries none is refused with
+`attachment_missing` before anything is saved or shown: the app forgot the files. It passes `no_attachment: true`
+when the text means it; the panel then says so in orange. The quoted original of a reply is not checked. Every
+answer names the files that left or were saved, with their sizes.
 
 On the panel, you can also choose **Keep as Draft**: the email is saved in Drafts instead, and the client hears so.
 
@@ -94,7 +110,7 @@ send the rest with one Touch ID. Each email is approved for its own exact bytes,
 
 They leave one by one, `spacing_seconds` apart: two seconds for up to 20 emails, thirty above, so a long batch does
 not reach Proton as a burst. When your hourly or daily limit is reached, the batch waits for room instead of failing,
-and goes on as soon as there is some: raise the limits in Postern's window, up to 100 per hour and 500 per day, with
+and goes on as soon as there is some: raise the limits in Postern's window, up to 300 per hour and 1,000 per day, with
 Touch ID, and it speeds up. `start_at` delays the first email, up to thirty days, for example to Monday at 8:00. While
 Postern is paused or `send_drafts` is off, the batch holds. When Bridge does not take an email (not running, signed
 out, or Proton asking to wait), the batch holds too and tries again after 30 seconds, 2 minutes, then every 10
@@ -102,13 +118,19 @@ minutes, instead of failing every email in turn; an email Proton refuses is mark
 An email whose connection broke while Bridge was taking it is marked `uncertain`: it counts towards your limits, its
 draft stays, and no batch sends that draft again; look in Sent.
 
-Before each email, Postern checks again that its recipients are still allowed, that its sender is still yours or an
-alias you kept, and that its draft is still in Drafts: deleting a draft in Proton holds its email back. Each email
+Before each email, Postern checks again that its recipients are still allowed and that its sender is still yours or
+an alias you kept, then composes the email again from its draft: deleting a draft in Proton holds its email back,
+and a draft changed after you approved it does not leave (`refused`). The approval keeps only each email's digest,
+so a batch of thousands holds no emails in memory while it waits. Each email
 takes its place in your limits at the moment it leaves, so two batches running at once never go past them, and it
 carries the time it leaves in its Date header (the approval covers every other byte).
 
-Batches live as long as Postern runs. The Overview pane lists them with their progress and a Stop button; quitting
-Postern stops them too. Either way, nothing is lost: a draft leaves Drafts only once its email is sent. Proton applies
+The Overview pane lists batches with their progress and a Stop button. An approved send batch is sealed on disk as
+it goes (ChaCha20-Poly1305, under a key in Postern's Keychain group), so 5,000 emails that take days at your limits
+survive a restart of the Mac or of Postern: the batch comes back waiting, and goes on only when you choose **Resume
+with Touch ID**. An email that was being handed to Bridge when Postern stopped comes back `uncertain` and is never
+sent again. A file that was changed by anything else does not open and is dropped. Nothing is lost either way: a
+draft leaves Drafts only once its email is sent. Proton applies
 its own limits as well (on the free plan, 50 emails an hour and 150 a day) and may stop an account that looks like it
 sends bulk mail.
 
@@ -146,6 +168,8 @@ When Postern refuses, the client gets a code and a sentence it can repeat to you
 | `quota_exceeded` | The hourly or daily sending limit is reached. |
 | `send_refused` | Proton refused the email; it was not sent. |
 | `send_uncertain` | The connection to Bridge broke while the email was handed over; check Sent before sending it again. |
+| `attachment_missing` | The text announces a file and none is attached; attach it, or pass `no_attachment: true`. |
+| `attachments_lost` | Bridge saved a draft without all its files; the draft was removed and nothing was saved. |
 | `approval_rejected` | You chose not to send or delete, or Touch ID did not pass. |
 | `approval_timeout` | Nobody answered the panel within two minutes. |
 | `bridge_unreachable` | Proton Mail Bridge is not running or not answering. |

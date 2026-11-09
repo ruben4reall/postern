@@ -61,6 +61,7 @@ struct AttachmentTools {
         return CallTool.Result(
             content: [.text(text: "Saved \(saved.filename) (\(saved.size) bytes) to \(saved.path). macOS marks it as downloaded, so it is checked before it opens.", annotations: nil, _meta: nil)],
             structuredContent: Optional<Value>.some(.object([
+                "summary": .string("Saved to \(saved.path). macOS marks it as downloaded, so it is checked before it opens."),
                 "path": .string(saved.path), "filename": .string(UntrustedRenderer.defuse(saved.filename)),
                 "mime_type": .string(saved.mimeType), "size": .int(saved.size), "sha256": .string(saved.sha256),
             ])),

@@ -18,11 +18,16 @@ struct ControlView: View {
         } detail: {
             VStack(spacing: 0) {
                 if model.backgroundServiceOff { ServiceOffBar() }
+                if let updates = model.updates, let version = updates.pendingVersion {
+                    UpdateBar(version: version) { updates.checkForUpdates() }
+                }
                 if let notice = model.notice {
                     NoticeBar(text: notice) { model.notice = nil }
                 }
                 if model.configured { detail } else { WelcomePane(model: model) }
             }
+            .scrollContentBackground(.hidden)
+            .background(Theme.canvas)
             .navigationTitle(model.configured ? model.pane.title : "Postern")
             .navigationSubtitle(model.statusLine)
             .toolbar {
@@ -39,6 +44,7 @@ struct ControlView: View {
             }
         }
         .frame(minWidth: 820, minHeight: 560)
+        .tint(Theme.accent)
         .sheet(isPresented: $model.showingSetup) {
             if let setup = model.setup {
                 OnboardingView(model: setup, cancel: model.configured ? { model.cancelSetup() } : nil)
@@ -68,32 +74,22 @@ extension ControlModel {
     }
 
     var statusTint: Color {
-        if !configured { return .gray }
-        return policy.paused ? .orange : .green
+        if !configured { return Theme.hint }
+        return policy.paused ? Theme.warning : Theme.success
     }
 }
 
 extension ControlModel.Pane {
-    var tint: Color {
-        switch self {
-        case .overview: .green
-        case .tools: .blue
-        case .mailboxes: .teal
-        case .clients: .purple
-        case .activity: .indigo
-        case .security: .gray
-        }
-    }
+    var tint: Color { Theme.interaction }
 }
 
 extension Tier {
+    /// Purple for what only reads, writes or files; Proton's warning and danger for what leaves or is lost.
     var tint: Color {
         switch self {
-        case .read: .blue
-        case .organize: .teal
-        case .draft: .indigo
-        case .send: .orange
-        case .delete: .red
+        case .read, .organize, .draft: Theme.interaction
+        case .send: Theme.warning
+        case .delete: Theme.danger
         }
     }
 }
@@ -108,7 +104,7 @@ private struct Sidebar: View {
             VStack(alignment: .leading, spacing: 22) {
                 LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
                     ForEach(ControlModel.Pane.allCases) { pane in
-                        Tile(pane: pane, value: value(for: pane), tint: pane == .overview ? model.statusTint : pane.tint,
+                        Tile(pane: pane, value: value(for: pane), tint: pane == .overview ? model.statusTint : Theme.interaction,
                              symbol: pane == .overview && model.policy.paused ? "pause.fill" : pane.symbol,
                              selected: model.pane == pane && model.configured) {
                             model.pane = pane
@@ -118,23 +114,33 @@ private struct Sidebar: View {
                 }
                 if !model.connectedApps.isEmpty {
                     VStack(alignment: .leading, spacing: 8) {
-                        Text("Connected now").font(.caption.weight(.semibold)).foregroundStyle(.secondary)
+                        Text("Connected now").font(.caption.weight(.semibold)).textCase(.uppercase).kerning(0.4)
+                            .foregroundStyle(Theme.sidebarTextWeak)
                         ForEach(sessionsByApp, id: \.name) { app in
                             HStack(spacing: 8) {
-                                Circle().fill(.green).frame(width: 7, height: 7)
-                                Text(app.name)
+                                Circle().fill(Theme.success).frame(width: 7, height: 7)
+                                Text(app.name).foregroundStyle(Theme.sidebarText)
                                 Spacer()
-                                if app.count > 1 { Text("\(app.count)").foregroundStyle(.secondary).monospacedDigit() }
+                                if app.count > 1 {
+                                    Text("\(app.count)").font(.caption.weight(.semibold)).monospacedDigit()
+                                        .foregroundStyle(.white)
+                                        .padding(.horizontal, 6).padding(.vertical, 1)
+                                        .background(Theme.interaction, in: RoundedRectangle(cornerRadius: 4))
+                                }
                             }
                             .font(.callout)
                         }
                     }
                     .padding(.horizontal, 6)
                 }
+                Spacer(minLength: 0)
             }
             .padding(.horizontal, 10)
             .padding(.top, 6)
         }
+        .scrollContentBackground(.hidden)
+        .background(Theme.sidebar)
+        .environment(\.colorScheme, .dark)
     }
 
     private var sessionsByApp: [(name: String, count: Int)] {
@@ -171,27 +177,29 @@ private struct Tile: View {
                 HStack(alignment: .top) {
                     Image(systemName: symbol)
                         .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(selected ? tint : .white)
+                        .foregroundStyle(selected ? Theme.interaction : .white)
                         .frame(width: 26, height: 26)
-                        .background(selected ? AnyShapeStyle(.white) : AnyShapeStyle(tint.gradient), in: Circle())
+                        .background(selected ? AnyShapeStyle(.white) : AnyShapeStyle(tint), in: Circle())
                     Spacer(minLength: 4)
                     Text(value)
                         .font(.system(size: 20, weight: .bold, design: .rounded))
                         .monospacedDigit()
-                        .foregroundStyle(selected ? .white : .primary)
+                        .foregroundStyle(.white)
                         .lineLimit(1)
                 }
                 Text(pane.title)
                     .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(selected ? .white : .secondary)
+                    .foregroundStyle(selected ? .white : Theme.sidebarTextWeak)
                     .lineLimit(1)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 9)
             .frame(maxWidth: .infinity, alignment: .leading)
-            .background(selected ? AnyShapeStyle(tint.gradient) : AnyShapeStyle(.fill.quaternary),
-                        in: RoundedRectangle(cornerRadius: 11, style: .continuous))
-            .contentShape(RoundedRectangle(cornerRadius: 11, style: .continuous))
+            .background(selected ? Theme.interaction : Theme.sidebarTile,
+                        in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
+                .strokeBorder(.white.opacity(selected ? 0.18 : 0.06)))
+            .contentShape(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
         }
         .buttonStyle(.plain)
         .accessibilityLabel("\(pane.title), \(value)")
@@ -213,7 +221,7 @@ struct PaneHero: View {
                 .font(.system(size: 21, weight: .semibold))
                 .foregroundStyle(.white)
                 .frame(width: 44, height: 44)
-                .background(tint.gradient, in: RoundedRectangle(cornerRadius: 10, style: .continuous))
+                .background(tint, in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
             VStack(alignment: .leading, spacing: 3) {
                 Text(title).font(.title3.weight(.semibold))
                 Text(text).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
@@ -236,14 +244,35 @@ private struct NoticeBar: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
-        .background(.tint.opacity(0.08))
+        .background(Theme.accentSoft)
+    }
+}
+
+/// A new version, found by a check: named at the top of every pane until it is installed or looked at.
+private struct UpdateBar: View {
+    let version: String
+    let open: () -> Void
+
+    var body: some View {
+        HStack(alignment: .center, spacing: 10) {
+            Image(systemName: "arrow.down.circle.fill").foregroundStyle(Theme.accent).font(.title3)
+            VStack(alignment: .leading, spacing: 1) {
+                Text("Postern \(version) is available").fontWeight(.semibold)
+                Text("Signed by Postern's developer. Nothing installs until you choose to.").font(.callout).foregroundStyle(Theme.textWeak)
+            }
+            Spacer()
+            Button("See What's New…", action: open).buttonStyle(.borderedProminent)
+        }
+        .padding(.horizontal, 20)
+        .padding(.vertical, 10)
+        .background(Theme.accentSoft)
     }
 }
 
 private struct ServiceOffBar: View {
     var body: some View {
         HStack(alignment: .firstTextBaseline) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning)
             Text("Postern's background item is turned off, so apps can't connect. Turn Postern on in Login Items.")
                 .fixedSize(horizontal: false, vertical: true)
             Spacer()
@@ -251,7 +280,7 @@ private struct ServiceOffBar: View {
         }
         .padding(.horizontal, 20)
         .padding(.vertical, 10)
-        .background(.orange.opacity(0.1))
+        .background(Theme.warning.opacity(0.12))
     }
 }
 
@@ -321,7 +350,7 @@ private struct OverviewPane: View {
             if !model.batches.isEmpty {
                 Section {
                     ForEach(model.batches.prefix(5)) { batch in
-                        BatchRow(batch: batch) { model.cancelBatch(batch.id) }
+                        BatchRow(batch: batch, cancel: { model.cancelBatch(batch.id) }, resume: { model.resumeBatch(batch.id) })
                     }
                 } header: {
                     Text("Batches")
@@ -377,6 +406,7 @@ private struct OverviewPane: View {
 private struct BatchRow: View {
     let batch: BatchBoard.Batch
     let cancel: () -> Void
+    var resume: () -> Void = {}
 
     var body: some View {
         VStack(alignment: .leading, spacing: 6) {
@@ -384,11 +414,14 @@ private struct BatchRow: View {
                 Label(title, systemImage: batch.kind == .sends ? "paperplane" : "doc.on.doc")
                     .font(.body.weight(.medium))
                 Spacer()
+                if batch.interrupted {
+                    Button("Resume with Touch ID", action: resume).buttonStyle(.borderedProminent).controlSize(.small)
+                }
                 if !batch.isOver {
                     Button("Stop", role: .destructive, action: cancel).controlSize(.small)
                 }
             }
-            ProgressView(value: Double(done), total: Double(max(1, batch.items.count)))
+            ProgressView(value: Double(done), total: Double(max(1, batch.items.count))).tint(Theme.accent)
             Text(status).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
         .padding(.vertical, 4)
@@ -478,7 +511,7 @@ private struct ToolsPane: View {
     var body: some View {
         Form {
             Section {
-                PaneHero(symbol: "switch.2", tint: .blue, title: "Tools",
+                PaneHero(symbol: "switch.2", tint: Theme.interaction, title: "Tools",
                          text: "Each tool is one thing an app may do with your mail. Turning one on asks for Touch ID; turning it off is immediate, and connected apps see the change at once.")
             }
             ForEach(Tier.allCases, id: \.self) { tier in
@@ -574,7 +607,7 @@ private struct MailboxesPane: View {
     var body: some View {
         Form {
             Section {
-                PaneHero(symbol: "tray.2", tint: .teal, title: "Mailboxes",
+                PaneHero(symbol: "tray.2", tint: Theme.interaction, title: "Mailboxes",
                          text: "Choose what apps can see. A hidden mailbox doesn't exist for them: missing from lists and searches, its messages refused.")
             }
             Section {
@@ -643,7 +676,7 @@ private struct ClientsPane: View {
     var body: some View {
         Form {
             Section {
-                PaneHero(symbol: "app.connected.to.app.below.fill", tint: .purple, title: "Apps",
+                PaneHero(symbol: "app.connected.to.app.below.fill", tint: Theme.interaction, title: "Apps",
                          text: "Connect Postern to the apps you use. Connecting only tells an app where Postern is: what it may do stays in Tools.")
             }
             Section {
@@ -652,7 +685,7 @@ private struct ClientsPane: View {
                 } else {
                     ForEach(sessionsByApp, id: \.name) { app in
                         HStack(spacing: 10) {
-                            Circle().fill(.green).frame(width: 8, height: 8)
+                            Circle().fill(Theme.success).frame(width: 8, height: 8)
                             Text(app.name)
                             Spacer()
                             Text(app.count == 1 ? "1 session" : "\(app.count) sessions").foregroundStyle(.secondary)
@@ -663,7 +696,7 @@ private struct ClientsPane: View {
                 Text("Connected now")
             }
             Section {
-                ForEach(model.clients) { row in
+                ForEach(model.clients.filter(\.installed) + model.clients.filter { !$0.installed }) { row in
                     LabeledContent {
                         clientAction(row)
                     } label: {
@@ -679,6 +712,7 @@ private struct ClientsPane: View {
             } footer: {
                 Text("Connecting writes one entry in the app's settings: the path of Postern's helper, never a password. Tools still stay off until you turn them on.")
             }
+            OtherAppSection()
         }
         .formStyle(.grouped)
     }
@@ -693,7 +727,7 @@ private struct ClientsPane: View {
         } else {
             switch row.status {
             case .connected:
-                Label("Connected", systemImage: "checkmark.circle.fill").foregroundStyle(.green)
+                Label("Connected", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.success)
             case .notConnected:
                 Button("Connect") { model.connect(row) }
             case .connectedElsewhere:
@@ -708,6 +742,41 @@ private struct ClientsPane: View {
     }
 }
 
+/// Any other MCP app: the entry to paste into its settings, in the shape it expects.
+private struct OtherAppSection: View {
+    @State private var snippet: SetupSnippet = .json
+    @State private var copied = false
+
+    var body: some View {
+        Section {
+            Picker("Format", selection: $snippet) {
+                ForEach(SetupSnippet.allCases) { Text($0.title).tag($0) }
+            }
+            Text(snippet.text(relayPath: ClientConnector.relayPath))
+                .font(.system(.callout, design: .monospaced))
+                .textSelection(.enabled)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(10)
+                .background(Theme.lowered, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+                .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border))
+            HStack {
+                Spacer()
+                Button(copied ? "Copied" : "Copy") {
+                    NSPasteboard.general.clearContents()
+                    NSPasteboard.general.setString(snippet.text(relayPath: ClientConnector.relayPath), forType: .string)
+                    copied = true
+                    Task { try? await Task.sleep(for: .seconds(2)); copied = false }
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        } header: {
+            Text("Any other app")
+        } footer: {
+            Text("Every app that speaks MCP can use Postern: paste this into its MCP settings. It names Postern's helper and nothing else.")
+        }
+    }
+}
+
 // MARK: Activity
 
 private struct ActivityPane: View {
@@ -718,7 +787,7 @@ private struct ActivityPane: View {
     var body: some View {
         Form {
             Section {
-                PaneHero(symbol: "list.bullet.rectangle", tint: .indigo, title: "Activity",
+                PaneHero(symbol: "list.bullet.rectangle", tint: Theme.interaction, title: "Activity",
                          text: "Every call an app made through Postern, kept for 90 days. Postern never writes down what your mail says.")
                 IntegrityBanner(integrity: model.integrity)
             }
@@ -812,10 +881,10 @@ private struct IntegrityBanner: View {
                 .foregroundStyle(.secondary).symbolRenderingMode(.multicolor)
         case .broken(let line)?:
             Label("The log was changed outside Postern, at entry \(line).", systemImage: "exclamationmark.octagon.fill")
-                .foregroundStyle(.red)
+                .foregroundStyle(Theme.danger)
         case .headMismatch?:
             Label("Entries were removed from the log outside Postern.", systemImage: "exclamationmark.octagon.fill")
-                .foregroundStyle(.red)
+                .foregroundStyle(Theme.danger)
         case nil:
             EmptyView()
         }
@@ -848,7 +917,7 @@ private struct OutcomeLabel: View {
         if outcome == "ok" {
             Label("Done", systemImage: "checkmark").foregroundStyle(.secondary)
         } else {
-            Label(Self.text(for: outcome), systemImage: "hand.raised").foregroundStyle(.orange)
+            Label(Self.text(for: outcome), systemImage: "hand.raised").foregroundStyle(Theme.warning)
         }
     }
 }
@@ -875,7 +944,7 @@ private struct SecurityPane: View {
     var body: some View {
         Form {
             Section {
-                PaneHero(symbol: "lock.shield", tint: .gray, title: "Security",
+                PaneHero(symbol: "lock.shield", tint: Theme.interaction, title: "Security",
                          text: "How you approve, how much apps may send, the Bridge certificate Postern trusts, and updates. Anything that gives apps more power asks for Touch ID.")
             }
             Section {
@@ -978,18 +1047,18 @@ private struct SendingSection: View {
         Section {
             Stepper(value: Binding(get: { model.policy.sendsPerHour },
                                    set: { value in Task { await model.setLimits(perHour: value, perDay: model.policy.sendsPerDay) } }),
-                    in: 1...100) {
+                    in: 1...300) {
                 LabeledContent("At most per hour", value: "\(model.policy.sendsPerHour) emails")
             }
             Stepper(value: Binding(get: { model.policy.sendsPerDay },
                                    set: { value in Task { await model.setLimits(perHour: model.policy.sendsPerHour, perDay: value) } }),
-                    in: 1...500) {
+                    in: 1...1000) {
                 LabeledContent("At most per day", value: "\(model.policy.sendsPerDay) emails")
             }
         } header: {
             Text("Sending")
         } footer: {
-            Text("Raising a limit asks for Touch ID. Apps hear that the limit is reached; nothing is sent.")
+            Text("Raising a limit asks for Touch ID. A batch waits for room when a limit is reached. Proton sets its own limits by plan and account reputation (150 a day on the free plan) and may stop an account that looks like bulk mail: raise these only as far as your use needs.")
         }
         Section {
             AddressList(addresses: model.policy.trustedRecipients.sorted(), empty: "Nobody. Every email shows the approval panel.") { email in

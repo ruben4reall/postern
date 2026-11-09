@@ -158,16 +158,38 @@ struct SendTools {
         guard SendBudget.remaining(policy, sends: ledger.recentSends()) > 0 else {
             throw PosternError(.quotaExceeded, "The sending limit the user set is reached. Try again later.")
         }
+        let fingerprint = message.contentFingerprint
+        if let conflict = await board.holdSingle(fingerprint) { throw PosternError(.duplicate, conflict) }
+        var left = false
+        do {
+            let outcome = try await review(message, tool: tool, context: context, extra: extra, left: &left)
+            await board.releaseSingle(fingerprint, sent: left)
+            return outcome
+        } catch let error as PosternError {
+            await board.releaseSingle(fingerprint, sent: left || error.code == .sendUncertain)
+            throw error
+        } catch {
+            await board.releaseSingle(fingerprint, sent: left)
+            throw error
+        }
+    }
+
+    /// The panel, then Bridge. `left` turns true once the email is sent.
+    private func review(
+        _ message: OutgoingMessage, tool: ToolID, context: String?, extra: [String: [ApprovalBadge]], left: inout Bool
+    ) async throws -> CallTool.Result {
         let request = try await approvalRequest(message, tool: tool, context: context, extra: extra)
 
         if let approved = await desk.approveTrusted(request, trusted: policy.trustedRecipients) {
             try await sendCounted(approved)
+            left = true
             return result("Sent to \(approved.recipients.joined(separator: ", "))\(Self.withFiles(approved.message)), all on the user's trusted list.",
                           ["sent": .bool(true), "attachments": Self.fileList(approved.message)])
         }
         switch await desk.review(request) {
         case .approved(let approved):
             try await sendCounted(approved)
+            left = true
             return result("The user read the email, approved it with Touch ID, and it was sent to \(approved.recipients.joined(separator: ", "))\(Self.withFiles(approved.message)).",
                           ["sent": .bool(true), "attachments": Self.fileList(approved.message)])
         case .saveAsDraft(let draft):
@@ -472,9 +494,12 @@ struct SendTools {
         return nil
     }
 
+    /// The text, and the same facts as fields. Several clients give the model only the fields, others only the
+    /// text, so the fields carry the text too, as `summary`.
     func result(_ text: String, _ fields: [String: Value]) -> CallTool.Result {
         CallTool.Result(content: [.text(text: text, annotations: nil, _meta: nil)],
-                        structuredContent: Optional<Value>.some(.object(fields)), isError: false)
+                        structuredContent: Optional<Value>.some(.object(fields.merging(["summary": .string(text)]) { own, _ in own })),
+                        isError: false)
     }
 
     static func describe(_ address: Address) -> String {

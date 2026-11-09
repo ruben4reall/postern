@@ -11,7 +11,7 @@ enum Authenticator {
 
     static func confirm(_ reason: String, allowPassword: Bool) async -> Outcome {
         let context = LAContext()
-        var policy = LAPolicy.deviceOwnerAuthenticationWithBiometricsOrWatch
+        var policy = LAPolicy.deviceOwnerAuthenticationWithBiometricsOrCompanion
         if !context.canEvaluatePolicy(policy, error: nil) {
             // A Mac without any biometric hardware has only its password; elsewhere the user must have allowed it.
             guard allowPassword || context.biometryType == .none else { return .unavailable }

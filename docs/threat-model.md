@@ -79,10 +79,18 @@ reads Bridge's own window; a compromised Proton account.
   messages. One panel at a time. A batch of drafts gets one panel and one Touch ID, and each email in it is still
   bound to its own SHA-256 (all of its bytes but the Date header, set when it leaves). An approved batch may take
   hours to leave at your limits: it is the one approval that outlives the panel. It covers only those exact emails.
-  A draft that a batch holds, sent or may have sent cannot be taken by another batch, so an email leaves once. The
-  batch holds while Postern is paused or `send_drafts` is off; before each email it rechecks your allowed
-  recipients, your sender addresses and that the draft is still in Drafts. The Overview pane can stop it at any time,
-  and it is kept in memory only, so quitting Postern ends it.
+  A draft that a batch holds, sent or may have sent cannot be taken by another batch, so an email leaves once, even
+  when an app calls again after a timeout. The approval keeps only each email's digest (an `ApprovedClaim`, which
+  only the desk makes): when its turn comes, the email is composed again from its draft, and `redeem` gives an
+  `ApprovedMessage` only if every byte but the Date and the envelope are the ones approved, so a draft changed in
+  Proton after approval does not leave. The batch holds while Postern is paused or `send_drafts` is off; before each
+  email it rechecks your allowed recipients and your sender addresses. The Overview pane can stop it at any time.
+- **A batch kept across restarts.** An approved send batch is written to disk as it goes, so one of thousands of
+  emails that takes days can survive a restart. Each file is sealed with ChaCha20-Poly1305 under a 256-bit key kept
+  in Postern's Keychain group: no other program can read who the emails go to, and a changed file does not open and
+  is dropped. A batch found at launch never resumes on its own: it waits for **Resume with Touch ID** in the window,
+  and the desk gives back the claims only then. An email that was being handed to Bridge when Postern stopped comes
+  back `uncertain` and is never sent again.
 - **Writing as someone else.** An email leaves from your account's address or from an alias you added under Send
   from, with Touch ID; any other From is refused before the panel, and the panel always shows it.
 - **Sending a lot.** 10 emails per hour and 30 per day by default, counted in the Keychain. Raising them needs
@@ -91,10 +99,19 @@ reads Bridge's own window; a compromised Proton account.
   share the last place. When the Keychain cannot be read (a locked screen), the count kept in memory still applies.
 - **Attaching a file from elsewhere.** Attachments and spreadsheets are read only from the outbox folder and the
   folders inside it, by a path that may not contain `..`, a hidden name or a link, and through a descriptor opened
-  without following links, on a plain file with a single name (no hard link to a file elsewhere).
+  without following links, on a plain file with a single name (no hard link to a file elsewhere). An app can also
+  attach content it wrote itself (`inline_attachments`, 10 MB at most), which gives it nothing it could not already
+  put in the text, and attachments of emails it is allowed to read (`email_attachments`), as `forward_message`
+  already could; hidden mailboxes stay out of reach. Every file is listed on the panel with its size.
+- **Forgetting the files.** An email that announces a file and carries none is refused before the panel, so an app
+  that forgot its attachments has to add them; the panel marks any that the app said were meant to go without one.
+  After a draft is saved, Postern reads back how many files Bridge kept and removes a draft that lost one.
 - **Talking to Postern directly.** Every XPC connection between Postern's processes requires the other side to be
   signed by Postern's developer, in both directions.
-- **Reading the password from a settings file.** Client settings hold the path of the relay, never a secret.
+- **Reading the password from a settings file.** Client settings hold the path of the relay, never a secret. To
+  write them, the sandbox allows Postern each app's settings file by its exact path (Cursor, VS Code, Windsurf,
+  Gemini CLI, Kiro, Cline), never the folder around it, so Postern cannot read the tokens these apps keep beside it;
+  Claude Desktop's and Codex's folders are allowed as before.
 - **Clicking the panel for you.** Touch ID cannot be typed by a program. The Mac password fallback is off by default,
   and turning it on needs Touch ID.
 

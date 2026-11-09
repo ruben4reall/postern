@@ -13,8 +13,8 @@
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-111" alt="MIT license"></a>
 </p>
 
-Postern is a native Mac app that lets MCP clients such as Claude Code, Claude Desktop and Codex work with your
-Proton Mail, through [Proton Mail Bridge](https://proton.me/mail/bridge) on the same Mac. You switch on, one by one,
+Postern is a native Mac app that lets any MCP client, such as Claude Code, Claude Desktop, Codex, ChatGPT, Cursor,
+VS Code, Windsurf or Gemini CLI, work with your Proton Mail, through [Proton Mail Bridge](https://proton.me/mail/bridge) on the same Mac. You switch on, one by one,
 what they may do. Anything that could leak or destroy mail waits for you on a panel that shows exactly what will
 happen, and happens only after Touch ID.
 
@@ -55,8 +55,8 @@ serve: `list_outbox`, `batch_status` and `cancel_batch`.
 |---|---|---|
 | **Read** | `list_mailboxes`, `search_messages`, `get_message`, `get_thread`, `awaiting_reply`, `read_attachment`, `save_attachment`, `list_addresses` | Every message is cleaned of hidden text and invisible characters, and labeled as untrusted. Attachments are read (PDFs, scans, photos, text) in a sandboxed reader, or saved only to `~/Downloads/Postern`, marked as downloaded. `awaiting_reply` lists who has not answered you. |
 | **Organize** | `mark_read`, `mark_unread`, `set_starred`, `move_messages`, `archive_messages`, `add_label`, `remove_label`, `create_mailbox` | Changes are read back from Bridge to confirm them. Never to Trash or Spam. |
-| **Drafts** | `create_draft`, `create_drafts`, `update_draft`, `delete_draft` | Drafts stay in Drafts. Nothing is sent. `create_drafts` writes up to 500 from a template or a spreadsheet, each with its own attachments. |
-| **Send** | `send_message`, `reply_to_message`, `forward_message`, `send_draft`, `send_drafts` | Every email waits for you on the approval panel and leaves only after Touch ID. A batch of up to 500 drafts takes one panel and one Touch ID, then leaves at a steady pace within your limits: 10 per hour and 30 per day by default. Aliases you add can be used as sender. |
+| **Drafts** | `create_draft`, `create_drafts`, `update_draft`, `delete_draft` | Drafts stay in Drafts. Nothing is sent. `create_drafts` writes up to 5,000 from a template or a spreadsheet, each with its own attachments, and every saved draft is checked to still hold its files. |
+| **Send** | `send_message`, `reply_to_message`, `forward_message`, `send_draft`, `send_drafts` | Every email waits for you on the approval panel and leaves only after Touch ID. An email that says a file is attached but carries none is refused before it reaches you. A batch of up to 5,000 drafts takes one panel and one Touch ID, then leaves at a steady pace within your limits (10 per hour and 30 per day by default), and survives a restart. Aliases you add can be used as sender. |
 | **Delete** | `trash_messages`, `delete_permanently` | Every deletion lists each message on a panel and needs Touch ID. Erasing works only on messages already in Trash or Spam. |
 
 The full reference, with every argument, is in [docs/tools.md](docs/tools.md).
@@ -122,10 +122,12 @@ Open Postern. The setup takes a minute:
 3. **Sign in.** In Bridge, open your account and copy the username and password shown under Mailbox details. This
    password is made by Bridge; it is not your Proton password. It goes straight into the Keychain.
 4. **Allow reading**, with Touch ID.
-5. **Connect your apps.** In Apps, click Connect next to Claude Code, Claude Desktop or Codex. Postern writes one
-   entry in that app's settings: the path of its helper, never a password. Restart the app, or open a new session.
+5. **Connect your apps.** In Apps, click Connect next to Claude Code, Claude Desktop, Codex (shared by ChatGPT's Mac
+   app), Cursor, VS Code, Windsurf, Gemini CLI, Kiro or Cline. Postern writes one entry in that app's settings: the
+   path of its helper, never a password. Restart the app, or open a new session.
 
-Other MCP clients can launch Postern's helper over stdio:
+Any other MCP client can launch Postern's helper over stdio. Apps shows the entry in the format each one expects
+(JSON, VS Code, Zed, TOML, OpenCode, Goose, Continue), ready to copy:
 
 ```json
 {

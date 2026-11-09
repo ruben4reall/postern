@@ -134,7 +134,7 @@ struct ApprovalView: View {
                 let remaining = max(0, Int(deadline.timeIntervalSince(context.date)))
                 Text(String(format: "%d:%02d", remaining / 60, remaining % 60))
                     .font(.callout.monospacedDigit())
-                    .foregroundStyle(remaining < 20 ? .orange : .secondary)
+                    .foregroundStyle(remaining < 20 ? Theme.warning : Theme.textWeak)
                     .help("The request is rejected when this reaches zero.")
             }
         }
@@ -183,10 +183,10 @@ struct ApprovalView: View {
         } icon: {
             Image(systemName: "exclamationmark.triangle.fill")
         }
-        .foregroundStyle(.red)
+        .foregroundStyle(Theme.danger)
         .padding(10)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.red.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        .background(Theme.danger.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
     }
 
     private var bodyText: some View {
@@ -247,14 +247,7 @@ struct BadgeView: View {
     let badge: ApprovalBadge
 
     var body: some View {
-        Text(title)
-            .font(.caption.weight(.medium))
-            .lineLimit(1)
-            .fixedSize()
-            .padding(.horizontal, 7)
-            .padding(.vertical, 2)
-            .foregroundStyle(color)
-            .background(color.opacity(0.14), in: Capsule())
+        Pill(text: title, color: color)
     }
 
     private var title: String {
@@ -268,9 +261,9 @@ struct BadgeView: View {
 
     private var color: Color {
         switch badge {
-        case .firstContact, .replyToDiffers: .orange
-        case .cameFromEmail: .red
-        case .trusted: .green
+        case .firstContact, .replyToDiffers: Theme.warning
+        case .cameFromEmail: Theme.danger
+        case .trusted: Theme.success
         }
     }
 }
@@ -319,7 +312,7 @@ struct DeletionView: View {
             HStack(alignment: .top, spacing: 14) {
                 Image(systemName: request.permanent ? "trash.slash.circle.fill" : "trash.circle.fill")
                     .font(.system(size: 34))
-                    .foregroundStyle(request.permanent ? Color.red : Color.orange)
+                    .foregroundStyle(request.permanent ? Theme.danger : Theme.warning)
                     .symbolRenderingMode(.hierarchical)
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title).font(.title3.weight(.semibold))
@@ -332,7 +325,7 @@ struct DeletionView: View {
                 TimelineView(.periodic(from: .now, by: 1)) { context in
                     let remaining = max(0, Int(deadline.timeIntervalSince(context.date)))
                     Text(String(format: "%d:%02d", remaining / 60, remaining % 60))
-                        .font(.callout.monospacedDigit()).foregroundStyle(remaining < 20 ? .orange : .secondary)
+                        .font(.callout.monospacedDigit()).foregroundStyle(remaining < 20 ? Theme.warning : Theme.textWeak)
                 }
             }
             ScrollView {
@@ -367,7 +360,7 @@ struct DeletionView: View {
                     Label(request.permanent ? "Erase with Touch ID" : "Move to Trash with Touch ID", systemImage: "touchid")
                 }
                 .buttonStyle(.borderedProminent)
-                .tint(request.permanent ? .red : .orange)
+                .tint(request.permanent ? Theme.danger : Theme.warning)
             }
             .controlSize(.large)
         }

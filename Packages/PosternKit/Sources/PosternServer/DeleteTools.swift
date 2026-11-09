@@ -38,6 +38,7 @@ struct DeleteTools {
             return CallTool.Result(
                 content: [.text(text: text, annotations: nil, _meta: nil)],
                 structuredContent: Optional<Value>.some(.object([
+                    "summary": .string(text),
                     "count": .int(report.done.count),
                     "messages": .array(report.done.map { .object(["id": .string($0.opaque)]) }),
                     "verified": .bool(report.verified),

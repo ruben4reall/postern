@@ -344,6 +344,15 @@ public actor ApprovalDesk {
         }
     }
 
+    /// Gives back the approvals of a batch the user approved before Postern quit, once they confirm again with
+    /// Touch ID: the same digests, read from the batch Postern sealed on disk, and no others.
+    public func resume(_ digests: [String], reason: String) async -> [ApprovedClaim]? {
+        await acquire()
+        defer { release() }
+        guard !digests.isEmpty, await authenticator.confirm(reason: reason) else { return nil }
+        return digests.map { ApprovedClaim(digest: $0) }
+    }
+
     /// The person's choice, or nil when the request expired first.
     private func choice<Intent: Sendable>(
         within limit: Duration? = nil, _ present: @escaping @Sendable (Date) async -> Intent

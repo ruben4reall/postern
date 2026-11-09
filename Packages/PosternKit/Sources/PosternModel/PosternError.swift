@@ -21,6 +21,8 @@ public enum PosternErrorCode: String, Codable, Sendable {
     case attachmentMissing = "attachment_missing"
     /// Bridge saved a draft without every file it was given.
     case attachmentsLost = "attachments_lost"
+    /// The same email is already waiting for the user, or left a moment ago.
+    case duplicate
     case approvalRejected = "approval_rejected"
     case approvalTimeout = "approval_timeout"
 }

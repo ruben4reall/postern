@@ -23,14 +23,48 @@ public enum ToolCatalog {
     ])
 
     static let sender: Value = .object([
-        "type": "string",
-        "description": "The address to send from, such as an alias of the account. One of list_addresses; default the account's.",
+        "type": "string", "description": "Send from this address, one of list_addresses. Default the account's.",
     ])
+
+    /// Cc and Bcc: the same as recipients, described once on To.
+    static let moreRecipients: Value = .object(["type": "array", "items": .object(["type": "string"]), "maxItems": 50])
 
     static let outbox: Value = .object([
         "type": "array", "items": .object(["type": "string"]), "maxItems": 20,
-        "description": "File names in the Postern outbox folder (~/Downloads/Postern/Outbox), such as CV.pdf or Letters/Acme.pdf for a subfolder; list_outbox lists them. Nothing else can be attached.",
+        "description": "Files of the outbox (~/Downloads/Postern/Outbox), such as CV.pdf or Letters/Acme.pdf; list_outbox lists them.",
     ])
+
+    static let inline: Value = .object([
+        "type": "array", "maxItems": 20,
+        "description": "Files you write: a name such as report.csv, and text, or base64 for other files. 10 MB in all.",
+        "items": .object([
+            "type": "object",
+            "properties": .object([
+                "name": .object(["type": "string"]), "text": .object(["type": "string"]), "base64": .object(["type": "string"]),
+            ]),
+            "required": .array(["name"]),
+        ]),
+    ])
+
+    static let fromEmails: Value = .object([
+        "type": "array", "maxItems": 20,
+        "description": "Attachments of emails you can read: the email's id and the attachment's index from get_message.",
+        "items": .object([
+            "type": "object",
+            "properties": .object(["id": .object(["type": "string"]), "index": .object(["type": "integer", "minimum": 1])]),
+            "required": .array(["id", "index"]),
+        ]),
+    ])
+
+    static let noAttachment: Value = .object([
+        "type": "boolean",
+        "description": "true when the text mentions a file (attached, ci-joint) but none is meant; otherwise such an email is refused.",
+    ])
+
+    /// Every way to attach files, for the tools that write an email.
+    static let files: [String: Value] = [
+        "attachments": outbox, "inline_attachments": inline, "email_attachments": fromEmails, "no_attachment": noAttachment,
+    ]
 
     static let ids: Value = .object([
         "type": "array", "items": .object(["type": "string"]), "minItems": 1, "maxItems": 100,
@@ -117,12 +151,11 @@ public enum ToolCatalog {
             Tool(
                 name: id.rawValue, title: "Find emails awaiting a reply",
                 description: """
-                Lists the people the user wrote to who have not answered: the follow-ups to write, such as job \
-                applications with no news. Looks at Sent since a day (default 30 days ago), groups the emails by their \
-                first recipient, leaves out people written to in the last quiet_days (default 7), and checks for an \
-                answer three ways: a reply in the conversation, any later email from the same address, or from the \
-                same company domain (not for public providers such as gmail.com). Spam is checked too. By default \
-                only people without any answer are listed; include_answered lists the others with what was heard.
+                Follow-ups: lists the people the user emailed who have not answered, such as job applications with \
+                no news. Reads Sent since a day (default 30 days ago), one line per first recipient, leaving out people \
+                written to in the last quiet_days (default 7). An answer is a reply in the conversation, a later email \
+                from the same address, or from the same company domain (not public providers such as gmail.com), Spam \
+                included. include_answered also lists the others with what was heard.
                 """,
                 inputSchema: schema([
                     "since": .object(["type": "string", "description": "First day of sent mail to look at, YYYY-MM-DD. Default 30 days ago."]),
@@ -196,47 +229,49 @@ public enum ToolCatalog {
         case .createDraft:
             Tool(
                 name: id.rawValue, title: "Write a draft",
-                description: "Saves a draft in Drafts. Nothing is sent: the user, or send_draft with their approval, sends it.",
+                description: "Saves an email draft in Proton Drafts, with its files. Nothing is sent: the user, or send_draft with their approval, sends it. Postern checks that Bridge kept every file.",
                 inputSchema: schema([
-                    "to": recipients, "cc": recipients, "bcc": recipients, "from": sender,
+                    "to": recipients, "cc": moreRecipients, "bcc": moreRecipients, "from": sender,
                     "subject": .object(["type": "string"]), "body": .object(["type": "string", "description": "Plain text."]),
-                    "attachments": outbox,
-                ], required: ["to", "subject", "body"]),
+                ].merging(files) { $1 }, required: ["to", "subject", "body"]),
                 annotations: draftAnnotations
             )
         case .createDrafts:
             Tool(
                 name: id.rawValue, title: "Write drafts from a template",
                 description: """
-                Saves up to \(SendTools.batchLimit) drafts in Drafts at once, for example one job application per \
-                company, each with its own attachments. A template gives the subject, body, attachments and sender \
-                they share; in its subject, body and attachment names, {{name}} is replaced by each draft's value for \
-                name. Give the drafts inline, each with its recipients and values, or as data_file: a spreadsheet \
-                (CSV, semicolon or tab separated, or a JSON list) in the outbox, one row per draft, whose to, cc, \
-                bcc, from, subject, body and attachments columns fill those fields and whose every column is a value. \
-                Every draft is checked first: if one has a problem (a {{name}} without a value, a missing file), \
-                none is saved, unless skip_invalid is true. dry_run checks them all and shows the first one without \
-                saving anything. Long batches go on in the background: the answer then gives a batch id for \
-                batch_status. Nothing is sent: send_drafts with that batch id sends them after one approval.
+                Mail merge: saves up to \(SendTools.batchLimit) email drafts at once, such as one job application per \
+                company with its own files. The template holds what they share; {{name}} in its subject, body and file \
+                names takes each draft's value. Give drafts inline, or data_file: a CSV (comma, semicolon or tab) or JSON \
+                list in the outbox, one row per draft; its to, cc, bcc, from, subject, body and attachments columns fill \
+                those fields, and every column is a value. All drafts are checked first: one problem saves none unless \
+                skip_invalid. Start with dry_run, which saves nothing and shows the first draft. Long batches go on in \
+                the background with a batch id for batch_status. Nothing is sent: send_drafts with that batch id sends them.
                 """,
                 inputSchema: schema([
                     "template": .object([
                         "type": "object",
                         "properties": .object([
                             "subject": .object(["type": "string"]), "body": .object(["type": "string", "description": "Plain text."]),
-                            "attachments": outbox, "from": sender, "cc": recipients, "bcc": recipients,
+                            "attachments": outbox, "from": sender, "cc": moreRecipients, "bcc": moreRecipients,
                         ]),
+                        "description": "What the drafts share. It also takes inline_attachments and email_attachments as create_draft does.",
                     ]),
                     "drafts": .object([
                         "type": "array", "minItems": 1, "maxItems": .int(SendTools.batchLimit),
                         "items": .object([
                             "type": "object",
                             "properties": .object([
-                                "to": recipients, "cc": recipients, "bcc": recipients, "from": sender,
+                                "to": recipients, "cc": moreRecipients, "bcc": moreRecipients, "from": sender,
                                 "subject": .object(["type": "string"]), "body": .object(["type": "string"]), "attachments": outbox,
                                 "values": .object([
-                                    "type": "object", "additionalProperties": .object(["type": "string"]),
-                                    "description": "The text for each {{name}} of the template, such as {\"company\": \"Acme\"}.",
+                                    "type": "array",
+                                    "items": .object([
+                                        "type": "object",
+                                        "properties": .object(["name": .object(["type": "string"]), "value": .object(["type": "string"])]),
+                                        "required": .array(["name", "value"]),
+                                    ]),
+                                    "description": "The text for each {{name}} of the template, such as [{\"name\": \"company\", \"value\": \"Acme\"}].",
                                 ]),
                             ]),
                             "required": .array([.string("to")]),
@@ -248,19 +283,19 @@ public enum ToolCatalog {
                     ]),
                     "dry_run": .object(["type": "boolean", "description": "Check every draft and show the first one; save nothing."]),
                     "skip_invalid": .object(["type": "boolean", "description": "Save the drafts without a problem even if others have one. Default false."]),
+                    "no_attachment": noAttachment,
                 ]),
                 annotations: draftAnnotations
             )
         case .updateDraft:
             Tool(
                 name: id.rawValue, title: "Change a draft",
-                description: "Replaces fields of a draft; fields left out keep their value, attachments included. Returns the draft's new id.",
+                description: "Changes fields of an email draft; fields left out keep their value. Its files stay unless attachments, inline_attachments or email_attachments are given, which replace them all (email_attachments can name the draft's own files). Returns the draft's new id.",
                 inputSchema: schema([
                     "id": .object(["type": "string", "description": "Draft id."]),
-                    "to": recipients, "cc": recipients, "bcc": recipients, "from": sender,
+                    "to": recipients, "cc": moreRecipients, "bcc": moreRecipients, "from": sender,
                     "subject": .object(["type": "string"]), "body": .object(["type": "string"]),
-                    "attachments": outbox,
-                ], required: ["id"]),
+                ].merging(files) { $1 }, required: ["id"]),
                 annotations: draftAnnotations
             )
         case .deleteDraft:
@@ -275,20 +310,19 @@ public enum ToolCatalog {
             Tool(
                 name: id.rawValue, title: "Send an email",
                 description: """
-                Sends a new email. The user sees the whole message on Postern's approval panel and approves it with \
-                Touch ID; the call waits up to two minutes and reports what they decided.
+                Sends a new email, with its files, from the user's Proton Mail. The user reads it on Postern's \
+                approval panel and approves it with Touch ID; the call waits up to two minutes and says what they decided.
                 """,
                 inputSchema: schema([
-                    "to": recipients, "cc": recipients, "bcc": recipients, "from": sender,
+                    "to": recipients, "cc": moreRecipients, "bcc": moreRecipients, "from": sender,
                     "subject": .object(["type": "string"]), "body": .object(["type": "string", "description": "Plain text."]),
-                    "attachments": outbox,
-                ], required: ["to", "subject", "body"]),
+                ].merging(files) { $1 }, required: ["to", "subject", "body"]),
                 annotations: sendAnnotations, _meta: askEveryTime
             )
         case .replyToMessage:
             Tool(
                 name: id.rawValue, title: "Reply",
-                description: "Replies to a message, quoting it. Recipients come from the original. Approved by the user on Postern's panel.",
+                description: "Replies to an email, quoting it, with files if given. Recipients come from the original. Approved by the user on Postern's panel.",
                 inputSchema: schema([
                     "id": .object(["type": "string", "description": "Message id to answer."]),
                     "body": .object(["type": "string", "description": "Plain text, written above the quote."]),
@@ -297,39 +331,38 @@ public enum ToolCatalog {
                         "type": "string",
                         "description": "The address to send from. Default: the address of the user's the message was sent to, else the account's.",
                     ]),
-                ], required: ["id", "body"]),
+                ].merging(files) { $1 }, required: ["id", "body"]),
                 annotations: sendAnnotations, _meta: askEveryTime
             )
         case .forwardMessage:
             Tool(
                 name: id.rawValue, title: "Forward",
-                description: "Forwards a message with a note, attachments included. Approved by the user on Postern's panel.",
+                description: "Forwards an email with a note, its attachments included, plus any files given. Approved by the user on Postern's panel.",
                 inputSchema: schema([
                     "id": .object(["type": "string", "description": "Message id to forward."]),
                     "to": recipients, "note": .object(["type": "string", "description": "Optional text above the forwarded message."]),
-                    "include_attachments": .object(["type": "boolean", "description": "Default true."]),
+                    "include_attachments": .object(["type": "boolean", "description": "The original's attachments. Default true."]),
                     "from": sender,
-                ], required: ["id", "to"]),
+                ].merging(files) { $1 }, required: ["id", "to"]),
                 annotations: sendAnnotations, _meta: askEveryTime
             )
         case .sendDraft:
             Tool(
                 name: id.rawValue, title: "Send a draft",
                 description: "Sends a draft as it is, attachments included, after the user approves it on Postern's panel, then removes it from Drafts.",
-                inputSchema: schema(["id": .object(["type": "string", "description": "Draft id."])], required: ["id"]),
+                inputSchema: schema(["id": .object(["type": "string", "description": "Draft id."]), "no_attachment": noAttachment], required: ["id"]),
                 annotations: sendAnnotations, _meta: askEveryTime
             )
         case .sendDrafts:
             Tool(
                 name: id.rawValue, title: "Send several drafts",
                 description: """
-                Sends up to \(SendTools.batchLimit) drafts as they are, attachments included: the ids given, or every \
-                draft a create_drafts batch saved. The user reviews them all on one Postern panel, which also shows \
-                when the last should leave, can leave some out, and approves the rest with one Touch ID. They leave \
-                one by one, spacing_seconds apart, within the user's hourly and daily limits: when a limit is \
-                reached, the batch waits for room instead of failing. Each email sent leaves Drafts. Short batches \
-                answer with the outcome of each id; long ones answer at once with a batch id for batch_status and \
-                cancel_batch, and go on while Postern runs.
+                Sends up to \(SendTools.batchLimit) email drafts as they are, files included: the ids given, or every \
+                draft of a create_drafts batch. The user reviews them on one Postern panel, can leave some out, and \
+                approves the rest with one Touch ID. They leave one by one, spacing_seconds apart, within the user's \
+                hourly and daily limits, waiting for room when a limit is reached; a draft changed after approval does not \
+                leave. The call answers within a minute: with the outcome, or with a batch id while the panel is open or \
+                the emails leave. Then follow it with batch_status, and never call send_drafts again for the same drafts.
                 """,
                 inputSchema: schema([
                     "ids": .object([
@@ -345,6 +378,7 @@ public enum ToolCatalog {
                         "type": "string",
                         "description": "When the first email leaves, within 30 days, such as 2026-11-10T08:00 (the Mac's time zone). Default now.",
                     ]),
+                    "no_attachment": noAttachment,
                 ]),
                 annotations: sendAnnotations, _meta: askEveryTime
             )
@@ -424,9 +458,8 @@ public enum ToolCatalog {
     }
 
     private static func schema(_ properties: [String: Value], required: [String] = []) -> Value {
-        var object: [String: Value] = [
-            "type": "object", "properties": .object(properties), "additionalProperties": false,
-        ]
+        // Only the keywords every client and model accepts: Gemini refuses additionalProperties.
+        var object: [String: Value] = ["type": "object", "properties": .object(properties)]
         if !required.isEmpty { object["required"] = .array(required.map { .string($0) }) }
         return .object(object)
     }

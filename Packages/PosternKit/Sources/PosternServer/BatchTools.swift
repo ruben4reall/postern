@@ -89,8 +89,21 @@ extension SendTools {
                     throw PosternError(.invalidArgument, "Each draft is an object with to, and values for the template.")
                 }
                 var values: [String: String] = [:]
-                if case .object(let given)? = fields.removeValue(forKey: "values") {
+                switch fields.removeValue(forKey: "values") {
+                case .object(let given)?:
                     for case (let key, .string(let text)) in given { values[key] = text }
+                case .array(let pairs)?:
+                    for case .object(let pair) in pairs {
+                        guard case .string(let name)? = pair["name"] else { continue }
+                        switch pair["value"] {
+                        case .string(let text)?: values[name] = text
+                        case .int(let number)?: values[name] = String(number)
+                        case .double(let number)?: values[name] = String(number)
+                        default: break
+                        }
+                    }
+                default:
+                    break
                 }
                 return (fields, values)
             }
@@ -340,7 +353,13 @@ extension SendTools {
             }
         }
         let estimate = SendBudget.finish(count: queue.count, start: start ?? Date(), spacing: spacing, policy: policy, sends: ledger.recentSends())
+        await board.keep(id, queue: queue, noAttachment: flags["no_attachment"] == .bool(true))
         await board.decide(id, .approved, estimate: estimate)
+        await runQueue(queue, batch: id, spacing: spacing, start: start, flags: flags)
+    }
+
+    /// Sends an approved queue, composing each email again from its draft.
+    func runQueue(_ queue: [QueuedEmail], batch id: String, spacing: TimeInterval, start: Date?, flags: [String: Value]) async {
         let account = (try? await backend.ownAddress().email.lowercased()) ?? ""
         let live = livePolicy
         let tools = self

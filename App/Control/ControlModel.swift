@@ -122,6 +122,16 @@ final class ControlModel {
     }
 
     /// Stops a batch at once: taking power away needs no Touch ID.
+    /// Goes on with a batch approved before Postern quit, after Touch ID.
+    func resumeBatch(_ id: String) {
+        Task {
+            let state = CoreState.shared
+            await BatchResumer(board: state.board, desk: state.desk, backend: LiveBackend(), ledger: state.ledger,
+                               policy: { CoreState.shared.policy }).resume(id)
+            batches = await state.board.all()
+        }
+    }
+
     func cancelBatch(_ id: String) {
         Task {
             await CoreState.shared.board.cancel(id)
@@ -202,8 +212,8 @@ final class ControlModel {
 
     func setLimits(perHour: Int, perDay: Int) async {
         await update("let your apps send more emails") { policy in
-            policy.sendsPerHour = max(1, min(perHour, 100))
-            policy.sendsPerDay = max(policy.sendsPerHour, min(perDay, 500))
+            policy.sendsPerHour = max(1, min(perHour, 300))
+            policy.sendsPerDay = max(policy.sendsPerHour, min(perDay, 1000))
         }
     }
 
@@ -384,7 +394,7 @@ struct ToolCopy {
                      risk: "Once you approve, it leaves for good.")
         case .sendDrafts:
             ToolCopy(title: "Send drafts together", verb: "send several drafts at once",
-                     allows: "Send up to 500 drafts at once: one panel lists them all, you untick any, one Touch ID sends the rest, one by one within your limits.",
+                     allows: "Send up to 5,000 drafts at once: one panel lists them all, you untick any, one Touch ID sends the rest, one by one within your limits.",
                      risk: "One approval sends every email left ticked, even hours later when your limits make room. You can stop a batch here at any time.")
         case .readAttachment:
             ToolCopy(title: "Read attachments", verb: "read the text of your attachments",

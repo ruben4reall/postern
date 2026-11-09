@@ -60,4 +60,31 @@ import Testing
         let updated = String(decoding: bytes, as: UTF8.self)
         #expect(updated == "[mcp_servers.postern]\ncommand = \"\(relay)\"\nargs = []\n")
     }
+
+    @Test func addsPosternToEveryJSONClientInItsOwnShape() throws {
+        for kind in ClientKind.allCases where kind != .codex {
+            let updated = try json(try ClientConfigurator.connecting(Data("{\"theme\": \"dark\"}".utf8), kind: kind, relayPath: relay))
+            #expect(updated["theme"] as? String == "dark", "\(kind)")
+            let servers = try #require(updated[kind == .vscode ? "servers" : "mcpServers"] as? [String: Any], "\(kind)")
+            #expect((servers["postern"] as? [String: Any])?["command"] as? String == relay, "\(kind)")
+            #expect(try ClientConfigurator.connecting(JSONSerialization.data(withJSONObject: updated), kind: kind, relayPath: relay) == nil)
+        }
+        let cursor = try json(try ClientConfigurator.connecting(nil, kind: .cursor, relayPath: relay))
+        #expect(((cursor["mcpServers"] as? [String: Any])?["postern"] as? [String: Any])?["type"] as? String == "stdio")
+    }
+
+    @Test func readsVSCodeFilesWithCommentsAndTrailingCommas() throws {
+        let original = Data("{\n  // my servers\n  \"servers\": {\n    \"other\": {\"type\": \"stdio\", \"command\": \"x\"},\n  },\n}".utf8)
+        let updated = try json(try ClientConfigurator.connecting(original, kind: .vscode, relayPath: relay))
+        let servers = try #require(updated["servers"] as? [String: Any])
+        #expect(servers["other"] != nil && (servers["postern"] as? [String: Any])?["type"] as? String == "stdio")
+    }
+
+    @Test func everySnippetNamesTheRelay() {
+        for snippet in SetupSnippet.allCases {
+            #expect(snippet.text(relayPath: relay).contains(relay), "\(snippet)")
+        }
+        let json = SetupSnippet.json.text(relayPath: relay)
+        #expect((try? JSONSerialization.jsonObject(with: Data(json.utf8))) != nil)
+    }
 }

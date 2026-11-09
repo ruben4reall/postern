@@ -59,9 +59,9 @@ enum ClientConnector {
             guard let updated = try ClientConfigurator.connecting(original, kind: target.kind, relayPath: relayPath) else {
                 return
             }
-            // `~/.claude.json` sits in the home folder, where the sandbox only allows this one file: no temporary
-            // file can be created beside it, so it is rewritten in place, and restored if that fails.
-            let atomic = target.kind != .claudeCode || target.bookmark != nil
+            // Most of these files sit in folders where the sandbox allows that one file only: no temporary file can
+            // be created beside it, so it is rewritten in place, and restored if that fails.
+            let atomic = target.bookmark != nil || [.claudeDesktop, .codex].contains(target.kind)
             do {
                 try updated.write(to: target.fileURL, options: atomic ? .atomic : [])
             } catch {
@@ -102,10 +102,8 @@ enum ClientConnector {
 
     private static func isInstalled(_ target: ClientTarget) -> Bool {
         let files = FileManager.default
-        switch target.kind {
-        case .claudeCode: return files.fileExists(atPath: target.fileURL.path)
-        case .claudeDesktop, .codex: return files.fileExists(atPath: target.fileURL.deletingLastPathComponent().path)
-        }
+        if target.bookmark != nil || files.fileExists(atPath: target.fileURL.path) { return true }
+        return files.fileExists(atPath: realHome.appendingPathComponent(target.kind.installMarker).path)
     }
 
     private static func withAccess<T>(_ target: ClientTarget, _ body: () throws -> T) rethrows -> T {

@@ -129,6 +129,7 @@ struct FollowUpTools {
 
         let iso = ISO8601DateFormatter()
         let structured: Value = .object([
+            "summary": .string(lines.prefix(listing.isEmpty ? lines.count : lines.count - 1).joined(separator: " ")),
             "people": .int(all.count), "without_answer": .int(waiting.count), "written_recently": .int(recent),
             "partial": .bool(partial),
             "contacts": .array(shown.map { contact in

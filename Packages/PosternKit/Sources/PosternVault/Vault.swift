@@ -11,6 +11,8 @@ public enum VaultKey: String, CaseIterable, Sendable {
     case activityHead = "activity-head"
     /// When the last sends happened, for the hourly and daily limits.
     case sendLedger = "send-ledger"
+    /// The key that seals approved batches on disk, so they can be resumed after a restart.
+    case batchKey = "batch-key"
 }
 
 public enum VaultError: Error, Equatable, Sendable {

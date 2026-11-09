@@ -1,3 +1,4 @@
+import CryptoKit
 import Foundation
 import PosternApproval
 import PosternAudit
@@ -19,11 +20,18 @@ final class CoreState: @unchecked Sendable {
     /// One desk for the whole app: one approval panel at a time, whatever the client.
     let desk = ApprovalDesk(presenter: PanelPresenter(), authenticator: PolicyAuthenticator())
     /// Batches of drafts and sends, for every client, while the app runs. Each email a batch sends is logged.
+    /// Approved send batches are sealed on disk as they go, so a long one survives a restart and waits for the
+    /// user to resume it.
     let board = BatchBoard(
         onChange: { CoreState.shared.changed() },
         record: { client, tool, outcome in
             try? CoreState.shared.activity.append(client: client, tool: tool, outcome: outcome, items: 1)
-        }
+        },
+        store: SealedBatchStore(
+            folder: FileManager.default.urls(for: .applicationSupportDirectory, in: .userDomainMask)[0]
+                .appendingPathComponent("Postern/Batches", isDirectory: true),
+            key: { CoreState.batchKey() }
+        )
     )
     private let lock = NSLock()
     private var _policy: Policy = .initial
@@ -41,6 +49,21 @@ final class CoreState: @unchecked Sendable {
             fileURL: support.appendingPathComponent("Postern/activity.jsonl"), head: VaultHeadStore(vault: vault)
         )
         try? activity.prune(olderThan: Date().addingTimeInterval(-Self.activityRetention))
+        let board = self.board
+        Task { await board.restore() }
+    }
+
+    /// The key that seals batches: made once, kept in Postern's Keychain group. Nil while the Keychain cannot be read.
+    static func batchKey() -> SymmetricKey? {
+        let vault = KeychainVault(accessGroup: accessGroup)
+        do {
+            if let stored = try vault.data(for: .batchKey), stored.count == 32 { return SymmetricKey(data: stored) }
+            let key = SymmetricKey(size: .bits256)
+            try vault.set(key.withUnsafeBytes { Data($0) }, for: .batchKey)
+            return key
+        } catch {
+            return nil
+        }
     }
 
     var policy: Policy { lock.withLock { _policy } }

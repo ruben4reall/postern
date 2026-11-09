@@ -12,7 +12,7 @@ struct OnboardingView: View {
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
             if let error = model.error {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
-                    .foregroundStyle(.orange)
+                    .foregroundStyle(Theme.warning)
                     .font(.callout)
                     .padding(.bottom, 16)
             }
@@ -79,7 +79,7 @@ struct OnboardingView: View {
             HStack(spacing: 6) {
                 ForEach(OnboardingModel.Step.allCases, id: \.self) { step in
                     Circle()
-                        .fill(step == model.step ? Color.accentColor : Color.secondary.opacity(0.3))
+                        .fill(step == model.step ? Theme.accent : Color.secondary.opacity(0.3))
                         .frame(width: 6, height: 6)
                 }
             }

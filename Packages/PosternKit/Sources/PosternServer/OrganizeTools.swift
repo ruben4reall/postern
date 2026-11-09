@@ -197,6 +197,7 @@ struct OrganizeTools {
         return CallTool.Result(
             content: [.text(text: text, annotations: nil, _meta: nil)],
             structuredContent: Optional<Value>.some(.object([
+                "summary": .string(text.components(separatedBy: "\n")[0]),
                 "count": .int(found.count), "found": .int(total), "dry_run": .bool(true),
                 "messages": .array(found.prefix(30).map { item in
                     .object([
@@ -227,6 +228,7 @@ struct OrganizeTools {
             : " Bridge accepted it, but Postern could not see every change yet; check again in a moment."
         if !report.done.isEmpty && mailbox != nil { text += " Use the new ids below for further changes." }
         let structured: Value = .object([
+            "summary": .string(text),
             "count": .int(report.done.count),
             "messages": .array(report.done.map { .object(["id": .string($0.opaque)]) }),
             "not_done": .array(report.failed.map { .object(["id": .string($0.id.opaque), "reason": .string($0.reason)]) }),

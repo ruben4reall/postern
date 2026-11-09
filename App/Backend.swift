@@ -64,6 +64,10 @@ struct LiveBackend: MailBackend {
     func draftForSending(_ id: MessageID) async throws -> (message: SanitizedMessage, files: [OutgoingAttachment]) {
         try await current().draftForSending(id)
     }
+    func attachment(_ id: MessageID, index: Int) async throws -> OutgoingAttachment {
+        try await current().attachment(id, index: index)
+    }
+    func attachmentCount(of id: MessageID) async throws -> Int? { try await current().attachmentCount(of: id) }
     func deletionItems(_ ids: [MessageID]) async throws -> [DeletionItem] { try await current().deletionItems(ids) }
     func trash(_ approved: ApprovedDeletion) async throws -> ChangeReport { try await current().trash(approved) }
     func erase(_ approved: ApprovedDeletion) async throws -> ChangeReport { try await current().erase(approved) }
@@ -304,6 +308,25 @@ final class BridgeBackend: MailBackend, Sendable {
         let raw = try await rawMessage(id)
         let message = try await parser.sanitize(raw, maxChars: OutgoingMessage.maxBodyCharacters)
         return (message, try await files(of: raw, listed: message.attachments))
+    }
+
+    func attachment(_ id: MessageID, index: Int) async throws -> OutgoingAttachment {
+        let file = try await parser.attachment(try await rawMessage(id), index: index)
+        let name = PosternFolders.safeName(file.filename ?? "attachment-\(index)")
+        return try OutgoingAttachment.make(filename: name, data: file.data, mimeType: file.mimeType)
+    }
+
+    /// The files Bridge holds for a draft, from its structure alone: the check that follows every saved draft.
+    func attachmentCount(of id: MessageID) async throws -> Int? {
+        try await bridge {
+            try await self.client.withConnection { connection in
+                let drafts = try await connection.mailbox(named: "Drafts")
+                guard id.mailbox == drafts.raw else { return nil }
+                let status = try await connection.examine(drafts)
+                guard status.uidValidity == id.uidValidity else { return nil }
+                return try await connection.fetchSummaries([id.uid]).first?.attachmentCount
+            }
+        }
     }
 
     private func files(of raw: Data, listed: [AttachmentInfo]) async throws -> [OutgoingAttachment] {

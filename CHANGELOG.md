@@ -1,17 +1,48 @@
 # Changelog
 
-## 0.1.2 (unreleased)
+## 0.2.0 (unreleased)
+
+- **No more emails without their files.** An email whose subject or text says a file is attached (`ci-joint`,
+  `pièce jointe`, `en PJ`, `attached`, `anbei`, `adjunto`, `in allegato`, `em anexo`, `bijlage`…) and carries none is
+  refused before it is saved or shown, so the app attaches what it forgot; `no_attachment` says when no file is meant.
+  Every answer names the files that left, with their sizes.
+- **Attach files from anywhere an app can reach.** Besides the outbox, `inline_attachments` takes files the app wrote
+  itself (text, or base64 for anything else), and `email_attachments` attaches files of emails it can read, such as
+  an invoice sent on to your accountant. `reply_to_message` and `forward_message` take files too.
+- **Every draft is checked after it is saved.** Postern reads back how many files Bridge kept; a draft that lost one
+  is removed and the call says so (`attachments_lost`), instead of an email leaving later without them.
+- **Batches of 5,000.** `create_drafts` and `send_drafts` take up to 5,000 drafts. Approving a batch keeps only each
+  email's digest, and each email is composed again from its draft when its turn comes: thousands of emails never sit
+  in memory, and a draft you change in Proton after approving it does not leave.
+- **Batches that survive a restart.** An approved batch is sealed on disk as it goes, under a key in Postern's
+  Keychain. After a restart of the Mac or of Postern it comes back in the Overview, and goes on when you choose Resume
+  with Touch ID. An email caught mid-send comes back `uncertain`, never sent twice.
+- **No second panel when an app calls again.** `send_drafts` answers within a minute, with the outcome or with its
+  batch id while the panel is open, so apps with short timeouts no longer give up and call again; the drafts of a
+  batch stay held until it ends.
+- **Higher limits for those who need them.** The window now allows up to 300 emails an hour and 1,000 a day (Touch
+  ID), with a reminder that Proton sets its own limits.
+- **Works with every MCP app.** One click connects Cursor, VS Code (Copilot), Windsurf, Gemini CLI, Kiro and Cline,
+  besides Claude Code, Claude Desktop and Codex (which ChatGPT's Mac app shares). Any other app gets the entry to
+  paste, in its own format: JSON, VS Code, Zed, TOML, OpenCode, Goose, Continue.
+- **Every model reads every answer.** Claude Code, VS Code and Codex give the model only the structured part of a
+  result, Cursor and Gemini only the text: each answer now carries Postern's sentences in both. Schemas keep to what
+  Gemini and OpenAI's models accept, and the instructions are shorter and depend on the tools you turned on.
+- **Lighter for the model.** Tool descriptions were trimmed: every tool on now costs about 8,500 tokens, read once.
+- **A Proton look.** Postern's window and panels take Proton Mail's colors: the deep purple sidebar, the purple
+  accent, Proton's green, orange and red for states, and its badges.
+- **Updates are named in the window.** When a check finds a new version, a bar at the top of the window says so.
 
 - **Send from your aliases.** Add an alias of your Proton account under Send from in Postern's window (Touch ID);
   `send_message`, `create_draft`, `update_draft` and `forward_message` take `from`, replies leave from the address
   the original was sent to, and `list_addresses` lists them. Any other From is refused (`sender_not_allowed`), and a
   draft written from an address you did not add is not sent.
-- **Write up to 500 drafts from one template, or from a spreadsheet.** `create_drafts` fills `{{name}}` in the
+- **Write drafts from one template, or from a spreadsheet.** `create_drafts` fills `{{name}}` in the
   subject, body and attachment names with each draft's values, for example one application per company with its own
   letter. The values can come from a CSV or JSON file in the outbox, one row per draft, as Numbers or Excel export it.
   Every draft is checked before any is saved, so a missing value or file stops the batch instead of leaving half of
-  it; `dry_run` shows the first draft without saving anything. With `send_drafts`, 500 applications take two calls
-  and one Touch ID.
+  it; `dry_run` shows the first draft without saving anything. With `send_drafts`, hundreds of applications take two
+  calls and one Touch ID.
 - **Sort by search.** The organize tools take `search` instead of ids, to archive, move, label, star or mark as read
   every message a search finds, up to 1,000 at a time, such as the newsletters older than a month. `dry_run` lists
   them first and changes nothing. A search must name a condition besides its mailbox.
@@ -27,7 +58,7 @@
 - **Drafts keep their attachments when they are sent.** `send_draft` sent the text of a draft without its
   attachments, and `update_draft` dropped them too. Both now carry them, the panel lists them, and the bytes that
   leave are the ones you approved. If you sent drafts with attachments through 0.1.1, check your Sent folder.
-- **Send a batch of drafts with one Touch ID.** `send_drafts` takes up to 500 drafts, or every draft a
+- **Send a batch of drafts with one Touch ID.** `send_drafts` takes many drafts, or every draft a
   `create_drafts` batch saved, and shows them all on one panel: who they go to and from, the files and their total
   size, then each email with its recipients, warnings, subject, the start of the text and its attachments, with a
   filter to find one. Untick any that should wait, and one Touch ID sends the rest. Each email is still approved for

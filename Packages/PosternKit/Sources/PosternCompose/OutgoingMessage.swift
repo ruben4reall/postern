@@ -114,6 +114,14 @@ public struct OutgoingMessage: Codable, Sendable, Equatable {
         return SHA256.hash(data: data).map { String(format: "%02x", $0) }.joined()
     }
 
+    /// What the email says and to whom, without its identity or time: two calls that write the same email give the
+    /// same fingerprint, so an app that calls again after a timeout does not send it twice.
+    public var contentFingerprint: String {
+        let parts = [from.email, envelopeRecipients.joined(separator: ","), subject, fullText]
+            + attachments.map { $0.filename + ":" + $0.sha256 }
+        return SHA256.hash(data: Data(parts.joined(separator: "\u{0}").utf8)).map { String(format: "%02x", $0) }.joined()
+    }
+
     /// RFC 5322 bytes with CRLF line endings. Drafts keep the Bcc header; sent mail never shows it.
     public func rfc822(includeBcc: Bool) -> Data { rfc822(includeBcc: includeBcc, dated: true) }
 
