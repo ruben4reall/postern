@@ -43,6 +43,13 @@ if let index = CommandLine.arguments.firstIndex(of: "--hold-approval-panel"), in
     MainActor.assumeIsolated { SetupSnapshots.holdApprovalPanel(dark: dark, kind: kind, seconds: 6) }
     exit(0)
 }
+// `--client-status` prints what the Apps pane would show, read from inside the sandbox.
+if CommandLine.arguments.contains("--client-status") {
+    MainActor.assumeIsolated {
+        for row in ClientConnector.rows() { print("\(row.target.title)\t\(row.installed ? "installed" : "absent")\t\(row.status)") }
+    }
+    exit(0)
+}
 if CommandLine.arguments.contains("--selftest") {
     exit(SelfTest.runBlocking())
 }

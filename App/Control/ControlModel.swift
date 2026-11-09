@@ -3,6 +3,7 @@ import Foundation
 import Observation
 import PosternAudit
 import PosternBridge
+import PosternClients
 import PosternModel
 import PosternPolicy
 import PosternServer
@@ -269,7 +270,17 @@ final class ControlModel {
             try ClientConnector.connect(row.target)
             notice = "\(row.target.title) is connected. Restart it, or open a new session, to see Postern."
         } catch {
-            notice = "Postern couldn't update \(row.target.title)'s settings."
+            // The sandbox lets Postern write each app's settings file, but not create a folder or a file it cannot
+            // reach: the entry goes to the clipboard instead, to paste by hand.
+            let snippet: SetupSnippet = switch row.target.kind {
+            case .codex: .toml
+            case .vscode: .vscode
+            default: .json
+            }
+            NSPasteboard.general.clearContents()
+            NSPasteboard.general.setString(snippet.text(relayPath: ClientConnector.relayPath), forType: .string)
+            let path = "~/" + row.target.fileURL.path.replacingOccurrences(of: ClientConnector.realHome.path + "/", with: "")
+            notice = "Postern couldn't write \(row.target.title)'s settings. Its entry is on the clipboard: paste it into \(path)."
         }
         refresh()
     }
