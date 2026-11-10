@@ -10,6 +10,7 @@ is laid out, how to run it, and the rules that keep that answer "no".
 - [Build the app with your own team](#build-the-app-with-your-own-team)
 - [Rules every change keeps](#rules-every-change-keeps)
 - [Adding a tool](#adding-a-tool)
+- [Adding an app](#adding-an-app)
 - [Bridge behaviors worth knowing](#bridge-behaviors-worth-knowing)
 - [Style](#style)
 - [Pull requests](#pull-requests)
@@ -21,8 +22,22 @@ is laid out, how to run it, and the rules that keep that answer "no".
   real email.
 - **Suggest a feature** with the [feature form](https://github.com/ruben4reall/postern/issues/new?template=feature_request.yml).
 - **Send a hostile email** that gets past the reader: hidden text, a forged sender, a parser crash. Please report it
-  privately as described in [SECURITY.md](SECURITY.md).
+  privately as described in [SECURITY.md](SECURITY.md). Once it is fixed, the trick joins
+  `Tests/PosternMailTests/HiddenTextTricksTests.swift`, next to the visible text it must not remove.
+- **Connect another app in one click.** See [Adding an app](#adding-an-app).
 - **Fix something.** Issues labeled `good first issue` are a gentle start.
+
+### Your first change in ten minutes
+
+```bash
+git clone https://github.com/ruben4reall/postern.git
+cd postern/Packages/PosternKit
+swift test                      # about 230 tests, against fake IMAP and SMTP servers
+git switch -c fix/what-you-fix
+```
+
+Write the test that fails, make it pass, run `swift test` again, and open a pull request. You do not need a Proton
+account, Bridge or a signing team for anything in `Packages/PosternKit`.
 
 ## Project layout
 
@@ -46,7 +61,7 @@ Packages/PosternKit/ Everything that can be tested without the app:
   PosternApproval    The approval desk: the only producer of approved messages and deletions.
   PosternServer      The MCP tools and sessions.
   PosternAudit       The chained activity log.
-  PosternClients     Reading and writing the settings of Claude Code, Claude Desktop and Codex.
+  PosternClients     The settings of the apps Postern connects in one click, edited in place.
 docs/                Threat model, architecture, tool reference, images.
 scripts/             Build, install and offscreen screenshots.
 ```
@@ -95,8 +110,8 @@ scripts/build.sh
 `~/Applications` and registers the launch agent. The data protection Keychain needs a provisioning profile, which
 Xcode creates when you sign in with your Apple account (`-allowProvisioningUpdates`).
 
-`scripts/snapshot-control.sh <folder>` draws every pane and panel, light and dark, with sample data, in windows placed
-outside every display, so nothing shows on screen.
+`scripts/render-ui.sh <folder>` draws every pane and panel, light and dark, with sample data, to PNG files without
+putting anything on screen or needing screen recording. The images in `docs/assets` come from it.
 
 Debug builds also have `--selftest`, which checks attachments and Trash against your real Bridge **on messages it
 creates itself and nothing else**: a message created in Inbox, a draft, and an email sent to your own address, each
@@ -145,6 +160,21 @@ These come from the threat model. A pull request that breaks one will not be mer
 5. Document it in [docs/tools.md](docs/tools.md). A test fails while a tool is missing from that page.
 6. New tools start off. Do not add them to `Policy.readOnly`.
 
+## Adding an app
+
+Apps that launch a local MCP server from a settings file can be connected in one click.
+
+1. Add a case to `ClientKind` in `PosternClients/ClientConfigurator.swift`: its name, its settings file relative to
+   the home folder, the folder that shows it is installed, and the entry it expects (`entry`). JSON files are edited
+   in place by `JSONCEditor`, so the user's comments and key order stay.
+2. Add the file's exact path to the sandbox exceptions in `project.yml`
+   (`com.apple.security.temporary-exception.files.home-relative-path.read-write`). Never a folder: some apps keep
+   sign-in tokens next to their settings.
+3. Add a test in `ClientConfiguratorTests` with a copy of a real settings file, comments included.
+4. List the app in the README and on the website.
+
+An app that only reads a format Postern does not write gets a `SetupSnippet` instead: the entry to copy.
+
 ## Bridge behaviors worth knowing
 
 Seen on Proton Mail Bridge 3.27, each one with a test in the fakes:
@@ -167,6 +197,8 @@ Seen on Proton Mail Bridge 3.27, each one with a test in the fakes:
 
 - Swift 6 with strict concurrency. Closures handed to XPC are `@Sendable`, or the process traps at runtime.
 - Comments say why, not what. Doc comments on every public type.
+- Code that walks a message or a page uses a loop and a stack, never recursion: an email can nest as deep as its
+  sender likes.
 - English everywhere in the repository. Visible text uses plain words and short sentences, and avoids long dashes.
 - Match the surrounding code before reaching for a new pattern.
 

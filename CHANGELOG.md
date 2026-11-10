@@ -2,6 +2,24 @@
 
 ## 0.2.0 (unreleased)
 
+- **Listed as Proton Mail in your apps.** Postern's entry is now named `proton-mail-postern`, and it introduces
+  itself as "Proton Mail (Postern)", so apps and their tools say which mailbox they reach. An entry made by an
+  earlier version keeps working, and Connect renames it.
+- **Your settings files stay as you wrote them.** Connecting an app now edits its settings file in place: your
+  comments, the order of your keys, your numbers and your indentation stay, where Postern rewrote the whole file
+  before.
+- **Hidden text, caught in more disguises.** Text whose color is too close to its background, in any CSS color form
+  (`rgb(255 255 255)`, `hsl()`, `#fffe`, named colors), sizes that inherit a zero size, `filter: opacity()`,
+  `transform: scale()` or `translate()`, large negative margins, `zoom`, `content-visibility`, the inside of a closed
+  `<details>`, and rules that select by position (`:nth-child`, `:not`) are removed before the app reads a message.
+  Proton does not load remote images until asked, so a picture from the web no longer counts as what is behind the
+  text: its fallback color does.
+- **A message built to stall the reader is refused.** A page nested more than 1,000 levels deep, which no real email
+  is, is not rendered, and every walk through a page is a loop that no nesting can exhaust. Thousands of random and
+  broken messages and pages now run in the tests.
+- **Attachments with a stray character are read whole.** A base64 attachment with one character too many at its end,
+  or made of pieces put end to end, used to come out empty.
+
 - **No more emails without their files.** An email whose subject or text says a file is attached (`ci-joint`,
   `pièce jointe`, `en PJ`, `attached`, `anbei`, `adjunto`, `in allegato`, `em anexo`, `bijlage`…) and carries none is
   refused before it is saved or shown, so the app attaches what it forgot; `no_attachment` says when no file is meant.

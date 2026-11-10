@@ -1,16 +1,32 @@
 name: Feature request
-description: An idea for Postern.
+description: Something Postern could do, or do better.
 labels: [enhancement]
 body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for the idea. Postern only adds powers that stay under the user's control: say how you would like
+        to approve or limit what you ask for.
   - type: textarea
     id: need
     attributes:
       label: What you want to do
-      description: The task you would like an app to do with your mail, or what you would like to see in Postern.
+      description: What you would ask your AI app, and what Postern should do then.
+      placeholder: "I ask Claude to file every invoice in a folder per supplier…"
     validations:
       required: true
   - type: textarea
-    id: risk
+    id: today
     attributes:
-      label: What could go wrong
-      description: If an app or a stranger's email misused this, what could happen? Postern turns every new power off by default and guards the risky ones with a panel and Touch ID.
+      label: What happens today
+      description: What Postern does now, or which tool comes closest.
+  - type: textarea
+    id: control
+    attributes:
+      label: How you would keep control
+      description: Should it need a switch, a panel, Touch ID, a limit? What could go wrong if an app misused it?
+  - type: input
+    id: app
+    attributes:
+      label: Your app and model
+      placeholder: Claude Desktop, Cursor with GPT, LM Studio with Qwen…
