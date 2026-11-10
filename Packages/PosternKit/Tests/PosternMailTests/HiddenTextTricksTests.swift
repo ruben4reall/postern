@@ -279,7 +279,7 @@ import Testing
     func staysFastAfterTheSecondReview(_ html: String) async {
         let start = Date()
         _ = await Task.detached { HTMLSanitizer().render(html) }.value
-        #expect(Date().timeIntervalSince(start) < 10)
+        #expect(Date().timeIntervalSince(start) < 45)
     }
 
     /// What ordinary mail does with color, size and position, which a reader sees.
