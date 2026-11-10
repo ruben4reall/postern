@@ -225,14 +225,27 @@ public enum MIMEParser {
 }
 
 enum TransferDecoding {
+    /// Decodes base64 as mail clients do: line breaks and stray characters are skipped, padding ends a piece and a
+    /// new one may follow, and a lone character left at the end is dropped instead of losing the whole file.
     static func base64(_ data: Data) -> Data {
-        let filtered = data.filter { byte in
-            (65...90).contains(byte) || (97...122).contains(byte) || (48...57).contains(byte)
-                || byte == 43 || byte == 47
+        var out = Data()
+        var piece: [UInt8] = []
+        func flush() {
+            if piece.count % 4 == 1 { piece.removeLast() }
+            if piece.isEmpty { return }
+            piece += Array(repeating: UInt8(ascii: "="), count: (4 - piece.count % 4) % 4)
+            if let decoded = Data(base64Encoded: Data(piece)) { out.append(decoded) }
+            piece.removeAll(keepingCapacity: true)
         }
-        var text = String(decoding: filtered, as: UTF8.self)
-        text += String(repeating: "=", count: (4 - text.count % 4) % 4)
-        return Data(base64Encoded: text) ?? Data()
+        for byte in data {
+            if (65...90).contains(byte) || (97...122).contains(byte) || (48...57).contains(byte) || byte == 43 || byte == 47 {
+                piece.append(byte)
+            } else if byte == UInt8(ascii: "=") {
+                flush()
+            }
+        }
+        flush()
+        return out
     }
 
     static func quotedPrintable(_ data: Data) -> Data {
@@ -251,7 +264,8 @@ enum TransferDecoding {
             }
             if look < bytes.count, bytes[look] == 10 { index = look + 1; continue }
             if look >= bytes.count { index = look; continue }
-            if index + 2 < bytes.count,
+            if index + 2 < bytes.count, Character(UnicodeScalar(bytes[index + 1])).isHexDigit,
+               Character(UnicodeScalar(bytes[index + 2])).isHexDigit,
                let value = UInt8(String(decoding: bytes[(index + 1)...(index + 2)], as: UTF8.self), radix: 16) {
                 out.append(value)
                 index += 3

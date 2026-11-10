@@ -53,9 +53,16 @@ reads Bridge's own window; a compromised Proton account.
 ### A1, a stranger's email
 
 - **Hidden instructions.** Before the client sees a message, the parser removes text hidden by HTML attributes or
-  CSS (`display:none`, `visibility:hidden`, zero size, text colored like its background, and more), scripts and
-  styles, invisible and direction-changing Unicode characters, and tag characters. Images are never fetched; they
-  become their alt text.
+  CSS (`display:none`, `visibility:hidden`, a size of zero inherited or set, text whose contrast with what is behind
+  it is below 1.2 in any CSS color form, opacity and `filter: opacity()` multiplied down the page, boxes moved,
+  shrunk or clipped out of sight, `content-visibility`, the inside of a closed `<details>`, `<style>` rules for a
+  desktop window including structural pseudo-classes), scripts and styles, invisible and direction-changing Unicode
+  characters, and tag characters. Images are never fetched; they become their alt text. Remote background images
+  count as not loaded, as in Proton before you allow them: the fallback color is what the text is judged against.
+- **A message built against the reader.** Sizes, MIME depth and part counts are bounded; a page nested more than
+  1,000 levels deep is not rendered, and every walk through a page is a loop, so no nesting can exhaust a thread's
+  stack or make the parser quadratic. The tests run thousands of random pages, with words hidden by each trick, and
+  thousands of mutated messages.
 - **Instructions that look like system text.** Mail content arrives in fields named `untrusted_*`, and its text
   rendering is wrapped in markers that carry a fresh random value for each response. A marker written inside the
   email is escaped. The server's instructions tell the client that this text is data, never instructions.
