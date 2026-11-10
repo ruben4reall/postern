@@ -14,11 +14,13 @@ public struct HTMLRendering: Sendable {
 /// Turns hostile HTML into the text a human would actually see.
 ///
 /// The styles of the page are worked out the way a browser works them out: the `<style>` rules that apply in a
-/// desktop window, by importance, specificity and order, then the element's own style; invalid values dropped;
-/// shorthands, custom properties and inheritance followed. From that, anything a reader would not see is left out:
-/// hidden boxes, boxes moved, shrunk, clipped or faded out of sight, the inside of a closed `<details>`, text too
-/// small to read or too close in color to what is behind it. Images are never fetched; links are listed with their
-/// real destination. Every walk through the page is a loop, and a page built to stall the reader is not rendered.
+/// desktop window, by importance, layer, specificity and order, then the element's own style; invalid values
+/// dropped, shorthands, custom properties and inheritance followed. From that, anything a reader would not see is
+/// left out: hidden boxes, boxes moved, shrunk, clipped or faded out of sight, the inside of a closed `<details>`,
+/// text too small to read or too close in color to what is behind it. What this reader cannot work out, such as a
+/// filter, a mask or a blend it does not know, counts as hiding: the model may miss a word a reader sees, never the
+/// other way round. Images are never fetched; links are listed with their real destination. Every walk through the
+/// page is a loop, and a page built to stall the reader is not rendered.
 public struct HTMLSanitizer: Sendable {
     public init() {}
 
@@ -30,13 +32,13 @@ public struct HTMLSanitizer: Sendable {
     static let maxStyleBytes = 2_000_000
     /// Siblings past which SwiftSoup's positional selectors grow too slow.
     static let maxSiblingsWithPositionalRules = 3_000
-    /// Selector matches past which a page takes too long to style.
-    static let maxMatchingWork = 40_000_000
+    /// Selectors times elements past which matching takes too much time or memory.
+    static let maxMatchingWork = 12_000_000
 
     private static let invisibleTags: Set<String> = [
         "script", "style", "head", "title", "template", "noscript", "iframe", "frame", "frameset", "object", "embed",
         "applet", "svg", "math", "meta", "link", "base", "canvas", "audio", "video", "source", "track", "map", "input",
-        "select", "textarea", "button", "datalist", "rp", "meter", "progress", "param", "slot",
+        "select", "textarea", "button", "datalist", "rp", "meter", "progress", "param", "slot", "noembed", "noframes",
     ]
 
     static let blockTags: Set<String> = [
@@ -52,6 +54,9 @@ public struct HTMLSanitizer: Sendable {
             return Self.refused("its HTML nests elements more than \(Self.maxDepth) levels deep")
         }
         if shape.elements > Self.maxElements { return Self.refused("its HTML holds more than \(Self.maxElements) elements") }
+        if shape.formatting > NestingGuard.maxFormatting || shape.rebuilding > NestingGuard.maxRebuilding {
+            return Self.refused("its HTML leaves styles of text open across thousands of paragraphs")
+        }
         if shape.styleBytes > Self.maxStyleBytes { return Self.refused("its style sheets are larger than any email's") }
         guard let document = try? SwiftSoup.parse(html) else {
             return HTMLRendering(text: "", links: [], hiddenElementsRemoved: 0, imagesOmitted: 0)
@@ -60,17 +65,22 @@ public struct HTMLSanitizer: Sendable {
         let sheet = StyleSheet(blocks)
         if sheet.tooComplex { return Self.refused("its style sheets are nested or numbered beyond any email's") }
         let elementCount = (try? document.getAllElements().size()) ?? 0
+        if elementCount > Self.maxElements { return Self.refused("its HTML holds more than \(Self.maxElements) elements") }
         let selectors = sheet.rules.reduce(0) { $0 + $1.selectors.count }
         if selectors * elementCount > Self.maxMatchingWork { return Self.refused("its style sheets are larger than any email's") }
         if sheet.positional, Self.mostSiblings(in: document) > Self.maxSiblingsWithPositionalRules {
             return Self.refused("its style picks elements by position among thousands of siblings")
         }
+        guard let matches = sheet.match(in: document) else {
+            return Self.refused("its style takes more work to apply than any email's")
+        }
 
-        var walker = Walker(matches: sheet.match(in: document), closedDetails: Self.closedDetails(in: document))
-        walker.walk(document.body() ?? document)
+        let root: Element = document.children().first() ?? document
+        var walker = Walker(matches: matches, closedDetails: Self.closedDetails(in: document))
+        walker.walk(root)
 
         var renderer = TextRenderer(hidden: walker.hidden)
-        renderer.render(document.body() ?? document)
+        renderer.render(root)
         return HTMLRendering(
             text: Self.normalize(renderer.output), links: renderer.links, hiddenElementsRemoved: walker.removed,
             imagesOmitted: renderer.images
@@ -131,33 +141,33 @@ public struct HTMLSanitizer: Sendable {
 
     // MARK: Styles
 
-    /// What is behind a text: one color, or the colors of a gradient.
-    enum Behind {
+    /// What is behind a text.
+    indirect enum Behind {
         case color(CSSColor)
-        case gradient([CSSColor])
+        /// The text may sit on any of these, as when a box too small for its text lets it overflow onto its parent:
+        /// it is read only if it shows on every one.
+        case all([Behind])
 
         func under(_ paint: CSSColor) -> Behind {
             switch self {
             case .color(let behind): .color(paint.over(behind))
-            case .gradient(let stops): .gradient(stops.map { paint.over($0) })
+            case .all(let grounds): .all(grounds.map { $0.under(paint) })
             }
         }
 
-        /// Whether `color` stands out from it enough to be read, somewhere.
+        /// Whether `color` stands out from it enough to be read.
         func shows(_ color: CSSColor) -> Bool {
             switch self {
             case .color(let behind): color.over(behind).contrast(with: behind) >= 1.2
-            case .gradient(let stops): stops.contains { color.over($0).contrast(with: $0) >= 1.2 }
+            case .all(let grounds): grounds.allSatisfy { $0.shows(color) }
             }
         }
     }
 
     /// What paints a text clipped to its background (`background-clip: text`).
     enum ClipPaint {
-        case stops([CSSColor])
-        /// A picture carried in the email.
-        case picture
-        /// A remote picture, not loaded until the reader asks.
+        case color(CSSColor)
+        /// Nothing this reader can see: a picture, loaded or not.
         case nothing
     }
 
@@ -174,34 +184,41 @@ public struct HTMLSanitizer: Sendable {
         var strokeColor: CSSColor?
         var visible = true
         var opacity = 1.0
-        var letterSpacingHides = false
+        /// In points, as inherited: a spacing set in `em` is fixed where it is set.
+        var letterSpacing = 0.0
+        /// A filter, mask or blend above that this reader cannot work out, or text drawn as bullets.
+        var obscured = false
         var behind: Behind = .color(.white)
         var clipPaint: ClipPaint?
         var custom: [String: String] = [:]
+        /// The element's own values of properties that do not inherit, for a child that asks for `inherit`.
+        var own: [String: String] = [:]
 
         /// Whether a text drawn with this state escapes a reader.
         var hidesText: Bool {
-            if !visible || opacity <= 0.05 || fontSize * scale <= 2 || letterSpacingHides { return true }
+            if !visible || obscured || opacity <= 0.05 || fontSize * scale <= 2 || letterSpacing <= -0.3 * fontSize { return true }
             if fillUnknown || (fill == nil && colorUnknown) { return true }
             var stroke = strokeColor ?? color ?? .black
             stroke.alpha *= opacity
-            if strokeWidth >= 0.3, behind.shows(stroke) { return false }
+            if strokeWidth * scale >= 0.3, behind.shows(stroke) { return false }
             var paint = fill ?? color ?? .black
             paint.alpha *= opacity
             if paint.alpha <= 0.05 {
-                switch clipPaint {
-                case .picture?: return false
-                case .stops(let stops)?: return !stops.contains { stop in
-                    var faded = stop
-                    faded.alpha *= opacity
-                    return behind.shows(faded)
-                }
-                default: return true
-                }
+                guard case .color(var drawn)? = clipPaint else { return true }
+                drawn.alpha *= opacity
+                return !behind.shows(drawn)
             }
             return !behind.shows(paint)
         }
     }
+
+    /// Properties that do not inherit and that this reader evaluates: `inherit` on them takes the parent's value.
+    static let nonInherited: Set<String> = [
+        "opacity", "transform", "translate", "scale", "zoom", "filter", "clip-path", "mix-blend-mode", "mask",
+        "mask-image", "background-color", "background-image", "overflow-x", "overflow-y", "height", "max-height",
+        "width", "max-width", "position", "left", "top", "right", "bottom", "margin-left", "margin-top", "clip",
+        "box-shadow", "background-size", "background-clip",
+    ]
 
     /// Walks the page once, from the top, working out each element's style and marking what a reader would not see.
     struct Walker {
@@ -216,10 +233,8 @@ public struct HTMLSanitizer: Sendable {
         }
 
         mutating func walk(_ root: Element) {
-            var stack: [(Element, State)] = []
-            var rootState = State()
-            if let state = style(root, from: State()) { rootState = state } else { mark(root); return }
-            stack.append((root, rootState))
+            guard let rootState = style(root, from: State()) else { mark(root); return }
+            var stack: [(Element, State)] = [(root, rootState)]
             while let (element, state) = stack.popLast() {
                 let closed = closedDetails.contains(ObjectIdentifier(element))
                 var summaryKept = false
@@ -257,21 +272,10 @@ public struct HTMLSanitizer: Sendable {
         private func style(_ element: Element, from parent: State) -> State? {
             let tag = element.tagName()
             if tag == "dialog", !element.hasAttr("open") { return nil }
-            var values = cascade(element, tag: tag)
-
-            // Custom properties first, then every value that uses one.
             var state = parent
-            for (name, value) in values where name.hasPrefix("--") {
-                state.custom[name] = StyleRules.substitute(value, custom: parent.custom) ?? ""
-            }
-            var deferred: [(String, String)] = []
-            for (name, value) in values where !name.hasPrefix("--") && value.contains("var(") {
-                values[name] = nil
-                if let resolved = StyleRules.substitute(value, custom: state.custom) {
-                    if name.hasPrefix("@") { deferred.append((String(name.dropFirst()), resolved)) } else { values[name] = resolved }
-                }
-            }
-            for (name, value) in deferred { StyleRules.apply(name, value, into: &values) }
+            var values = cascade(element, tag: tag, parent: parent, state: &state)
+            for key in HTMLSanitizer.nonInherited where values[key] == "inherit" { values[key] = parent.own[key] }
+            state.own = values.filter { HTMLSanitizer.nonInherited.contains($0.key) }
 
             var fontSize = values["font-size"].flatMap { CSSLength.fontSize($0, inherited: parent.fontSize) } ?? parent.fontSize
             if let adjust = values["font-size-adjust"].flatMap(Double.init), adjust.isFinite, adjust > 0, adjust < 0.5 {
@@ -286,8 +290,9 @@ public struct HTMLSanitizer: Sendable {
             case "visible"?: state.visible = true
             default: break
             }
-            if let opacity = values["opacity"].flatMap(StyleRules.fraction) { state.opacity *= opacity }
-            if let filter = values["filter"].flatMap(StyleRules.filterOpacity) { state.opacity *= filter }
+            if let opacity = values["opacity"] { state.opacity *= StyleRules.fraction(opacity) ?? 0 }
+            if StyleRules.obscures(values) { state.obscured = true }
+            if let filter = values["filter"] { state.opacity *= StyleRules.filterOpacity(filter) ?? 1 }
 
             if let value = values["color"] {
                 switch CSSColor.read(value) {
@@ -318,28 +323,34 @@ public struct HTMLSanitizer: Sendable {
                 state.strokeColor = color == "currentcolor" ? nil : CSSColor.parse(color)
             }
             if let spacing = values["letter-spacing"] {
-                let points = spacing == "normal" ? 0 : CSSLength.length(spacing, relativeTo: fontSize, font: fontSize) ?? 0
-                state.letterSpacingHides = points <= -0.3 * fontSize
+                state.letterSpacing = spacing == "normal" ? 0 : CSSLength.length(spacing, relativeTo: fontSize, font: fontSize) ?? parent.letterSpacing
             }
 
-            let behind = StyleRules.behind(values, over: parent.behind)
+            let current = state.color ?? .black
+            let ownGround = StyleRules.behind(values, over: parent.behind, current: current)
             if let clip = values["background-clip"], clip.split(separator: " ").contains("text") {
-                state.clipPaint = StyleRules.clipPaint(values)
+                state.clipPaint = StyleRules.clipPaint(values, current: current)
+            } else if StyleRules.sizeCapped(values, font: fontSize) {
+                // The text may overflow a box sized below it, onto what is behind the box.
+                state.behind = .all([ownGround, parent.behind])
             } else {
-                state.behind = behind
+                state.behind = ownGround
             }
             return state
         }
 
-        /// The element's declarations after the cascade: the old presentational attributes first, then the rules by
-        /// importance, then style attribute over selectors, then specificity, then order; invalid values dropped.
-        private func cascade(_ element: Element, tag: String) -> [String: String] {
+        /// The element's declarations after the cascade: the old presentational attributes first, then the rules
+        /// by importance, then style attribute over selectors, then cascade layer, specificity and order. Custom
+        /// properties are worked out first, then every value that uses one; invalid values are dropped.
+        private func cascade(_ element: Element, tag: String, parent: State, state: inout State) -> [String: String] {
             var values: [String: String] = [:]
-            if element.hasAttr("hidden") { values["display"] = "none" }
-            if let attribute = try? element.attr("bgcolor"), let color = CSSColor.legacy(attribute) {
+            if element.hasAttr("hidden") || element.hasAttr("popover") { values["display"] = "none" }
+            if ["body", "table", "tr", "td", "th", "thead", "tbody", "tfoot", "marquee"].contains(tag),
+               let attribute = try? element.attr("bgcolor"), let color = CSSColor.legacy(attribute) {
                 values["background-color"] = color.cssText
             }
-            if let picture = try? element.attr("background"), !picture.isEmpty {
+            if ["body", "table", "tr", "td", "th", "thead", "tbody", "tfoot"].contains(tag),
+               let picture = try? element.attr("background"), !picture.isEmpty {
                 values["background-image"] = "url(\(picture.lowercased()))"
             }
             if tag == "font" {
@@ -348,25 +359,41 @@ public struct HTMLSanitizer: Sendable {
             }
             if tag == "body", let color = (try? element.attr("text")).flatMap(CSSColor.legacy) { values["color"] = color.cssText }
 
-            var declared: [(important: Bool, inline: Bool, specificity: Int, order: Int, index: Int, declaration: CSSDeclaration)] = []
-            for (specificity, order, declarations) in matches.byElement[ObjectIdentifier(element)] ?? [] {
+            typealias Entry = (important: Bool, inline: Bool, layer: Int, specificity: Int, order: Int, index: Int, declaration: CSSDeclaration)
+            var declared: [Entry] = []
+            for (specificity, order, layered, declarations) in matches.byElement[ObjectIdentifier(element)] ?? [] {
                 for (index, declaration) in declarations.enumerated() {
-                    declared.append((declaration.important, false, specificity, order, index, declaration))
+                    // Outside a layer beats inside for normal declarations; the other way round for important ones.
+                    let layer = declaration.important ? (layered ? 1 : 0) : (layered ? 0 : 1)
+                    declared.append((declaration.important, false, layer, specificity, order, index, declaration))
                 }
             }
             if let style = try? element.attr("style"), !style.isEmpty {
                 for (index, declaration) in CSSText.declarations(style).enumerated() {
-                    declared.append((declaration.important, true, 0, 0, index, declaration))
+                    declared.append((declaration.important, true, 2, 0, 0, index, declaration))
                 }
             }
             declared.sort {
                 if $0.important != $1.important { return !$0.important }
                 if $0.inline != $1.inline { return !$0.inline }
+                if $0.layer != $1.layer { return $0.layer < $1.layer }
                 if $0.specificity != $1.specificity { return $0.specificity < $1.specificity }
                 if $0.order != $1.order { return $0.order < $1.order }
                 return $0.index < $1.index
             }
-            for entry in declared { StyleRules.apply(entry.declaration.name, entry.declaration.value, into: &values) }
+
+            var raw: [String: String] = [:]
+            for entry in declared where entry.declaration.name.hasPrefix("--") { raw[entry.declaration.name] = entry.declaration.value }
+            state.custom = StyleRules.resolve(raw, inherited: parent.custom)
+
+            for entry in declared where !entry.declaration.name.hasPrefix("--") {
+                var value = entry.declaration.value
+                if value.contains("var(") {
+                    // A value that names a missing property falls back to unset, not to the value before it.
+                    value = StyleRules.substitute(value, custom: state.custom)?.lowercased() ?? "unset"
+                }
+                StyleRules.apply(entry.declaration.name, value, into: &values)
+            }
             return values
         }
     }
@@ -398,6 +425,7 @@ public struct HTMLSanitizer: Sendable {
             func push(_ node: Node, _ steps: inout [Step]) {
                 steps.append(contentsOf: node.getChildNodes().reversed().filter { !hidden.contains(ObjectIdentifier($0)) }.map { .node($0) })
             }
+            if hidden.contains(ObjectIdentifier(root)) { return }
             push(root, &steps)
             while let step = steps.popLast() {
                 switch step {
@@ -469,26 +497,49 @@ extension CSSColor {
 }
 
 /// Measures a page before it is parsed, in one pass over its bytes, the way the HTML parser builds it: elements
-/// open and close on a stack, an end tag closes the element it names or nothing, paragraphs, items and cells close
-/// each other, comments and raw text such as scripts are skipped, quotes count only around attribute values.
+/// open and close on a stack, an end tag closes the element it names, unless a block such as a `<div>` stands in
+/// the way; paragraphs, items and cells close each other; table parts outside a table are dropped; text styles left
+/// open are rebuilt in every later block; comments and raw text such as scripts are skipped; quotes count only
+/// around attribute values.
 enum NestingGuard {
     struct Shape {
         var depth = 0
         var elements = 0
         var styleBytes = 0
+        /// The most text styles (`<b>`, `<font>`…) left open at once, each rebuilt in every later block.
+        var formatting = 0
+        /// What rebuilding them costs SwiftSoup, which grows with the square of the blocks that follow.
+        var rebuilding = 0
     }
+
+    /// Rebuilding past this takes SwiftSoup seconds (about a second per million on a Mac, in a debug build).
+    static let maxRebuilding = 4_000_000
+
+    /// Text styles left open past this make the parser rebuild them over and over.
+    static let maxFormatting = 64
 
     private static let void: Set<String> = [
         "area", "base", "br", "col", "embed", "hr", "img", "input", "link", "meta", "source", "track", "wbr", "param",
         "keygen", "basefont", "bgsound", "frame", "image",
     ]
     private static let rawText: Set<String> = ["script", "style", "textarea", "title", "xmp", "iframe", "noembed", "noframes"]
+    private static let formatting: Set<String> = ["a", "b", "big", "code", "em", "font", "i", "nobr", "s", "small", "strike", "strong", "tt", "u"]
     private static let closesParagraph: Set<String> = [
         "address", "article", "aside", "blockquote", "center", "details", "dialog", "dir", "div", "dl", "fieldset",
         "figcaption", "figure", "footer", "form", "h1", "h2", "h3", "h4", "h5", "h6", "header", "hgroup", "hr", "main",
-        "menu", "nav", "ol", "p", "pre", "section", "summary", "table", "ul", "li", "dd", "dt", "listing", "xmp",
+        "menu", "nav", "ol", "p", "pre", "section", "summary", "table", "ul", "li", "dd", "dt", "listing", "xmp", "search",
     ]
     private static let scope: Set<String> = ["html", "table", "td", "th", "caption", "marquee", "object", "applet", "template", "button"]
+    /// Elements an end tag for an ordinary element does not close through.
+    private static let special: Set<String> = [
+        "address", "applet", "area", "article", "aside", "base", "basefont", "bgsound", "blockquote", "body", "br",
+        "button", "caption", "center", "col", "colgroup", "dd", "details", "dir", "div", "dl", "dt", "embed", "fieldset",
+        "figcaption", "figure", "footer", "form", "frame", "frameset", "h1", "h2", "h3", "h4", "h5", "h6", "head",
+        "header", "hgroup", "hr", "html", "iframe", "img", "input", "keygen", "li", "link", "listing", "main",
+        "marquee", "menu", "meta", "nav", "noembed", "noframes", "noscript", "object", "ol", "p", "param", "plaintext",
+        "pre", "script", "search", "section", "select", "source", "style", "summary", "table", "tbody", "td",
+        "template", "textarea", "tfoot", "th", "thead", "title", "tr", "track", "ul", "wbr", "xmp",
+    ]
 
     static func exceeds(_ html: String, depth limit: Int) -> Bool {
         measure(html, stopAt: limit).depth > limit
@@ -500,6 +551,8 @@ enum NestingGuard {
         var shape = Shape()
         var stack: [String] = []
         var tables = 0
+        var openFormatting = 0
+        var blocksSinceFormatting = 0
         var index = 0
 
         func isLetter(_ byte: UInt8) -> Bool { (65...90).contains(byte) || (97...122).contains(byte) }
@@ -528,20 +581,37 @@ enum NestingGuard {
             }
             return count
         }
-        func find(_ needle: [UInt8], from start: Int, ignoringCase: Bool) -> Int? {
+        func find(_ needle: [UInt8], from start: Int) -> Int? {
             guard needle.count <= count else { return nil }
+            var at = start
+            while at + needle.count <= count {
+                if bytes[at] == needle[0], Array(bytes[at..<(at + needle.count)]) == needle { return at }
+                at += 1
+            }
+            return nil
+        }
+        /// The `</tag` that ends raw text: the name, then a space, `/` or `>`, in any case.
+        func endOfRawText(_ tag: String, from start: Int) -> Int {
+            let needle = Array("</\(tag)".utf8)
             var at = start
             while at + needle.count <= count {
                 var matches = true
                 for offset in 0..<needle.count {
                     var byte = bytes[at + offset]
-                    if ignoringCase, (65...90).contains(byte) { byte += 32 }
+                    if (65...90).contains(byte) { byte += 32 }
                     if byte != needle[offset] { matches = false; break }
                 }
-                if matches { return at }
+                if matches {
+                    let after = at + needle.count
+                    if after >= count || isSpace(bytes[after]) || bytes[after] == 47 || bytes[after] == 62 { return at }
+                }
                 at += 1
             }
-            return nil
+            return count
+        }
+        func pop(from position: Int) {
+            tables -= stack[position...].lazy.filter { $0 == "table" }.count
+            stack.removeSubrange(position...)
         }
         /// Closes `targets` if one is open above any of `boundaries`, looking at most 64 elements down.
         func close(_ targets: Set<String>, within boundaries: Set<String>) {
@@ -549,11 +619,7 @@ enum NestingGuard {
             var looked = 0
             while position >= 0, looked < 64 {
                 let open = stack[position]
-                if targets.contains(open) {
-                    tables -= stack[position...].lazy.filter { $0 == "table" }.count
-                    stack.removeSubrange(position...)
-                    return
-                }
+                if targets.contains(open) { pop(from: position); return }
                 if boundaries.contains(open) { return }
                 position -= 1
                 looked += 1
@@ -569,23 +635,34 @@ enum NestingGuard {
                     let body = index + 4
                     if body < count, bytes[body] == 62 { index = body + 1; continue }
                     if body + 1 < count, bytes[body] == 45, bytes[body + 1] == 62 { index = body + 2; continue }
-                    let end = [find(Array("-->".utf8), from: body, ignoringCase: false).map { $0 + 3 },
-                               find(Array("--!>".utf8), from: body, ignoringCase: false).map { $0 + 4 }].compactMap { $0 }.min()
+                    let end = [find(Array("-->".utf8), from: body).map { $0 + 3 },
+                               find(Array("--!>".utf8), from: body).map { $0 + 4 }].compactMap { $0 }.min()
                     index = end ?? count
                 } else {
                     // <!DOCTYPE …>, <!x …>: a bogus comment, to the first >.
-                    index = (find([62], from: index + 2, ignoringCase: false) ?? count) + 1
+                    index = (find([62], from: index + 2) ?? count) + 1
                 }
             } else if next == 63 {
-                index = (find([62], from: index + 2, ignoringCase: false) ?? count) + 1
+                index = (find([62], from: index + 2) ?? count) + 1
             } else if next == 47 {
                 guard index + 2 < count, isLetter(bytes[index + 2]) else {
-                    index = (find([62], from: index + 2, ignoringCase: false) ?? count) + 1
+                    index = (find([62], from: index + 2) ?? count) + 1
                     continue
                 }
                 let (tag, end) = name(at: index + 2)
                 index = endOfTag(from: end)
-                if !void.contains(tag) { close([tag], within: []) }
+                if void.contains(tag) { continue }
+                if formatting.contains(tag) {
+                    // The adoption agency reaches through blocks to close a text style.
+                    if openFormatting > 0 { openFormatting -= 1 }
+                    if openFormatting == 0 { blocksSinceFormatting = 0 }
+                    close([tag], within: [])
+                } else if special.contains(tag) {
+                    close([tag], within: scope)
+                } else {
+                    // Any other end tag closes the element it names, unless a special element stands in the way.
+                    close([tag], within: special)
+                }
             } else if isLetter(next) {
                 let (tag, end) = name(at: index + 1)
                 index = endOfTag(from: end)
@@ -593,7 +670,16 @@ enum NestingGuard {
                 // Table parts outside a table are dropped by the parser.
                 if tables == 0, ["td", "th", "tr", "tbody", "thead", "tfoot", "caption", "col", "colgroup"].contains(tag) { continue }
                 shape.elements += 1
-                if closesParagraph.contains(tag) { close(["p"], within: scope) }
+                if closesParagraph.contains(tag) {
+                    close(["p"], within: scope)
+                    // Text styles left open are rebuilt inside the new block.
+                    shape.elements += openFormatting
+                    if openFormatting > 0 {
+                        blocksSinceFormatting += 1
+                        shape.rebuilding += openFormatting * blocksSinceFormatting
+                        if shape.rebuilding > maxRebuilding { return shape }
+                    }
+                }
                 switch tag {
                 case "li": close(["li"], within: scope.union(["ul", "ol"]))
                 case "dd", "dt": close(["dd", "dt"], within: scope.union(["dl"]))
@@ -608,8 +694,12 @@ enum NestingGuard {
                 case "nobr": close(["nobr"], within: scope)
                 default: break
                 }
+                if formatting.contains(tag) {
+                    openFormatting += 1
+                    shape.formatting = max(shape.formatting, openFormatting)
+                }
                 if rawText.contains(tag) {
-                    let end = find(Array("</\(tag)".utf8), from: index, ignoringCase: true) ?? count
+                    let end = endOfRawText(tag, from: index)
                     if tag == "style" { shape.styleBytes += end - index }
                     index = end
                     continue
@@ -641,28 +731,40 @@ enum StyleRules {
         "-webkit-box", "-webkit-inline-box", "-webkit-flex", "-webkit-inline-flex", "-ms-flexbox",
         "-ms-inline-flexbox", "-moz-box", "-moz-inline-box", "inline-list-item",
     ]
+    /// Prefixed properties and the logical ones that stand for a longhand in a page written left to right.
+    private static let aliases: [String: String] = [
+        "margin-inline-start": "margin-left", "margin-block-start": "margin-top", "inset-inline-start": "left",
+        "inset-block-start": "top", "inset-inline-end": "right", "inset-block-end": "bottom",
+        "-webkit-background-clip": "background-clip", "-webkit-mask-image": "mask-image", "-webkit-mask": "mask",
+        "-webkit-filter": "filter", "-webkit-transform": "transform", "-ms-transform": "transform",
+        "-moz-transform": "transform",
+    ]
+    private static let plain: Set<String> = [
+        "background-image", "margin-left", "margin-top", "position", "left", "top", "right", "bottom", "height",
+        "max-height", "width", "max-width", "text-indent", "white-space", "transform", "translate", "scale", "zoom",
+        "filter", "clip", "clip-path", "letter-spacing", "font-size-adjust", "overflow-x", "overflow-y",
+        "-webkit-text-stroke-width", "mix-blend-mode", "mask", "mask-image", "-webkit-text-security", "line-height",
+        "background-size", "box-shadow", "background-clip",
+    ]
 
     /// Sets the declaration on the element's values, expanding shorthands, if its value is one the property takes:
     /// a browser drops any other, and the value before it stays.
-    static func apply(_ name: String, _ value: String, into values: inout [String: String]) {
-        if name.hasPrefix("--") { values[name] = value; return }
-        let pending = value.contains("var(")
-        let shorthands: Set<String> = ["background", "font", "margin", "inset", "overflow", "-webkit-text-stroke"]
-        if pending, shorthands.contains(name) { values["@" + name] = value; return }
+    static func apply(_ written: String, _ value: String, into values: inout [String: String]) {
+        let name = aliases[written] ?? written
         switch name {
         case "display":
             let words = value.split(whereSeparator: \.isWhitespace).map(String.init)
-            if pending || keywords.contains(value) || (!words.isEmpty && words.allSatisfy(displayWords.contains)) { values[name] = value }
+            if keywords.contains(value) || (!words.isEmpty && words.allSatisfy(displayWords.contains)) { values[name] = value }
         case "visibility":
-            if pending || ["visible", "hidden", "collapse"].contains(value) || keywords.contains(value) { values[name] = value }
+            if ["visible", "hidden", "collapse"].contains(value) || keywords.contains(value) { values[name] = value }
         case "content-visibility":
-            if pending || ["visible", "hidden", "auto"].contains(value) || keywords.contains(value) { values[name] = value }
+            if ["visible", "hidden", "auto"].contains(value) || keywords.contains(value) { values[name] = value }
         case "opacity":
-            if pending || fraction(value) != nil || keywords.contains(value) { values[name] = value }
+            if fraction(value) != nil || keywords.contains(value) || value.contains("(") { values[name] = value }
         case "color", "-webkit-text-fill-color", "background-color", "-webkit-text-stroke-color":
-            if pending || CSSColor.read(value) != nil { values[name] = value }
+            if CSSColor.read(value) != nil { values[name] = value }
         case "font-size":
-            if pending || CSSLength.fontSize(value, inherited: CSSLength.rootFontSize) != nil { values[name] = value }
+            if CSSLength.fontSize(value, inherited: CSSLength.rootFontSize) != nil || value.contains("(") { values[name] = value }
         case "font":
             if let size = fontSize(inShorthand: value) { values["font-size"] = size }
         case "background":
@@ -672,16 +774,18 @@ enum StyleRules {
             for picture in image { rest = rest.replacingOccurrences(of: picture, with: " ") }
             values["background-color"] = color(inShorthand: rest)?.cssText ?? "transparent"
             if rest.split(whereSeparator: { $0 == " " || $0 == "," }).contains("text") { values["background-clip"] = "text" }
-        case "background-clip", "-webkit-background-clip":
-            values["background-clip"] = value
-        case "margin":
+        case "margin", "margin-inline", "margin-block":
             let parts = CSSColor.splitTopLevel(value, by: " ")
             guard (1...4).contains(parts.count) else { return }
+            if name == "margin-inline" { values["margin-left"] = parts[0]; return }
+            if name == "margin-block" { values["margin-top"] = parts[0]; return }
             values["margin-top"] = parts[0]
             values["margin-left"] = parts.count == 4 ? parts[3] : parts.count >= 2 ? parts[1] : parts[0]
-        case "inset":
+        case "inset", "inset-inline", "inset-block":
             let parts = CSSColor.splitTopLevel(value, by: " ")
             guard (1...4).contains(parts.count) else { return }
+            if name == "inset-inline" { values["left"] = parts[0]; values["right"] = parts.last; return }
+            if name == "inset-block" { values["top"] = parts[0]; values["bottom"] = parts.last; return }
             values["top"] = parts[0]
             values["right"] = parts.count >= 2 ? parts[1] : parts[0]
             values["bottom"] = parts.count >= 3 ? parts[2] : parts[0]
@@ -699,69 +803,121 @@ enum StyleRules {
                     values["-webkit-text-stroke-color"] = part
                 }
             }
-        case "background-image", "margin-left", "margin-top", "position", "left", "top", "right", "bottom", "height",
-             "max-height", "width", "max-width", "text-indent", "white-space", "transform", "translate", "scale", "zoom",
-             "filter", "clip", "clip-path", "letter-spacing", "font-size-adjust", "overflow-x", "overflow-y",
-             "-webkit-text-stroke-width":
-            values[name] = value
         default:
-            break
+            if plain.contains(name) { values[name] = value }
         }
     }
 
-    /// The value with each `var(--name, fallback)` replaced; nil when one names nothing and has no fallback, which
-    /// makes the declaration fall back to inheriting.
-    static func substitute(_ value: String, custom: [String: String], depth: Int = 0) -> String? {
-        guard let start = value.range(of: "var(") else { return value }
-        guard depth < 8 else { return nil }
-        var level = 1
-        var index = start.upperBound
-        while index < value.endIndex, level > 0 {
-            if value[index] == "(" { level += 1 }
-            if value[index] == ")" { level -= 1 }
-            if level > 0 { index = value.index(after: index) }
+    /// Each element's custom properties, worked out from its own declarations and what it inherits: a property that
+    /// names another is resolved through it; a cycle, or a value longer than 16 KB, is invalid and counts as unset.
+    static func resolve(_ raw: [String: String], inherited: [String: String]) -> [String: String] {
+        guard !raw.isEmpty else { return inherited }
+        var resolved = inherited
+        var done: [String: String?] = [:]
+        func value(of name: String, visiting: Set<String>) -> String? {
+            if let finished = done[name] { return finished }
+            guard let written = raw[name] else { return inherited[name] }
+            guard !visiting.contains(name), visiting.count < 32 else { return nil }
+            let result = substitute(written, lookup: { value(of: $0, visiting: visiting.union([name])) })
+            done[name] = .some(result)
+            return result
         }
-        guard index < value.endIndex else { return nil }
-        let inside = String(value[start.upperBound..<index])
-        let parts = CSSColor.splitTopLevel(inside, by: ",")
-        let name = parts[0].trimmingCharacters(in: .whitespaces)
-        let fallback = parts.count > 1 ? parts.dropFirst().joined(separator: ",").trimmingCharacters(in: .whitespaces) : nil
-        guard let replacement = custom[name].flatMap({ $0.isEmpty ? nil : $0 }) ?? fallback else { return nil }
-        let replaced = String(value[..<start.lowerBound]) + replacement + String(value[value.index(after: index)...])
-        return substitute(replaced, custom: custom, depth: depth + 1)
+        for name in raw.keys {
+            if let result = value(of: name, visiting: []), !result.isEmpty { resolved[name] = result } else { resolved[name] = nil }
+        }
+        return resolved
+    }
+
+    static func substitute(_ value: String, custom: [String: String]) -> String? {
+        substitute(value, lookup: { custom[$0] })
+    }
+
+    /// The value with each `var(--name, fallback)` replaced, left to right, as many times as a replacement brings in
+    /// another; nil when one names nothing and has no fallback, or when the result grows past 16 KB or takes more
+    /// than 256 replacements.
+    static func substitute(_ value: String, lookup: (String) -> String?) -> String? {
+        var text = value
+        var replacements = 0
+        while let start = text.range(of: "var(") {
+            replacements += 1
+            guard replacements <= 256, text.utf8.count <= 16_384 else { return nil }
+            var level = 1
+            var index = start.upperBound
+            while index < text.endIndex, level > 0 {
+                if text[index] == "(" { level += 1 }
+                if text[index] == ")" { level -= 1 }
+                if level > 0 { index = text.index(after: index) }
+            }
+            guard index < text.endIndex else { return nil }
+            let inside = String(text[start.upperBound..<index])
+            let parts = CSSColor.splitTopLevel(inside, by: ",")
+            let name = parts[0].trimmingCharacters(in: .whitespaces)
+            let fallback = parts.count > 1 ? parts.dropFirst().joined(separator: ",").trimmingCharacters(in: .whitespaces) : nil
+            guard let replacement = lookup(name).flatMap({ $0.isEmpty ? nil : $0 }) ?? fallback else { return nil }
+            text = String(text[..<start.lowerBound]) + replacement + String(text[text.index(after: index)...])
+        }
+        return text.utf8.count <= 16_384 ? text : nil
     }
 
     /// The pictures and gradients of a `background` value.
     static func images(in value: String) -> [String] {
-        value.matches(of: #/(?:url|(?:repeating-)?(?:linear|radial|conic)-gradient|image-set|image|-webkit-gradient|-webkit-linear-gradient)\((?:[^()]|\([^()]*\))*\)/#).map { String($0.0) }
+        value.matches(of: #/(?:url|(?:repeating-)?(?:linear|radial|conic)-gradient|image-set|image|-webkit-gradient|-webkit-(?:repeating-)?(?:linear|radial)-gradient|cross-fade|element|paint)\((?:[^()]|\((?:[^()]|\([^()]*\))*\))*\)/#).map { String($0.0) }
     }
 
-    /// What is behind the element's text: its own color over what is behind it, under its gradient. Proton loads no
-    /// remote picture until the reader asks, and a picture carried in the email may be anything: neither counts, so
-    /// text is judged against the color shown when no picture is.
-    static func behind(_ values: [String: String], over parent: HTMLSanitizer.Behind) -> HTMLSanitizer.Behind {
+    /// What is behind the element's text: its own color over what is behind it, under the color covering most of
+    /// its gradient, or the color an inset shadow paints over it. Proton loads no remote picture until the reader
+    /// asks, and a picture carried in the email may be anything: neither counts.
+    static func behind(_ values: [String: String], over parent: HTMLSanitizer.Behind, current: CSSColor) -> HTMLSanitizer.Behind {
         var base = parent
-        if let value = values["background-color"], let color = CSSColor.parse(value), color.alpha > 0.05 {
-            base = color.alpha >= 0.95 ? .color(CSSColor(red: color.red, green: color.green, blue: color.blue)) : parent.under(color)
+        if let value = values["background-color"] {
+            let color: CSSColor?
+            switch CSSColor.read(value) {
+            case .color(let read)?: color = read
+            case .inherit?: color = value == "currentcolor" ? current : nil
+            default: color = nil
+            }
+            if let color, color.alpha > 0.05 {
+                base = color.alpha >= 0.95 ? .color(CSSColor(red: color.red, green: color.green, blue: color.blue)) : parent.under(color)
+            }
         }
-        let stops = (values["background-image"].map(images(in:)) ?? []).filter { $0.contains("gradient(") }.flatMap(CSSColor.stops(inGradient:))
-        guard !stops.isEmpty else { return base }
-        let ground: CSSColor
-        switch base {
-        case .color(let color): ground = color
-        case .gradient(let colors): ground = colors.first ?? .white
+        let size = values["background-size"] ?? ""
+        let painted = !CSSColor.splitTopLevel(size, by: " ").contains { CSSLength.length($0, relativeTo: 100) == 0 }
+        if painted, let gradient = (values["background-image"].map(images(in:)) ?? []).first(where: { $0.contains("gradient(") }),
+           let dominant = CSSColor.dominant(inGradient: gradient) {
+            base = base.under(dominant)
         }
-        return .gradient(stops.map { $0.over(ground) })
+        if let shadow = values["box-shadow"], shadow.contains("inset") {
+            let words = CSSColor.splitTopLevel(shadow, by: " ")
+            let lengths = words.compactMap { CSSLength.length($0, relativeTo: 0) }
+            if lengths.count >= 4, lengths[3] >= 50, let color = words.lazy.compactMap({ CSSColor.parse($0) }).first, color.alpha > 0.05 {
+                base = base.under(color)
+            }
+        }
+        return base
     }
 
-    /// What paints text clipped to the element's background.
-    static func clipPaint(_ values: [String: String]) -> HTMLSanitizer.ClipPaint {
+    /// What paints text clipped to the element's background: the color covering most of its gradient, or its
+    /// color. A picture, remote or carried in the email, paints nothing this reader can see.
+    static func clipPaint(_ values: [String: String], current: CSSColor) -> HTMLSanitizer.ClipPaint {
         let pictures = values["background-image"].map(images(in:)) ?? []
-        let stops = pictures.filter { $0.contains("gradient(") }.flatMap(CSSColor.stops(inGradient:))
-        if !stops.isEmpty { return .stops(stops) }
-        if pictures.contains(where: { $0.range(of: #"^url\(\s*['"]?\s*(?:cid|data):"#, options: .regularExpression) != nil }) { return .picture }
-        if let color = values["background-color"].flatMap(CSSColor.parse), color.alpha > 0.05 { return .stops([color]) }
+        if let gradient = pictures.first(where: { $0.contains("gradient(") }), let dominant = CSSColor.dominant(inGradient: gradient) {
+            return .color(dominant)
+        }
+        if !pictures.isEmpty { return .nothing }
+        if let value = values["background-color"] {
+            if value == "currentcolor" { return .color(current) }
+            if let color = CSSColor.parse(value), color.alpha > 0.05 { return .color(color) }
+        }
         return .nothing
+    }
+
+    /// A box given a height or maximum height under a line of its text, without clipping: the text shows over what
+    /// is behind the box.
+    static func sizeCapped(_ values: [String: String], font: Double) -> Bool {
+        for key in ["height", "max-height"] {
+            if let value = values[key], let points = CSSLength.length(value, relativeTo: 600, font: font), points < font * 1.2 { return true }
+        }
+        return false
     }
 
     /// The color in a `background` shorthand such as `#fff no-repeat` or `rgb(0 0 0) center`.
@@ -777,8 +933,8 @@ enum StyleRules {
         guard let value else { return nil }
         for word in CSSColor.splitTopLevel(value, by: " ") {
             let size = CSSColor.splitTopLevel(word, by: "/").first ?? ""
-            guard let first = size.first, first.isNumber || first == "." || size.hasPrefix("calc(") || size.hasPrefix("min(") || size.hasPrefix("max(") || size.hasPrefix("clamp(") else { continue }
-            if size == "0" || size.contains(where: \.isLetter) || size.hasSuffix("%") { return size }
+            guard let first = size.first, first.isNumber || ".+-".contains(first) || ["calc(", "min(", "max(", "clamp("].contains(where: size.hasPrefix) else { continue }
+            if size == "0" || size == "+0" || size == "-0" || size.contains(where: \.isLetter) || size.hasSuffix("%") { return size }
         }
         return nil
     }
@@ -793,18 +949,51 @@ enum StyleRules {
         return sizes[min(max(step, 1), 7) - 1]
     }
 
-    /// `0.4` or `40%` as 0.4, between 0 and 1.
+    /// `0.4`, `40%` or `calc(0.4)` as 0.4, between 0 and 1. Nil when it cannot be told.
     static func fraction(_ value: String) -> Double? {
         let trimmed = value.trimmingCharacters(in: .whitespaces)
-        let number = trimmed.hasSuffix("%") ? Double(trimmed.dropLast()).map { $0 / 100 } : Double(trimmed)
+        let number: Double?
+        if ["calc(", "min(", "max(", "clamp("].contains(where: trimmed.hasPrefix) {
+            number = CSSLength.length(trimmed, relativeTo: 1)
+        } else if trimmed.hasSuffix("%") {
+            number = Double(trimmed.dropLast()).map { $0 / 100 }
+        } else if keywords.contains(trimmed) {
+            number = 1
+        } else {
+            number = Double(trimmed)
+        }
         guard let number, number.isFinite else { return nil }
         return min(max(number, 0), 1)
     }
 
     /// The product of the `opacity()` functions in a `filter`.
     static func filterOpacity(_ value: String) -> Double? {
-        let found = value.matches(of: #/opacity\(\s*([^)\s]+)\s*\)/#).compactMap { fraction(String($0.1)) }
+        let found = value.matches(of: #/opacity\(\s*([^)\s]+)\s*\)/#).map { fraction(String($0.1)) ?? 0 }
         return found.isEmpty ? nil : found.reduce(1, *)
+    }
+
+    /// A filter, mask or blend this reader cannot see through, or text drawn as bullets: what it does to the text
+    /// cannot be told, so the text counts as hidden.
+    static func obscures(_ values: [String: String]) -> Bool {
+        let neutral: Set<String> = ["none", "normal", "initial", "unset", "inherit", "revert"]
+        if let blend = values["mix-blend-mode"], !neutral.contains(blend) { return true }
+        for key in ["mask", "mask-image"] {
+            if let mask = values[key], !neutral.contains(mask) { return true }
+        }
+        if let security = values["-webkit-text-security"], !neutral.contains(security) { return true }
+        if let filter = values["filter"], !neutral.contains(filter) {
+            if filter.contains("url(") { return true }
+            for match in filter.matches(of: #/([a-z-]+)\(([^()]*(?:\([^()]*\))?[^()]*)\)/#) {
+                let amount = fraction(String(match.2)) ?? 1
+                switch match.1 {
+                case "opacity", "blur", "drop-shadow", "grayscale", "sepia", "saturate", "hue-rotate": continue
+                case "brightness", "contrast": if amount <= 0.1 { return true }
+                case "invert": if amount >= 0.3 { return true }
+                default: return true
+                }
+            }
+        }
+        return false
     }
 
     /// How much `zoom` shrinks the element. Zero, `normal` and `reset` mean no zoom.
@@ -820,13 +1009,14 @@ enum StyleRules {
     static func scale(_ values: [String: String]) -> Double {
         var factor = 1.0
         if let transform = values["transform"] {
-            for match in transform.matches(of: #/(scale|scalex|scaley|scale3d|matrix)\(([^)]*)\)/#) {
+            for match in transform.matches(of: #/(scale|scalex|scaley|scale3d|matrix|matrix3d)\(([^)]*)\)/#) {
                 let numbers = match.2.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }.compactMap(number)
                 switch match.1 {
                 case "scale": if let x = numbers.first { factor *= min(abs(x), abs(numbers.count > 1 ? numbers[1] : x)) }
                 case "scalex", "scaley": if let x = numbers.first { factor *= abs(x) }
                 case "scale3d": if numbers.count >= 2 { factor *= min(abs(numbers[0]), abs(numbers[1])) }
-                default: if numbers.count == 6 { factor *= sqrt(abs(numbers[0] * numbers[3] - numbers[1] * numbers[2])) }
+                case "matrix": if numbers.count == 6 { factor *= sqrt(abs(numbers[0] * numbers[3] - numbers[1] * numbers[2])) }
+                default: if numbers.count == 16 { factor *= sqrt(abs(numbers[0] * numbers[5] - numbers[1] * numbers[4])) }
                 }
             }
         }
@@ -848,22 +1038,30 @@ enum StyleRules {
     /// opacity are judged on the text itself, since children can set their own.
     static func hidesBox(_ values: [String: String], font: Double) -> Bool {
         if values.isEmpty { return false }
-        if let display = values["display"], display.split(separator: " ").first == "none" { return true }
+        if let display = values["display"] {
+            let first = display.split(separator: " ").first.map(String.init) ?? ""
+            if ["none", "table-column", "table-column-group"].contains(first) { return true }
+        }
         if values["content-visibility"] == "hidden" { return true }
         func length(_ key: String, _ reference: Double) -> Double? {
             values[key].flatMap { CSSLength.length($0, relativeTo: reference, font: font) }
         }
-        let clipped = ["overflow-x", "overflow-y"].contains { ["hidden", "clip"].contains(values[$0] ?? "") }
+        let clipped = ["overflow-x", "overflow-y"].contains { ["hidden", "clip", "scroll", "auto", "overlay"].contains(values[$0] ?? "") }
         if clipped {
             for key in ["height", "max-height"] where (length(key, 600) ?? 2) <= 1 { return true }
             for key in ["width", "max-width"] where (length(key, 800) ?? 2) <= 1 { return true }
+            if values["height"] == nil, let line = values["line-height"],
+               let points = CSSLength.length(line, relativeTo: font, font: font) ?? Double(line).map({ $0 * font }), points <= 1 {
+                return true
+            }
         }
         if let indent = length("text-indent", 800) {
             if indent <= -500 || indent >= 2_000 || (clipped && indent >= 800) { return true }
         }
         if let position = values["position"], ["absolute", "fixed", "relative", "sticky"].contains(position) {
-            if let left = length("left", 800), left <= -500 { return true }
-            if let top = length("top", 600), top <= -500 { return true }
+            let reach = position == "relative" || position == "sticky" ? -500.0 : -200.0
+            if let left = length("left", 800), left <= reach { return true }
+            if let top = length("top", 600), top <= reach { return true }
             if let right = length("right", 800), right >= 2_000 { return true }
             if let bottom = length("bottom", 600), bottom >= 2_000 { return true }
         }
@@ -898,22 +1096,33 @@ enum StyleRules {
         return false
     }
 
-    /// `clip-path` shapes that leave nothing: an inset that meets itself, a circle or an ellipse of no size, a
-    /// polygon whose points all fall in one place.
+    /// `clip-path` shapes that leave nothing, or that this reader cannot draw: an inset that meets itself, a circle
+    /// or an ellipse with a radius under a point, a polygon whose points all fall in one place, a path or a link.
     private static func clipPathHides(_ value: String, font: Double) -> Bool {
+        if ["none", "initial", "unset", "inherit"].contains(value) { return false }
+        if value.contains("url(") || value.contains("path(") || value.contains("shape(") { return true }
+        func share(_ part: String) -> Double? {
+            part.hasSuffix("%") ? Double(part.dropLast()).map { $0 / 100 } : CSSLength.length(part, relativeTo: 0, font: font).map { $0 >= 2_000 ? 1 : 0 }
+        }
         if let match = value.firstMatch(of: #/inset\(([^)]*)\)/#) {
             let parts = CSSColor.splitTopLevel(String(match.1).components(separatedBy: " round ")[0], by: " ")
             guard (1...4).contains(parts.count) else { return false }
             let top = parts[0], right = parts.count >= 2 ? parts[1] : parts[0]
             let bottom = parts.count >= 3 ? parts[2] : parts[0], left = parts.count == 4 ? parts[3] : right
-            func share(_ part: String) -> Double? {
-                part.hasSuffix("%") ? Double(part.dropLast()).map { $0 / 100 } : CSSLength.length(part, relativeTo: 0, font: font).map { $0 >= 2_000 ? 1 : 0 }
-            }
             if let t = share(top), let b = share(bottom), t + b >= 1 { return true }
             if let l = share(left), let r = share(right), l + r >= 1 { return true }
         }
-        if let match = value.firstMatch(of: #/(?:circle|ellipse)\(\s*([^)\s]*)/#), let radius = CSSLength.length(String(match.1), relativeTo: 100, font: font), radius <= 0 {
-            return true
+        if let match = value.firstMatch(of: #/(?:xywh|rect)\(([^)]*)\)/#) {
+            let parts = CSSColor.splitTopLevel(String(match.1).components(separatedBy: " round ")[0], by: " ")
+            let sizes = parts.compactMap { CSSLength.length($0, relativeTo: 100, font: font) }
+            if value.contains("xywh("), sizes.count >= 4, sizes[2] <= 1 || sizes[3] <= 1 { return true }
+            if value.contains("rect("), sizes.count == 4, sizes[2] - sizes[0] <= 1 || sizes[1] - sizes[3] <= 1 { return true }
+        }
+        if let match = value.firstMatch(of: #/(circle|ellipse)\(([^)]*)\)/#) {
+            let radii = CSSColor.splitTopLevel(String(match.2).components(separatedBy: " at ")[0], by: " ")
+            for radius in radii.prefix(match.1 == "circle" ? 1 : 2) {
+                if let points = CSSLength.length(radius, relativeTo: 100, font: font), points < 1 { return true }
+            }
         }
         if let match = value.firstMatch(of: #/polygon\(([^)]*)\)/#) {
             let points = String(match.1).split(separator: ",").map { $0.split(whereSeparator: \.isWhitespace).joined(separator: " ") }
@@ -922,17 +1131,33 @@ enum StyleRules {
         return false
     }
 
-    /// A transform that moves the box hundreds of points off the page, or turns it edge-on.
+    /// A transform that moves the box hundreds of points off the page, turns it edge-on, or that this reader
+    /// cannot work out, such as a perspective with a depth.
     private static func transformHides(_ value: String, font: Double) -> Bool {
-        for match in value.matches(of: #/([a-z0-9]+)\(([^)]*)\)/#) {
+        if ["none", "initial", "unset", "inherit"].contains(value) { return false }
+        let known: Set<String> = [
+            "translate", "translatex", "translatey", "translate3d", "translatez", "scale", "scalex", "scaley", "scalez",
+            "scale3d", "rotate", "rotatez", "rotatex", "rotatey", "skew", "skewx", "skewy", "matrix", "matrix3d",
+            "perspective", "rotate3d",
+        ]
+        let functions = value.matches(of: #/([a-z0-9]+)\(([^)]*)\)/#)
+        let hasPerspective = functions.contains { $0.1 == "perspective" }
+        for match in functions {
             let arguments = match.2.split(separator: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+            guard known.contains(String(match.1)) else { return true }
             func off(_ index: Int, _ reference: Double) -> Bool {
                 index < arguments.count && (CSSLength.length(arguments[index], relativeTo: reference, font: font) ?? 0) <= -500
             }
+            func depth(_ index: Int) -> Bool {
+                index < arguments.count && (CSSLength.length(arguments[index], relativeTo: 0, font: font) ?? 0) != 0
+            }
             switch match.1 {
-            case "translate", "translate3d": if off(0, 800) || off(1, 600) { return true }
+            case "translate": if off(0, 800) || off(1, 600) { return true }
+            case "translate3d": if off(0, 800) || off(1, 600) || (hasPerspective && depth(2)) { return true }
+            case "translatez": if hasPerspective && depth(0) { return true }
             case "translatex": if off(0, 800) { return true }
             case "translatey": if off(0, 600) { return true }
+            case "rotate3d": return true
             case "rotatex", "rotatey", "skew", "skewx", "skewy":
                 for argument in arguments {
                     guard let degrees = angle(argument) else { continue }
@@ -942,6 +1167,11 @@ enum StyleRules {
             case "matrix":
                 let numbers = arguments.compactMap(number)
                 if numbers.count == 6, numbers[4] <= -500 || numbers[5] <= -500 { return true }
+            case "matrix3d":
+                let numbers = arguments.compactMap(number)
+                guard numbers.count == 16 else { return true }
+                // A perspective term, or a move hundreds of points off the page.
+                if numbers[3] != 0 || numbers[7] != 0 || numbers[11] != 0 || numbers[12] <= -500 || numbers[13] <= -500 { return true }
             default: break
             }
         }

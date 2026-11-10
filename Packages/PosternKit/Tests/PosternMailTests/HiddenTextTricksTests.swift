@@ -173,6 +173,115 @@ import Testing
         _ = sanitizer.render(html)
     }
 
+    /// Found by a second independent review, checked against Chromium.
+    @Test(arguments: [
+        // var() in cascade order, case kept, through other custom properties.
+        "<p>Visible</p><div style=\"--d:#000;background:var(--d);background-color:#fff\"><p style=\"color:#fff\">SECRET</p></div>",
+        "<p>Visible</p><p style=\"--f:16px a;font:var(--f);font-size:0\">SECRET</p>",
+        "<p>Visible</p><p style=\"--m:0;margin:var(--m);margin-left:-9999px\">SECRET</p>",
+        "<p>Visible</p><p style=\"--d:NONE;display:var(--d)\">SECRET</p>",
+        "<p>Visible</p><p style=\"--t:SCALE(0);transform:var(--t)\">SECRET</p>",
+        "<p>Visible</p><p style=\"--a:#fff;--b:var(--a);color:var(--b)\">SECRET</p>",
+        "<p>Visible</p><p style=\"--c:#fff;--C:#000;color:var(--c)\">SECRET</p>",
+        // The root element is styled too.
+        "<style>html{color:#fff}</style><p style=\"color:#000\">Visible</p><p>SECRET</p>",
+        "<style>:root{--c:#fff}</style><p>Visible</p><p style=\"color:var(--c)\">SECRET</p>",
+        // The cascade: :is() counts as its most specific argument, layers rank below unlayered rules.
+        "<style>.s.t{display:none} :is(.a,.b,.c,.s){display:block}</style><p>Visible</p><p class=\"s t\">SECRET</p>",
+        "<style>@layer a{p.s.s{display:block}} .s{display:none}</style><p>Visible</p><p class=\"s\">SECRET</p>",
+        // Pseudo-classes true at rest, attribute values that look like syntax, CSS read as the tokenizer reads it.
+        "<style>p.s:read-only{display:none}</style><p>Visible</p><p class=\"s\">SECRET</p>",
+        "<style>p.s:defined{display:none}</style><p>Visible</p><p class=\"s\">SECRET</p>",
+        "<style>p.s:dir(ltr){display:none}</style><p>Visible</p><p class=\"s\">SECRET</p>",
+        "<style>p[title=\":after\"]{display:none}</style><p>Visible</p><p title=\":after\">SECRET</p>",
+        "<style><!-- .s{display:none} --></style><p>Visible</p><p class=\"s\">SECRET</p>",
+        "<style>.s{x:(});display:none}</style><p>Visible</p><p class=\"s\">SECRET</p>",
+        "<style>.s{content:\"\\\"}\";display:none}</style><p>Visible</p><p class=\"s\">SECRET</p>",
+        "<p>Visible</p><p style=\"color:#fff;x:{;color:#000;}\">SECRET</p>",
+        "<p>Visible</p><p style=\"color:#fff;x:'\\';color:#000;'\">SECRET</p>",
+        // Media queries in every unit, and nested negations.
+        "<style>@media (max-width:20in){.s{display:none}}</style><p>Visible</p><p class=\"s\">SECRET</p>",
+        "<style>@media (max-width:1e4px){.s{display:none}}</style><p>Visible</p><p class=\"s\">SECRET</p>",
+        "<style>@media (max-width:100vw){.s{display:none}}</style><p>Visible</p><p class=\"s\">SECRET</p>",
+        "<style>@media (not (prefers-color-scheme:dark)){.s{display:none}}</style><p>Visible</p><p class=\"s\">SECRET</p>",
+        // Values browsers accept.
+        "<p>Visible</p><p style=\"opacity:calc(0)\">SECRET</p>",
+        "<p>Visible</p><p style=\"color:rgb(calc(255) 255 255)\">SECRET</p>",
+        "<p>Visible</p><p style=\"color:rgb(from white r g b)\">SECRET</p>",
+        "<p>Visible</p><p style=\"color:window\">SECRET</p>",
+        "<p>Visible</p><div style=\"color:#fff;background-color:currentcolor\"><p style=\"color:#fff\">SECRET</p></div>",
+        // What is really behind the text.
+        "<p>Visible</p><div bgcolor=\"#000\"><p style=\"color:#fff\">SECRET</p></div>",
+        "<p>Visible</p><div style=\"background:#000;height:0\"><p style=\"color:#fff\">SECRET</p></div>",
+        "<p>Visible</p><div style=\"background:linear-gradient(#fff 99.9%,#000 0)\"><p style=\"color:#fff\">SECRET</p></div>",
+        "<p>Visible</p><div style=\"background:linear-gradient(#000,#000);background-size:0 0\"><p style=\"color:#fff\">SECRET</p></div>",
+        "<p>Visible</p><div style=\"background:#000;box-shadow:inset 0 0 0 9999px #fff\"><p style=\"color:#fff\">SECRET</p></div>",
+        // Effects this reader cannot work out count as hiding.
+        "<p>Visible</p><p style=\"filter:invert(1)\">SECRET</p>",
+        "<p>Visible</p><p style=\"mix-blend-mode:screen\">SECRET</p>",
+        "<p>Visible</p><p style=\"-webkit-mask-image:linear-gradient(transparent,transparent)\">SECRET</p>",
+        "<p>Visible</p><p style=\"-webkit-text-security:disc\">SECRET</p>",
+        "<p>Visible</p><p style=\"transform:matrix3d(.01,0,0,0,0,.01,0,0,0,0,1,0,0,0,0,1)\">SECRET</p>",
+        "<p>Visible</p><p style=\"transform:rotate3d(1,0,0,90deg)\">SECRET</p>",
+        "<p>Visible</p><p style=\"transform:perspective(1px) translateZ(-1000px)\">SECRET</p>",
+        "<p>Visible</p><p style=\"clip-path:ellipse(50% 0)\">SECRET</p>",
+        "<p>Visible</p><p style=\"clip-path:circle(.1px)\">SECRET</p>",
+        "<p>Visible</p><p style=\"clip-path:xywh(0 0 0 0)\">SECRET</p>",
+        "<p>Visible</p><p style=\"margin-inline-start:-9999px\">SECRET</p>",
+        "<p>Visible</p><p style=\"line-height:0;overflow:hidden\">SECRET</p>",
+        "<p>Visible</p><p style=\"height:0;overflow:scroll\">SECRET</p>",
+        "<p>Visible</p><p style=\"display:table-column\">SECRET</p>",
+        "<p>Visible</p><p style=\"position:absolute;left:-400px\">SECRET</p>",
+        "<p>Visible</p><div style=\"opacity:0.2\"><p style=\"opacity:inherit\">SECRET</p></div>",
+        "<p>Visible</p><div style=\"font-size:100px;letter-spacing:-20px\"><p style=\"font-size:16px\">SECRET</p></div>",
+        "<p>Visible</p><p style=\"font:+0px a\">SECRET</p>",
+        "<p>Visible</p><p style=\"background:url(data:image/png;base64,iVBORw0KGgo=);-webkit-background-clip:text;-webkit-text-fill-color:transparent\">SECRET</p>",
+        "<p>Visible</p><div popover>SECRET</div>",
+        "<p>Visible</p><noembed>SECRET</noembed>",
+    ])
+    func removesWhatTheSecondReviewFound(_ html: String) {
+        let rendering = sanitizer.render(html)
+        #expect(rendering.text.contains("Visible"), "\(html)")
+        #expect(!rendering.text.contains("SECRET"), "\(html)")
+    }
+
+    @Test(arguments: [
+        "<style>:root{--bg:#111}.card{background:var(--bg);color:#eee}</style><div class=\"card\">Shown</div>",
+        "<div style=\"background:-webkit-gradient(linear,left top,left bottom,from(#000),to(#333))\"><p style=\"color:#fff\">Shown</p></div>",
+        "<style>@supports not (display:grid){.s{display:none}}</style><p class=\"s\">Shown</p>",
+        "<div style=\"font-size:10px;letter-spacing:-1px\"><p style=\"font-size:20px\">Shown</p></div>",
+        "<p style=\"filter:drop-shadow(0 0 2px #000)\">Shown</p>",
+        "<p style=\"transform:rotate(-2deg) translate3d(0,0,0)\">Shown</p>",
+        "<style>.footer table td a span{color:#555}</style><div class=\"footer\"><table><tr><td><a href=\"https://x.example\"><span>Shown</span></a></td></tr></table></div>",
+    ])
+    func keepsWhatReadersSeeAfterTheSecondReview(_ html: String) {
+        #expect(sanitizer.render(html).text.contains("Shown"), "\(html)")
+    }
+
+    @Test(arguments: [
+        "<p style=\"font-size:calc(" + String(repeating: "(", count: 2_000) + "1px" + String(repeating: ")", count: 2_000) + ")\">x</p>",
+        "<p style=\"color:" + String(repeating: "light-dark(", count: 1_000) + "red" + String(repeating: ",red)", count: 1_000) + "\">x</p>",
+        "<p style=\"color:" + String(repeating: "color-mix(in srgb, ", count: 500) + "red" + String(repeating: ", red)", count: 500) + "\">x</p>",
+    ])
+    func survivesWhatCrashedItAfterTheSecondReview(_ html: String) {
+        _ = sanitizer.render(html)
+    }
+
+    /// What the second review found that stalled the reader for seconds or minutes, or ran out of memory.
+    @Test(arguments: [
+        "<style>span div div div div{color:red}</style>" + String(repeating: "<div>", count: 120) + "x" + String(repeating: "</div>", count: 120),
+        "<style>div:has(:has(:has(i))){color:red}</style>" + String(repeating: "<div>", count: 300) + "<i>x</i>" + String(repeating: "</div>", count: 300),
+        "<div style=\"--v0:x;--v1:" + String(repeating: "var(--v0)", count: 8) + ";--v2:" + String(repeating: "var(--v1)", count: 8) + ";--v3:" + String(repeating: "var(--v2)", count: 8) + ";--v4:" + String(repeating: "var(--v3)", count: 8) + ";--v5:" + String(repeating: "var(--v4)", count: 8) + ";--v6:" + String(repeating: "var(--v5)", count: 8) + ";--v7:" + String(repeating: "var(--v6)", count: 8) + ";--v8:" + String(repeating: "var(--v7)", count: 8) + ";--v9:" + String(repeating: "var(--v8)", count: 8) + ";color:var(--v9)\">x</div>",
+        "<style>" + String(repeating: "*{color:red}", count: 1_000) + "</style>" + String(repeating: "<p>x</p>", count: 8_000),
+        "<p>" + (0..<50).map { "<b class=b\($0)>" }.joined() + "x" + String(repeating: "<p>x", count: 2_000),
+        "<p>" + (0..<10).map { "<b class=b\($0)>" }.joined() + "x" + String(repeating: "<p>x", count: 5_000),
+    ])
+    func staysFastAfterTheSecondReview(_ html: String) async {
+        let start = Date()
+        _ = await Task.detached { HTMLSanitizer().render(html) }.value
+        #expect(Date().timeIntervalSince(start) < 10)
+    }
+
     /// What ordinary mail does with color, size and position, which a reader sees.
     @Test(arguments: [
         "<p style=\"color:#999999\">Shown</p>",

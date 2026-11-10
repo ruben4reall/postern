@@ -20,14 +20,18 @@ struct CSSColor: Equatable {
     }
 
     /// The color a CSS value names, or nil when the value is not a color (a browser drops the declaration).
-    static func parse(_ raw: String) -> CSSColor? {
-        if case .color(let color) = read(raw) { return color }
+    static func parse(_ raw: String, depth: Int = 0) -> CSSColor? {
+        if case .color(let color) = read(raw, depth: depth) { return color }
         return nil
     }
 
-    static func read(_ raw: String) -> Parsed? {
+    /// Nested color functions past this are not read: no real email nests them, and a page could to exhaust the stack.
+    static let maxDepth = 16
+
+    static func read(_ raw: String, depth: Int = 0) -> Parsed? {
         let value = raw.trimmingCharacters(in: .whitespacesAndNewlines).lowercased()
         if value.isEmpty { return nil }
+        if depth > maxDepth { return .unknown }
         switch value {
         case "inherit", "currentcolor", "unset", "revert", "revert-layer": return .inherit
         case "initial": return .color(.black)
@@ -38,9 +42,11 @@ struct CSSColor: Equatable {
         if let open = value.firstIndex(of: "("), value.hasSuffix(")") {
             let name = value[..<open].trimmingCharacters(in: .whitespaces)
             let inside = String(value[value.index(after: open)..<value.index(before: value.endIndex)])
-            if let color = colorFunction(name, inside) { return .color(color) }
-            // A known function with arguments it cannot read is dropped by browsers; any other function is not.
-            return known.contains(name) ? nil : .unknown
+            if let color = colorFunction(name, inside, depth: depth) { return .color(color) }
+            // A known function with plain arguments it cannot read is dropped by browsers. One whose arguments use
+            // math, relative colors or another function may well draw something: what it draws is unknown.
+            if known.contains(name), !inside.contains("("), !inside.contains("from ") { return nil }
+            return .unknown
         }
         if let hex = named[value] ?? system[value] { return Self.hex(Substring(hex)).map(Parsed.color) }
         return nil
@@ -50,16 +56,17 @@ struct CSSColor: Equatable {
         "rgb", "rgba", "hsl", "hsla", "hwb", "lab", "lch", "oklab", "oklch", "color", "color-mix", "light-dark",
     ]
 
-    private static func colorFunction(_ name: String, _ inside: String) -> CSSColor? {
+    private static func colorFunction(_ name: String, _ inside: String, depth: Int) -> CSSColor? {
         switch name {
         case "light-dark":
             // Proton shows mail in light mode.
-            return splitTopLevel(inside, by: ",").first.flatMap(parse)
+            return splitTopLevel(inside, by: ",").first.flatMap { parse($0, depth: depth + 1) }
         case "color-mix":
-            return mix(inside)
+            return mix(inside, depth: depth)
         default:
             break
         }
+        if inside.hasPrefix("from ") { return nil }
         guard let read = arguments(inside), read.0.count == 3 else { return nil }
         let (channels, alphaText) = read
         let alpha: Double
@@ -121,7 +128,7 @@ struct CSSColor: Equatable {
     }
 
     /// `color-mix(in srgb, white 30%, black)`, mixed in sRGB.
-    private static func mix(_ inside: String) -> CSSColor? {
+    private static func mix(_ inside: String, depth: Int) -> CSSColor? {
         let parts = splitTopLevel(inside, by: ",").map { $0.trimmingCharacters(in: .whitespaces) }
         guard parts.count == 3, parts[0].hasPrefix("in ") else { return nil }
         func side(_ text: String) -> (CSSColor, Double?)? {
@@ -130,7 +137,7 @@ struct CSSColor: Equatable {
             if let index = words.firstIndex(where: { $0.hasSuffix("%") && Double($0.dropLast()) != nil }) {
                 weight = Double(words.remove(at: index).dropLast()).map { $0 / 100 }
             }
-            return parse(words.joined(separator: " ")).map { ($0, weight) }
+            return parse(words.joined(separator: " "), depth: depth + 1).map { ($0, weight) }
         }
         guard let left = side(parts[1]), let right = side(parts[2]) else { return nil }
         let (a, wa) = left, (b, wb) = right
@@ -143,29 +150,67 @@ struct CSSColor: Equatable {
                         blue: a.blue * p + b.blue * (1 - p), alpha: a.alpha * p + b.alpha * (1 - p))
     }
 
-    /// The colors of a gradient, as `linear-gradient(#fff, rgb(0 0 0) 40%)` lists them.
-    static func stops(inGradient value: String) -> [CSSColor] {
+    /// The colors of a gradient with the share of the box each covers, as `linear-gradient(#fff, rgb(0 0 0) 40%)`
+    /// or the old `-webkit-gradient(linear, …, from(#fff), to(#000))` list them.
+    static func stops(inGradient value: String) -> [(color: CSSColor, share: Double)] {
         guard let open = value.firstIndex(of: "("), value.hasSuffix(")") else { return [] }
         let inside = String(value[value.index(after: open)..<value.index(before: value.endIndex)])
-        return splitTopLevel(inside, by: ",").compactMap { part in
-            splitTopLevel(part.trimmingCharacters(in: .whitespaces), by: " ").lazy.compactMap(parse).first
+        var found: [(CSSColor, Double?)] = []
+        for part in splitTopLevel(inside, by: ",") {
+            let trimmed = part.trimmingCharacters(in: .whitespaces)
+            if trimmed.hasPrefix("from(") || trimmed.hasPrefix("to(") || trimmed.hasPrefix("color-stop(") {
+                let args = splitTopLevel(String(trimmed.drop { $0 != "(" }.dropFirst().dropLast()), by: ",").map { $0.trimmingCharacters(in: .whitespaces) }
+                let position: Double? = trimmed.hasPrefix("from(") ? 0 : trimmed.hasPrefix("to(") ? 1 : args.first.flatMap { $0.hasSuffix("%") ? Double($0.dropLast()).map { $0 / 100 } : Double($0) }
+                if let color = args.last.flatMap({ parse($0) }) { found.append((color, position)) }
+                continue
+            }
+            let words = splitTopLevel(trimmed, by: " ")
+            guard let color = words.lazy.compactMap({ parse($0) }).first else { continue }
+            let position = words.lazy.compactMap { $0.hasSuffix("%") ? Double($0.dropLast()).map { $0 / 100 } : nil }.first
+            found.append((color, position))
+        }
+        guard !found.isEmpty else { return [] }
+        // Stops without a position are spread evenly; a position below an earlier one is raised to it.
+        var positions = found.enumerated().map { $0.element.1 ?? (found.count == 1 ? 0 : Double($0.offset) / Double(found.count - 1)) }
+        for index in positions.indices.dropFirst() { positions[index] = max(positions[index], positions[index - 1]) }
+        return found.indices.map { index in
+            let start = index == 0 ? 0 : (positions[index - 1] + positions[index]) / 2
+            let end = index == found.count - 1 ? 1 : (positions[index] + positions[index + 1]) / 2
+            return (found[index].0, max(0, min(1, end) - max(0, start)))
         }
     }
 
-    /// Splits at `separator` outside parentheses and quotes.
+    /// The color covering most of a gradient.
+    static func dominant(inGradient value: String) -> CSSColor? {
+        stops(inGradient: value).max { $0.share < $1.share }?.color
+    }
+
+    /// Splits at `separator` outside parentheses, brackets, braces and strings, as the CSS tokenizer reads them:
+    /// a backslash escapes the character after it.
     static func splitTopLevel(_ text: String, by separator: Character) -> [String] {
         var parts: [String] = []
         var current = ""
         var depth = 0
         var quote: Character?
+        var escaped = false
         for character in text {
+            if escaped {
+                escaped = false
+                current.append(character)
+                continue
+            }
+            if character == "\\" {
+                escaped = true
+                current.append(character)
+                continue
+            }
             if let open = quote {
                 if character == open { quote = nil }
             } else if character == "\"" || character == "'" {
                 quote = character
-            } else if character == "(" {
+            } else if "([{".contains(character) {
                 depth += 1
-            } else if character == ")" {
+            } else if ")]}".contains(character) {
                 depth = max(0, depth - 1)
             } else if character == separator, depth == 0 {
                 parts.append(current)
@@ -182,7 +227,13 @@ struct CSSColor: Equatable {
     private static func number(_ text: String, percentOf full: Double) -> Double? {
         if text == "none" { return 0 }
         let value: Double?
-        if text.hasSuffix("%") { value = Double(text.dropLast()).map { $0 / 100 * full } } else { value = Double(text) }
+        if text.hasSuffix("%") && !text.contains("(") {
+            value = Double(text.dropLast()).map { $0 / 100 * full }
+        } else if ["calc(", "min(", "max(", "clamp("].contains(where: text.hasPrefix) {
+            value = CSSLength.length(text, relativeTo: full)
+        } else {
+            value = Double(text)
+        }
         guard let value, value.isFinite else { return nil }
         return value
     }
@@ -315,6 +366,12 @@ struct CSSColor: Equatable {
         "field": "ffffff", "fieldtext": "000000", "highlight": "b5d5ff", "highlighttext": "000000",
         "selecteditem": "0064d2", "selecteditemtext": "ffffff", "mark": "ffff00", "marktext": "000000",
         "graytext": "808080", "accentcolor": "6d4aff", "accentcolortext": "ffffff",
+        "activeborder": "767676", "activecaption": "ffffff", "appworkspace": "ffffff", "background": "ffffff",
+        "buttonhighlight": "efefef", "buttonshadow": "efefef", "captiontext": "000000", "inactiveborder": "767676",
+        "inactivecaption": "ffffff", "inactivecaptiontext": "808080", "infobackground": "ffffff", "infotext": "000000",
+        "menu": "ffffff", "menutext": "000000", "scrollbar": "ffffff", "threeddarkshadow": "767676",
+        "threedface": "efefef", "threedhighlight": "767676", "threedlightshadow": "767676", "threedshadow": "767676",
+        "window": "ffffff", "windowframe": "767676", "windowtext": "000000",
     ]
 
     /// The CSS named colors.
@@ -377,22 +434,23 @@ enum CSSLength {
 
     /// A length in points. `em` is taken of `font`, `%` of `reference`. `calc()`, `min()`, `max()` and `clamp()`
     /// are worked out when their terms are lengths added, subtracted, or scaled by numbers.
-    static func length(_ raw: String, relativeTo reference: Double, font: Double = rootFontSize) -> Double? {
+    static func length(_ raw: String, relativeTo reference: Double, font: Double = rootFontSize, depth: Int = 0) -> Double? {
+        guard depth <= 16 else { return nil }
         let value = raw.trimmingCharacters(in: .whitespaces).lowercased()
         if let open = value.firstIndex(of: "("), value.hasSuffix(")") {
             let name = String(value[..<open])
             let inside = String(value[value.index(after: open)..<value.index(before: value.endIndex)])
             let arguments = CSSColor.splitTopLevel(inside, by: ",").map { $0.trimmingCharacters(in: .whitespaces) }
             switch name {
-            case "calc", "-webkit-calc": return expression(inside, reference: reference, font: font)
+            case "calc", "-webkit-calc": return expression(inside, reference: reference, font: font, depth: depth + 1)
             case "min":
-                let values = arguments.compactMap { expression($0, reference: reference, font: font) }
+                let values = arguments.compactMap { expression($0, reference: reference, font: font, depth: depth + 1) }
                 return values.count == arguments.count ? values.min() : nil
             case "max":
-                let values = arguments.compactMap { expression($0, reference: reference, font: font) }
+                let values = arguments.compactMap { expression($0, reference: reference, font: font, depth: depth + 1) }
                 return values.count == arguments.count ? values.max() : nil
             case "clamp":
-                let values = arguments.compactMap { expression($0, reference: reference, font: font) }
+                let values = arguments.compactMap { expression($0, reference: reference, font: font, depth: depth + 1) }
                 guard values.count == 3 else { return nil }
                 return max(values[0], min(values[1], values[2]))
             default: return nil
@@ -433,11 +491,12 @@ enum CSSLength {
     }
 
     /// `16px - 2px`, `2 * 1em`, `100% / 3`: sums of terms, each a length or a length scaled by numbers.
-    private static func expression(_ text: String, reference: Double, font: Double) -> Double? {
+    private static func expression(_ text: String, reference: Double, font: Double, depth: Int) -> Double? {
+        guard depth <= 16 else { return nil }
         var total = 0.0
         var sign = 1.0
         var term = ""
-        var depth = 0
+        var level = 0
         func flush() -> Bool {
             let trimmed = term.trimmingCharacters(in: .whitespaces)
             term = ""
@@ -449,8 +508,8 @@ enum CSSLength {
                 guard let head = parts.first else { return false }
                 if let number = Double(head), number.isFinite {
                     product *= number
-                } else if let length = (head.hasPrefix("(") && head.hasSuffix(")") ? expression(String(head.dropFirst().dropLast()), reference: reference, font: font)
-                                        : length(head, relativeTo: reference, font: font)) {
+                } else if let length = (head.hasPrefix("(") && head.hasSuffix(")") ? expression(String(head.dropFirst().dropLast()), reference: reference, font: font, depth: depth + 1)
+                                        : length(head, relativeTo: reference, font: font, depth: depth + 1)) {
                     product *= length
                     lengths += 1
                 } else {
@@ -467,10 +526,10 @@ enum CSSLength {
         }
         let characters = Array(text)
         for (index, character) in characters.enumerated() {
-            if character == "(" { depth += 1 }
-            if character == ")" { depth -= 1 }
+            if character == "(" { level += 1 }
+            if character == ")" { level -= 1 }
             // + and - with spaces around them, outside parentheses, separate terms.
-            if depth == 0, character == "+" || character == "-", index > 0, characters[index - 1] == " ",
+            if level == 0, character == "+" || character == "-", index > 0, characters[index - 1] == " ",
                index + 1 < characters.count, characters[index + 1] == " " {
                 guard flush() else { return nil }
                 sign = character == "+" ? 1 : -1

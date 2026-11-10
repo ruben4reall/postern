@@ -56,6 +56,9 @@ struct SeededGenerator: RandomNumberGenerator {
         let rows = "<table>" + String(repeating: "<tr><td><font face=Arial>Row</td></tr>", count: 1_100) + "</table>"
         #expect(!NestingGuard.exceeds(rows, depth: 1_000))
         #expect(!NestingGuard.exceeds(String(repeating: "<p><span>text", count: 2_000), depth: 1_000))
+        // Found in the second review: an end tag stops at a block, raw text ends only at its own name.
+        #expect(NestingGuard.exceeds(String(repeating: "<span><div></span>", count: 1_000), depth: 1_000))
+        #expect(NestingGuard.exceeds("<style></styles><!--</style>" + String(repeating: "<div>", count: 1_001), depth: 1_000))
     }
 
     /// Pages built to make the reader slow: each is read or refused within seconds.
