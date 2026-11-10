@@ -146,6 +146,41 @@ import Testing
         #expect(servers.count == 1 && (servers[name] as? [String: Any])?["command"] as? String == relay)
     }
 
+    /// Found in review: three copies used to leave a trailing comma, which `JSON.parse` refuses in ~/.claude.json.
+    @Test func removesEveryCopyWithoutATrailingComma() throws {
+        let copies = "{\n  \"mcpServers\": {\n    \"other\": {\"command\": \"x\"},\n    \"postern\": {\"command\": \"/a\"},\n    \"proton-mail-postern\": {\"command\": \"/b\"},\n    \"postern\": {\"command\": \"/c\"}\n  },\n  \"tail\": 1\n}\n"
+        let bytes = try #require(try ClientConfigurator.connecting(Data(copies.utf8), kind: .claudeCode, relayPath: relay))
+        let text = String(decoding: bytes, as: UTF8.self)
+        #expect(!JSONCEditor.hasTrailingComma(text), "\(text)")
+        #expect(text.contains("\"tail\": 1"))
+        #expect(JSONCEditor.serverKeys(in: text, servers: "mcpServers") == ["other", name])
+        #expect(try JSONSerialization.jsonObject(with: bytes) is [String: Any])
+    }
+
+    /// Found in review: a comma inside a comment after the last value.
+    @Test func ignoresACommaWrittenInAComment() throws {
+        let original = "{\n  \"servers\": {\n    \"a\": {\"command\": \"x\"} /* one, two */\n  }\n}\n"
+        let bytes = try #require(try ClientConfigurator.connecting(Data(original.utf8), kind: .vscode, relayPath: relay))
+        let text = String(decoding: bytes, as: UTF8.self)
+        #expect(text.contains("/* one, two */"))
+        #expect(JSONCEditor.command(in: text, servers: "servers", name: name) == relay)
+    }
+
+    /// Apps read the last of two keys with the same name; the entry goes there and the other stays as it was.
+    @Test func writesWhereAppsReadADuplicateKey() throws {
+        let original = "{\"mcpServers\": {\"a\": {\"command\": \"x\"}}, \"mcpServers\": {\"b\": {\"command\": \"y\"}}}"
+        let bytes = try #require(try ClientConfigurator.connecting(Data(original.utf8), kind: .claudeCode, relayPath: relay))
+        let text = String(decoding: bytes, as: UTF8.self)
+        #expect(text.hasPrefix("{\"mcpServers\": {\"a\": {\"command\": \"x\"}}, \"mcpServers\": {\"b\""))
+        #expect(JSONCEditor.serverKeys(in: text, servers: "mcpServers") == ["b", name])
+    }
+
+    @Test func renamesCodexSubTablesToo() throws {
+        let old = Data("[mcp_servers.postern]\ncommand = \"/old/postern-mcp\"\n\n[mcp_servers.postern.env]\nA = \"1\"\n".utf8)
+        let text = String(decoding: try #require(try ClientConfigurator.connecting(old, kind: .codex, relayPath: relay)), as: UTF8.self)
+        #expect(text == "[mcp_servers.proton-mail-postern]\ncommand = \"\(relay)\"\n\n[mcp_servers.proton-mail-postern.env]\nA = \"1\"\n")
+    }
+
     @Test func everySnippetNamesTheRelay() {
         for snippet in SetupSnippet.allCases {
             #expect(snippet.text(relayPath: relay).contains(relay), "\(snippet)")

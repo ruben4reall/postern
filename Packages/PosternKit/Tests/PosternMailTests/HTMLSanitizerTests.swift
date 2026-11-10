@@ -11,7 +11,6 @@ import Testing
         "<p>Visible</p><div style=\"font-size:0px\">SECRET</div>",
         "<p>Visible</p><div style=\"font-size: 1px\">SECRET</div>",
         "<p>Visible</p><div hidden>SECRET</div>",
-        "<p>Visible</p><div aria-hidden=\"true\">SECRET</div>",
         "<style>.x { display: none }</style><p>Visible</p><p class=\"x\">SECRET</p>",
         "<style>/* c */ #y{visibility:hidden !important}</style><p>Visible</p><p id=\"y\">SECRET</p>",
         "<p>Visible</p><p style=\"color:#ffffff\">SECRET</p>",

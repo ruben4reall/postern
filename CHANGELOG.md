@@ -8,15 +8,20 @@
 - **Your settings files stay as you wrote them.** Connecting an app now edits its settings file in place: your
   comments, the order of your keys, your numbers and your indentation stay, where Postern rewrote the whole file
   before.
-- **Hidden text, caught in more disguises.** Text whose color is too close to its background, in any CSS color form
-  (`rgb(255 255 255)`, `hsl()`, `#fffe`, named colors), sizes that inherit a zero size, `filter: opacity()`,
-  `transform: scale()` or `translate()`, large negative margins, `zoom`, `content-visibility`, the inside of a closed
-  `<details>`, and rules that select by position (`:nth-child`, `:not`) are removed before the app reads a message.
-  Proton does not load remote images until asked, so a picture from the web no longer counts as what is behind the
-  text: its fallback color does.
-- **A message built to stall the reader is refused.** A page nested more than 1,000 levels deep, which no real email
-  is, is not rendered, and every walk through a page is a loop that no nesting can exhaust. Thousands of random and
-  broken messages and pages now run in the tests.
+- **Hidden text, caught in more disguises.** Styles are now worked out the way a browser works them out: `<style>`
+  rules by importance, specificity and order, then the element's own style, invalid values dropped, comments and
+  escapes decoded, shorthands, custom properties (`var()`) and inheritance followed, nested rules and `@layer`,
+  `@container` and `@supports` blocks read through. On that, text is judged by its contrast with what is behind it
+  in every CSS color form (`rgb`, `hsl`, `hwb`, `lab`, `lch`, `oklab`, `oklch`, `color()`, `color-mix()`, system and
+  named colors, the old `<font color>` rules), at the size it is drawn after zooms and scales, and through filters,
+  transforms, clips, margins, offsets, letter spacing, `content-visibility`, a closed `<details>` or `<dialog>`, and
+  rules for positions or for `:not(:hover)`. Remote background pictures count as not loaded, as in Proton, and
+  pictures carried in the email do not count either: the color behind them does. Gradient and outlined headlines
+  still show.
+- **A message built to stall the reader is refused.** Before parsing, the page is measured the way the parser builds
+  it; one nested more than 1,000 levels deep, with more than 150,000 elements or megabytes of styles, which no real
+  email has, is not rendered, and the app is told why. Hidden parts are marked instead of removed one by one, every
+  walk through a page is a loop, and thousands of random and broken messages and pages run in the tests.
 - **Attachments with a stray character are read whole.** A base64 attachment with one character too many at its end,
   or made of pieces put end to end, used to come out empty.
 

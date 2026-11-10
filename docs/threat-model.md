@@ -52,17 +52,19 @@ reads Bridge's own window; a compromised Proton account.
 
 ### A1, a stranger's email
 
-- **Hidden instructions.** Before the client sees a message, the parser removes text hidden by HTML attributes or
-  CSS (`display:none`, `visibility:hidden`, a size of zero inherited or set, text whose contrast with what is behind
-  it is below 1.2 in any CSS color form, opacity and `filter: opacity()` multiplied down the page, boxes moved,
-  shrunk or clipped out of sight, `content-visibility`, the inside of a closed `<details>`, `<style>` rules for a
-  desktop window including structural pseudo-classes), scripts and styles, invisible and direction-changing Unicode
-  characters, and tag characters. Images are never fetched; they become their alt text. Remote background images
-  count as not loaded, as in Proton before you allow them: the fallback color is what the text is judged against.
-- **A message built against the reader.** Sizes, MIME depth and part counts are bounded; a page nested more than
-  1,000 levels deep is not rendered, and every walk through a page is a loop, so no nesting can exhaust a thread's
-  stack or make the parser quadratic. The tests run thousands of random pages, with words hidden by each trick, and
-  thousands of mutated messages.
+- **Hidden instructions.** Before the client sees a message, the parser works out its styles as a browser would
+  (`<style>` rules for a desktop window by importance, specificity and order, then the style attribute; invalid
+  values dropped, comments and escapes decoded, shorthands, custom properties and inheritance followed) and leaves
+  out what a reader would not see: hidden boxes, boxes moved, shrunk, clipped, turned or faded out of sight, the
+  inside of a closed `<details>` or `<dialog>`, text drawn smaller than 2 points after zooms and scales, and text
+  whose contrast with what is behind it is below 1.2 in any CSS color form. Remote background pictures count as not
+  loaded, as in Proton before you allow them, and pictures carried in the email do not count either. Scripts,
+  styles, invisible and direction-changing Unicode characters and tag characters are removed. Images are never
+  fetched; they become their alt text.
+- **A message built against the reader.** Sizes, MIME depth and part counts are bounded. Before parsing, the page
+  is measured the way the parser builds it: deeper than 1,000 levels, more than 150,000 elements, or megabytes of
+  styles, and it is not rendered. Every walk through a page is a loop, hidden parts are marked rather than removed,
+  and the tests run thousands of random pages, with words hidden by each trick, and thousands of mutated messages.
 - **Instructions that look like system text.** Mail content arrives in fields named `untrusted_*`, and its text
   rendering is wrapped in markers that carry a fresh random value for each response. A marker written inside the
   email is escaped. The server's instructions tell the client that this text is data, never instructions.

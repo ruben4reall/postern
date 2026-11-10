@@ -8,28 +8,82 @@ enum JSONCEditor {
     /// whatever was under `name` or under any of `oldNames`. Nil when the text is not an object this editor can
     /// walk; the caller then writes the file another way.
     static func setting(_ text: String, servers: String, name: String, oldNames: [String], entry: String) -> String? {
+        var text = text
+        while true {
+            let scanner = Scanner(Array(text.utf8))
+            guard let root = scanner.object(at: scanner.skipTrivia(from: 0)) else { return nil }
+            // The last one wins, as in the parsers apps use.
+            guard let serversMember = root.members.last(where: { $0.key == servers }) else {
+                let indent = root.memberIndent ?? scanner.indent(before: root.close) + "  "
+                let block = "\(quoted(servers)): {\n\(indent)  \(quoted(name)): \(reindent(entry, by: indent + "  "))\n\(indent)}"
+                return scanner.inserting(block, into: root, indent: indent)
+            }
+            guard let inner = scanner.object(at: serversMember.valueStart) else { return nil }
+            let mine = inner.members.filter { $0.key == name || oldNames.contains($0.key) }
+            // One entry, under the new name: every copy after the first is cut, one at a time, reading the file
+            // again after each cut so that no offset is stale.
+            if mine.count > 1, let extra = mine.last {
+                var bytes = scanner.bytes
+                bytes.replaceSubrange(scanner.removalRange(of: extra, in: inner), with: [])
+                text = String(decoding: bytes, as: UTF8.self)
+                continue
+            }
+            let indent = inner.memberIndent ?? scanner.indent(before: inner.close) + "  "
+            let value = reindent(entry, by: indent)
+            guard let first = mine.first else {
+                return scanner.inserting("\(quoted(name)): \(value)", into: inner, indent: indent)
+            }
+            var bytes = scanner.bytes
+            bytes.replaceSubrange(first.keyStart..<first.valueEnd, with: Array("\(quoted(name)): \(value)".utf8))
+            return String(decoding: bytes, as: UTF8.self)
+        }
+    }
+
+    /// The keys of the object under `servers`, the last one when the file names it twice, as apps read it.
+    static func serverKeys(in text: String, servers: String) -> [String]? {
         let scanner = Scanner(Array(text.utf8))
-        guard let root = scanner.object(at: scanner.skipTrivia(from: 0)) else { return nil }
-        // The last one wins, as in a parser.
-        guard let serversMember = root.members.last(where: { $0.key == servers }) else {
-            let indent = root.memberIndent ?? scanner.indent(before: root.close) + "  "
-            let block = "\(quoted(servers)): {\n\(indent)  \(quoted(name)): \(reindent(entry, by: indent + "  "))\n\(indent)}"
-            return scanner.inserting(block, into: root, indent: indent)
+        guard let root = scanner.object(at: scanner.skipTrivia(from: 0)),
+              let member = root.members.last(where: { $0.key == servers }),
+              let inner = scanner.object(at: member.valueStart) else { return nil }
+        return inner.members.map(\.key)
+    }
+
+    /// The `command` of `servers` › `name`, read the way apps read the file: the last of duplicate keys wins.
+    static func command(in text: String, servers: String, name: String) -> String? {
+        let scanner = Scanner(Array(text.utf8))
+        guard let root = scanner.object(at: scanner.skipTrivia(from: 0)),
+              let serversMember = root.members.last(where: { $0.key == servers }),
+              let inner = scanner.object(at: serversMember.valueStart),
+              let entry = inner.members.last(where: { $0.key == name }),
+              let object = scanner.object(at: entry.valueStart),
+              let command = object.members.last(where: { $0.key == "command" }) else { return nil }
+        let raw = Data(scanner.bytes[command.valueStart..<command.valueEnd])
+        return (try? JSONSerialization.jsonObject(with: raw, options: .fragmentsAllowed)) as? String
+    }
+
+    /// Whether a comma comes right before a closing brace or bracket, outside strings and comments: what strict
+    /// parsers such as `JSON.parse` refuse, although Foundation accepts it.
+    static func hasTrailingComma(_ text: String) -> Bool {
+        let scanner = Scanner(Array(text.utf8))
+        let bytes = scanner.bytes
+        var at = 0
+        while at < bytes.count {
+            switch bytes[at] {
+            case 34:
+                at = scanner.endOfString(at) ?? bytes.count
+                continue
+            case 47 where at + 1 < bytes.count && (bytes[at + 1] == 47 || bytes[at + 1] == 42):
+                at = scanner.skipTrivia(from: at)
+                continue
+            case 44:
+                let next = scanner.skipTrivia(from: at + 1)
+                if next < bytes.count, bytes[next] == 125 || bytes[next] == 93 { return true }
+            default:
+                break
+            }
+            at += 1
         }
-        guard let inner = scanner.object(at: serversMember.valueStart) else { return nil }
-        let indent = inner.memberIndent ?? scanner.indent(before: inner.close) + "  "
-        let value = reindent(entry, by: indent)
-        let mine = inner.members.filter { $0.key == name || oldNames.contains($0.key) }
-        guard let first = mine.first else {
-            return scanner.inserting("\(quoted(name)): \(value)", into: inner, indent: indent)
-        }
-        // One entry, under the new name: the first is replaced, any other copy is removed.
-        var bytes = scanner.bytes
-        for member in mine.dropFirst().reversed() {
-            bytes.replaceSubrange(scanner.removalRange(of: member, in: inner), with: [])
-        }
-        bytes.replaceSubrange(first.keyStart..<first.valueEnd, with: Array("\(quoted(name)): \(value)".utf8))
-        return String(decoding: bytes, as: UTF8.self)
+        return false
     }
 
     private static func quoted(_ key: String) -> String {
@@ -145,20 +199,16 @@ enum JSONCEditor {
                 guard let valueEnd = endOfValue(valueStart) else { return nil }
                 var next = skipTrivia(from: valueEnd)
                 let comma = next < bytes.count && bytes[next] == 44
+                // The comma itself, found past any comment, so a comma written inside a comment never counts.
+                let end = comma ? next + 1 : valueEnd
                 if comma { next = skipTrivia(from: next + 1) }
                 members.append(Member(key: key, keyStart: at, valueStart: valueStart, valueEnd: valueEnd,
-                                      end: comma ? afterComma(from: valueEnd) : valueEnd, hasComma: comma))
+                                      end: end, hasComma: comma))
                 if !comma, next < bytes.count, bytes[next] != 125 { return nil }
                 at = next
             }
             guard at < bytes.count else { return nil }
             return Object(open: start, close: at, members: members, memberIndent: indent)
-        }
-
-        private func afterComma(from start: Int) -> Int {
-            var at = start
-            while at < bytes.count, bytes[at] != 44 { at += 1 }
-            return at + 1
         }
 
         /// The spaces and tabs between the start of the line and `index`, if only they are there.

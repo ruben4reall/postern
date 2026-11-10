@@ -147,11 +147,16 @@ public enum ClientConfigurator {
         if let data, !data.trimmingCharacters().isEmpty {
             guard let object = parse(data) else { throw ClientConfiguratorError.unreadable }
             root = object
-            if let edited = JSONCEditor.setting(String(decoding: data, as: UTF8.self), servers: kind.serversKey, name: serverName,
+            let original = String(decoding: data, as: UTF8.self)
+            // The edit is kept only if the file still parses, holds the entry as apps read it (the last of
+            // duplicate keys), lost no former copy, and gained no trailing comma a strict parser would refuse.
+            if let edited = JSONCEditor.setting(original, servers: kind.serversKey, name: serverName,
                                                 oldNames: formerNames, entry: pretty(kind.entry(relayPath))),
-               let check = parse(Data(edited.utf8)), let servers = check[kind.serversKey] as? [String: Any],
-               (servers[serverName] as? [String: Any])?["command"] as? String == relayPath,
-               formerNames.allSatisfy({ servers[$0] == nil }) {
+               parse(Data(edited.utf8)) != nil,
+               JSONCEditor.command(in: edited, servers: kind.serversKey, name: serverName) == relayPath,
+               let keys = JSONCEditor.serverKeys(in: edited, servers: kind.serversKey),
+               keys.filter({ allNames.contains($0) }) == [serverName],
+               JSONCEditor.hasTrailingComma(original) || !JSONCEditor.hasTrailingComma(edited) {
                 return Data(edited.utf8)
             }
         }
@@ -190,10 +195,15 @@ public enum ClientConfigurator {
     private static func connectingTOML(_ data: Data?, relayPath: String) -> Data {
         var lines = data.map { String(decoding: $0, as: UTF8.self) }?.components(separatedBy: "\n") ?? []
         let value = "command = \"\(escape(relayPath))\""
-        // An entry under a former name is renamed where it is.
+        // An entry under a former name is renamed where it is, with its sub-tables such as `.env`.
         if !lines.contains(where: { $0.trimmingCharacters(in: .whitespaces) == section }),
-           let old = lines.firstIndex(where: { line in formerNames.contains { section($0) == line.trimmingCharacters(in: .whitespaces) } }) {
-            lines[old] = section
+           let old = formerNames.first(where: { name in lines.contains { $0.trimmingCharacters(in: .whitespaces) == section(name) } }) {
+            for index in lines.indices {
+                let trimmed = lines[index].trimmingCharacters(in: .whitespaces)
+                for prefix in ["[mcp_servers.\(old)]", "[mcp_servers.\(old)."] where trimmed.hasPrefix(prefix) {
+                    lines[index] = "[mcp_servers.\(serverName)" + trimmed.dropFirst("[mcp_servers.\(old)".count)
+                }
+            }
         }
         if let start = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == section }) {
             var index = start + 1

@@ -48,6 +48,27 @@ struct SeededGenerator: RandomNumberGenerator {
         #expect(!NestingGuard.exceeds(flat, depth: 1_000))
         #expect(NestingGuard.exceeds(String(repeating: "<b>", count: 1_001), depth: 1_000))
         #expect(!NestingGuard.exceeds(String(repeating: "<b>x</b>", count: 50_000), depth: 1_000))
+        // Found in review: tags that close nothing, comments that end early, quotes outside values.
+        #expect(NestingGuard.exceeds(String(repeating: "<div></x>", count: 2_000), depth: 1_000))
+        #expect(NestingGuard.exceeds(String(repeating: "<!--><div>", count: 2_000), depth: 1_000))
+        #expect(NestingGuard.exceeds(String(repeating: "<div \"x>", count: 2_000), depth: 1_000))
+        // Ordinary tables with an unclosed font in every cell.
+        let rows = "<table>" + String(repeating: "<tr><td><font face=Arial>Row</td></tr>", count: 1_100) + "</table>"
+        #expect(!NestingGuard.exceeds(rows, depth: 1_000))
+        #expect(!NestingGuard.exceeds(String(repeating: "<p><span>text", count: 2_000), depth: 1_000))
+    }
+
+    /// Pages built to make the reader slow: each is read or refused within seconds.
+    @Test(arguments: [
+        "<style>p:nth-child(2){display:none}</style><div>" + String(repeating: "<p>a</p>", count: 20_000) + "</div>",
+        String(repeating: "<b hidden></b>", count: 20_000) + "<p>end</p>",
+        "<style>" + String(repeating: "/* ", count: 20_000) + "</style><p>end</p>",
+        "<style>" + String(repeating: ".a{color:red}", count: 6_000) + "</style><p>end</p>",
+    ])
+    func staysFastOnPagesBuiltToStallIt(_ html: String) async {
+        let start = Date()
+        _ = await Task.detached { HTMLSanitizer().render(html) }.value
+        #expect(Date().timeIntervalSince(start) < 10)
     }
 
     @Test func judgesManyDeepTextsInLinearTime() async {
