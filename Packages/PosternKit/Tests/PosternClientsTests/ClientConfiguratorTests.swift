@@ -4,10 +4,11 @@ import Testing
 
 @Suite struct ClientConfiguratorTests {
     let relay = "/Applications/Postern.app/Contents/Helpers/postern-mcp"
+    let name = "proton-mail-postern"
 
     func json(_ data: Data?) throws -> [String: Any] {
         let bytes = try #require(data)
-        return try #require(JSONSerialization.jsonObject(with: bytes) as? [String: Any])
+        return try #require(JSONSerialization.jsonObject(with: bytes, options: .json5Allowed) as? [String: Any])
     }
 
     @Test func addsPosternToClaudeCodeAndKeepsEverythingElse() throws {
@@ -18,7 +19,7 @@ import Testing
         #expect((updated["projects"] as? [String: Any])?["/a"] != nil)
         let servers = try #require(updated["mcpServers"] as? [String: Any])
         #expect((servers["other"] as? [String: Any])?["url"] as? String == "https://x.example")
-        let postern = try #require(servers["postern"] as? [String: Any])
+        let postern = try #require(servers[name] as? [String: Any])
         #expect(postern["type"] as? String == "stdio")
         #expect(postern["command"] as? String == relay)
     }
@@ -33,7 +34,7 @@ import Testing
         let old = try ClientConfigurator.connecting(nil, kind: .claudeCode, relayPath: "/old/postern-mcp")
         #expect(ClientConfigurator.status(of: old, kind: .claudeCode, relayPath: relay) == .connectedElsewhere("/old/postern-mcp"))
         let moved = try json(try ClientConfigurator.connecting(old, kind: .claudeCode, relayPath: relay))
-        #expect(((moved["mcpServers"] as? [String: Any])?["postern"] as? [String: Any])?["command"] as? String == relay)
+        #expect(((moved["mcpServers"] as? [String: Any])?[name] as? [String: Any])?["command"] as? String == relay)
     }
 
     @Test func refusesAFileThatIsNotJSON() {
@@ -48,7 +49,7 @@ import Testing
         let updated = try #require(try ClientConfigurator.connecting(original, kind: .codex, relayPath: relay))
         let text = String(decoding: updated, as: UTF8.self)
         #expect(text.hasPrefix("model = \"gpt\"\n\n[mcp_servers.other]\ncommand = \"x\"\n"))
-        #expect(text.contains("[mcp_servers.postern]\ncommand = \"\(relay)\"\n"))
+        #expect(text.contains("[mcp_servers.proton-mail-postern]\ncommand = \"\(relay)\"\n"))
         #expect(ClientConfigurator.status(of: updated, kind: .codex, relayPath: relay) == .connected)
         #expect(try ClientConfigurator.connecting(updated, kind: .codex, relayPath: relay) == nil)
     }
@@ -58,7 +59,7 @@ import Testing
         #expect(ClientConfigurator.status(of: old, kind: .codex, relayPath: relay) == .connectedElsewhere("/old/postern-mcp"))
         let bytes = try #require(try ClientConfigurator.connecting(old, kind: .codex, relayPath: relay))
         let updated = String(decoding: bytes, as: UTF8.self)
-        #expect(updated == "[mcp_servers.postern]\ncommand = \"\(relay)\"\nargs = []\n")
+        #expect(updated == "[mcp_servers.proton-mail-postern]\ncommand = \"\(relay)\"\nargs = []\n")
     }
 
     @Test func addsPosternToEveryJSONClientInItsOwnShape() throws {
@@ -66,18 +67,83 @@ import Testing
             let updated = try json(try ClientConfigurator.connecting(Data("{\"theme\": \"dark\"}".utf8), kind: kind, relayPath: relay))
             #expect(updated["theme"] as? String == "dark", "\(kind)")
             let servers = try #require(updated[kind == .vscode ? "servers" : "mcpServers"] as? [String: Any], "\(kind)")
-            #expect((servers["postern"] as? [String: Any])?["command"] as? String == relay, "\(kind)")
+            #expect((servers[name] as? [String: Any])?["command"] as? String == relay, "\(kind)")
             #expect(try ClientConfigurator.connecting(JSONSerialization.data(withJSONObject: updated), kind: kind, relayPath: relay) == nil)
         }
         let cursor = try json(try ClientConfigurator.connecting(nil, kind: .cursor, relayPath: relay))
-        #expect(((cursor["mcpServers"] as? [String: Any])?["postern"] as? [String: Any])?["type"] as? String == "stdio")
+        #expect(((cursor["mcpServers"] as? [String: Any])?[name] as? [String: Any])?["type"] as? String == "stdio")
     }
 
     @Test func readsVSCodeFilesWithCommentsAndTrailingCommas() throws {
         let original = Data("{\n  // my servers\n  \"servers\": {\n    \"other\": {\"type\": \"stdio\", \"command\": \"x\"},\n  },\n}".utf8)
         let updated = try json(try ClientConfigurator.connecting(original, kind: .vscode, relayPath: relay))
         let servers = try #require(updated["servers"] as? [String: Any])
-        #expect(servers["other"] != nil && (servers["postern"] as? [String: Any])?["type"] as? String == "stdio")
+        #expect(servers["other"] != nil && (servers[name] as? [String: Any])?["type"] as? String == "stdio")
+    }
+
+    /// The file is edited, not rewritten: the user's comments, key order, numbers and spacing stay byte for byte.
+    @Test func keepsTheRestOfTheFileExactlyAsItWas() throws {
+        let original = """
+        {
+          // Copilot servers, kept by hand
+          "inputs": [],
+          "servers": {
+            /* the GitHub one */
+            "github": { "type": "http", "url": "https://api.example/mcp/" },
+            "ratio": 1.10,
+          },
+          "z": 1e3
+        }
+        """
+        let bytes = try #require(try ClientConfigurator.connecting(Data(original.utf8), kind: .vscode, relayPath: relay))
+        let updated = String(decoding: bytes, as: UTF8.self)
+        var rest = Substring(updated)
+        for line in original.split(separator: "\n") {
+            let found = try #require(rest.range(of: line), "lost: \(line)")
+            rest = rest[found.upperBound...]
+        }
+        #expect(updated.contains("    \"proton-mail-postern\": {\n      \"command\": \"\(relay)\",\n      \"type\": \"stdio\"\n    }"))
+        #expect(ClientConfigurator.status(of: bytes, kind: .vscode, relayPath: relay) == .connected)
+    }
+
+    @Test func addsTheServersBlockWhenThereIsNone() throws {
+        let bytes = try #require(try ClientConfigurator.connecting(Data("{\n  \"theme\": \"dark\" // mine\n}\n".utf8), kind: .cursor, relayPath: relay))
+        let text = String(decoding: bytes, as: UTF8.self)
+        #expect(text.hasPrefix("{\n  \"theme\": \"dark\","))
+        #expect(text.contains("// mine"))
+        let servers = try #require(try json(bytes)["mcpServers"] as? [String: Any])
+        #expect((servers[name] as? [String: Any])?["command"] as? String == relay)
+    }
+
+    @Test func fillsAnEmptyServersObject() throws {
+        let bytes = try #require(try ClientConfigurator.connecting(Data("{\"mcpServers\": {}}".utf8), kind: .claudeDesktop, relayPath: relay))
+        #expect(((try json(bytes)["mcpServers"] as? [String: Any])?[name] as? [String: Any])?["command"] as? String == relay)
+    }
+
+    /// Postern was listed as `postern` before 0.2.0: that entry still counts, and connecting again renames it in
+    /// place, without a second copy.
+    @Test func knowsAndRenamesTheFormerName() throws {
+        let current = Data("{\"mcpServers\": {\"a\": 1, \"postern\": {\"command\": \"\(relay)\"}, \"b\": 2}}".utf8)
+        #expect(ClientConfigurator.status(of: current, kind: .claudeCode, relayPath: relay) == .connected)
+        #expect(try ClientConfigurator.connecting(current, kind: .claudeCode, relayPath: relay) == nil)
+
+        let moved = Data("{\"mcpServers\": {\"a\": 1, \"postern\": {\"command\": \"/old/postern-mcp\"}, \"b\": 2}}".utf8)
+        let bytes = try #require(try ClientConfigurator.connecting(moved, kind: .claudeCode, relayPath: relay))
+        let text = String(decoding: bytes, as: UTF8.self)
+        let servers = try #require(try json(bytes)["mcpServers"] as? [String: Any])
+        #expect(servers["postern"] == nil && servers["a"] != nil && servers["b"] != nil)
+        #expect((servers[name] as? [String: Any])?["command"] as? String == relay)
+        #expect(text.range(of: "\"a\"")!.lowerBound < text.range(of: name)!.lowerBound && text.range(of: name)!.lowerBound < text.range(of: "\"b\"")!.lowerBound)
+
+        let codex = Data("[mcp_servers.postern]\ncommand = \"\(relay)\"\n".utf8)
+        #expect(ClientConfigurator.status(of: codex, kind: .codex, relayPath: relay) == .connected)
+    }
+
+    @Test func removesASecondCopyUnderTheFormerName() throws {
+        let both = Data("{\n  \"mcpServers\": {\n    \"proton-mail-postern\": {\"command\": \"/old\"},\n    \"postern\": {\"command\": \"/older\"}\n  }\n}".utf8)
+        let bytes = try #require(try ClientConfigurator.connecting(both, kind: .claudeCode, relayPath: relay))
+        let servers = try #require(try json(bytes)["mcpServers"] as? [String: Any])
+        #expect(servers.count == 1 && (servers[name] as? [String: Any])?["command"] as? String == relay)
     }
 
     @Test func everySnippetNamesTheRelay() {

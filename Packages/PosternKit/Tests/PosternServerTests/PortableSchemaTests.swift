@@ -36,7 +36,7 @@ import Testing
         var issues: [String] = []
         for id in ToolID.allCases {
             let tool = ToolCatalog.definition(id)
-            #expect(tool.name.wholeMatch(of: #/[a-z][a-z0-9_]{0,40}/#) != nil && "postern".count + tool.name.count <= 60, "\(tool.name)")
+            #expect(tool.name.wholeMatch(of: #/[a-z][a-z0-9_]{0,40}/#) != nil && "proton-mail-postern".count + tool.name.count <= 60, "\(tool.name)")
             #expect(tool.description?.count ?? 0 <= 1000, "\(tool.name) has a long description")
             check(tool.inputSchema, path: tool.name, depth: 0, issues: &issues)
         }

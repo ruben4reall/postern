@@ -7,7 +7,7 @@ import PosternPolicy
 /// One MCP client connected through the relay. The policy is read on every call, so a switch turned off in the
 /// app takes effect immediately, and the tool list is pushed again when it changes.
 public actor Session {
-    public static let serverName = "postern"
+    public static let serverName = "proton-mail-postern"
 
     private let server: Server
     private let transport: any Transport
@@ -44,7 +44,7 @@ public actor Session {
         self.inlineWait = inlineWait
         self.board = board ?? BatchBoard()
         self.server = Server(
-            name: Self.serverName, version: version, title: "Postern",
+            name: Self.serverName, version: version, title: "Proton Mail (Postern)",
             instructions: ServerInstructions.text(for: policy()),
             capabilities: Server.Capabilities(tools: .init(listChanged: true))
         )

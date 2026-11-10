@@ -83,22 +83,23 @@ public enum SetupSnippet: String, CaseIterable, Sendable, Identifiable {
     }
 
     public func text(relayPath: String) -> String {
+        let name = ClientConfigurator.serverName
         let quoted = "\"" + relayPath.replacingOccurrences(of: "\\", with: "\\\\").replacingOccurrences(of: "\"", with: "\\\"") + "\""
         switch self {
         case .json:
-            return "{\n  \"mcpServers\": {\n    \"postern\": {\n      \"command\": \(quoted),\n      \"args\": []\n    }\n  }\n}"
+            return "{\n  \"mcpServers\": {\n    \"\(name)\": {\n      \"command\": \(quoted),\n      \"args\": []\n    }\n  }\n}"
         case .vscode:
-            return "{\n  \"servers\": {\n    \"postern\": {\n      \"type\": \"stdio\",\n      \"command\": \(quoted)\n    }\n  }\n}"
+            return "{\n  \"servers\": {\n    \"\(name)\": {\n      \"type\": \"stdio\",\n      \"command\": \(quoted)\n    }\n  }\n}"
         case .zed:
-            return "\"context_servers\": {\n  \"postern\": {\n    \"command\": \(quoted),\n    \"args\": [],\n    \"env\": {}\n  }\n}"
+            return "\"context_servers\": {\n  \"\(name)\": {\n    \"command\": \(quoted),\n    \"args\": [],\n    \"env\": {}\n  }\n}"
         case .toml:
-            return "[mcp_servers.postern]\ncommand = \(quoted)\nargs = []"
+            return "[mcp_servers.\(name)]\ncommand = \(quoted)\nargs = []"
         case .opencode:
-            return "{\n  \"mcp\": {\n    \"postern\": {\n      \"type\": \"local\",\n      \"command\": [\(quoted)]\n    }\n  }\n}"
+            return "{\n  \"mcp\": {\n    \"\(name)\": {\n      \"type\": \"local\",\n      \"command\": [\(quoted)]\n    }\n  }\n}"
         case .goose:
-            return "extensions:\n  postern:\n    type: stdio\n    name: postern\n    cmd: \(quoted)\n    args: []\n    enabled: true\n    timeout: 300"
+            return "extensions:\n  \(name):\n    type: stdio\n    name: Proton Mail (Postern)\n    cmd: \(quoted)\n    args: []\n    enabled: true\n    timeout: 300"
         case .continueYAML:
-            return "mcpServers:\n  - name: postern\n    type: stdio\n    command: \(quoted)"
+            return "mcpServers:\n  - name: \(name)\n    type: stdio\n    command: \(quoted)"
         }
     }
 }
@@ -117,7 +118,11 @@ public enum ClientConfiguratorError: Error, Equatable {
 /// Adds Postern to a client's configuration. The entry holds the relay's path and nothing else: no secret ever goes
 /// into these files. Pure functions over the file's bytes; reading and writing belong to the caller.
 public enum ClientConfigurator {
-    public static let serverName = "postern"
+    /// The name apps list Postern under: what people search for is Proton Mail.
+    public static let serverName = "proton-mail-postern"
+    /// The names Postern used before 0.2.0. An entry under one of them is Postern's, and connecting again renames it.
+    public static let formerNames = ["postern"]
+    static var allNames: [String] { [serverName] + formerNames }
 
     public static func status(of data: Data?, kind: ClientKind, relayPath: String) -> ConnectionStatus {
         guard let current = command(in: data, kind: kind) else { return .notConnected }
@@ -135,25 +140,61 @@ public enum ClientConfigurator {
 
     // MARK: JSON clients
 
+    /// Edits the file's text in place, so the user's comments, key order and formatting stay; a file the editor
+    /// cannot walk is rewritten whole, as long as it parses.
     private static func connectingJSON(_ data: Data?, kind: ClientKind, relayPath: String) throws -> Data {
         var root: [String: Any] = [:]
         if let data, !data.trimmingCharacters().isEmpty {
             guard let object = parse(data) else { throw ClientConfiguratorError.unreadable }
             root = object
+            if let edited = JSONCEditor.setting(String(decoding: data, as: UTF8.self), servers: kind.serversKey, name: serverName,
+                                                oldNames: formerNames, entry: pretty(kind.entry(relayPath))),
+               let check = parse(Data(edited.utf8)), let servers = check[kind.serversKey] as? [String: Any],
+               (servers[serverName] as? [String: Any])?["command"] as? String == relayPath,
+               formerNames.allSatisfy({ servers[$0] == nil }) {
+                return Data(edited.utf8)
+            }
         }
         var servers = root[kind.serversKey] as? [String: Any] ?? [:]
+        for name in formerNames { servers[name] = nil }
         servers[serverName] = kind.entry(relayPath)
         root[kind.serversKey] = servers
         return try JSONSerialization.data(withJSONObject: root, options: [.prettyPrinted, .withoutEscapingSlashes])
     }
 
+    /// JSON as people write it by hand: two spaces, `"key": value`, keys sorted, empty lists and objects on one line.
+    static func pretty(_ value: Any, indent: String = "") -> String {
+        switch value {
+        case let text as String:
+            let data = (try? JSONSerialization.data(withJSONObject: text, options: [.fragmentsAllowed, .withoutEscapingSlashes])) ?? Data()
+            return String(decoding: data, as: UTF8.self)
+        case let flag as Bool:
+            return flag ? "true" : "false"
+        case let list as [Any]:
+            if list.isEmpty { return "[]" }
+            return "[\n" + list.map { indent + "  " + pretty($0, indent: indent + "  ") }.joined(separator: ",\n") + "\n" + indent + "]"
+        case let object as [String: Any]:
+            if object.isEmpty { return "{}" }
+            return "{\n" + object.keys.sorted().map { indent + "  " + pretty($0) + ": " + pretty(object[$0]!, indent: indent + "  ") }
+                .joined(separator: ",\n") + "\n" + indent + "}"
+        default:
+            return "\(value)"
+        }
+    }
+
     // MARK: TOML (Codex)
 
-    private static let section = "[mcp_servers.\(serverName)]"
+    private static func section(_ name: String) -> String { "[mcp_servers.\(name)]" }
+    private static let section = section(serverName)
 
     private static func connectingTOML(_ data: Data?, relayPath: String) -> Data {
         var lines = data.map { String(decoding: $0, as: UTF8.self) }?.components(separatedBy: "\n") ?? []
         let value = "command = \"\(escape(relayPath))\""
+        // An entry under a former name is renamed where it is.
+        if !lines.contains(where: { $0.trimmingCharacters(in: .whitespaces) == section }),
+           let old = lines.firstIndex(where: { line in formerNames.contains { section($0) == line.trimmingCharacters(in: .whitespaces) } }) {
+            lines[old] = section
+        }
         if let start = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == section }) {
             var index = start + 1
             while index < lines.count, !lines[index].trimmingCharacters(in: .whitespaces).hasPrefix("[") {
@@ -184,7 +225,8 @@ public enum ClientConfigurator {
         switch kind {
         case .codex:
             let lines = String(decoding: data, as: UTF8.self).components(separatedBy: "\n")
-            guard let start = lines.firstIndex(where: { $0.trimmingCharacters(in: .whitespaces) == section }) else {
+            let sections = allNames.map(section)
+            guard let start = lines.firstIndex(where: { sections.contains($0.trimmingCharacters(in: .whitespaces)) }) else {
                 return nil
             }
             for line in lines[(start + 1)...] {
@@ -196,8 +238,8 @@ public enum ClientConfigurator {
             }
             return ""
         default:
-            guard let root = parse(data),
-                  let entry = (root[kind.serversKey] as? [String: Any])?[serverName] as? [String: Any] else { return nil }
+            guard let root = parse(data), let servers = root[kind.serversKey] as? [String: Any],
+                  let entry = allNames.lazy.compactMap({ servers[$0] as? [String: Any] }).first else { return nil }
             return entry["command"] as? String
         }
     }
