@@ -3,16 +3,16 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Postern: your Proton Mail, behind a door you hold</title>
-<meta name="description" content="Postern is a free, open-source Mac app that lets AI apps such as Claude Code, Codex and Cursor work with your Proton Mail through Proton Mail Bridge. You switch on what they may do. Nothing is sent or deleted until you approve it with Touch ID.">
+<title>Postern: the Proton Mail MCP server for Claude, ChatGPT and every AI app</title>
+<meta name="description" content="Postern is a free, open-source Mac app and Proton Mail MCP server. Claude, ChatGPT through Codex, Cursor, GitHub Copilot and Gemini can read, sort, draft and send your Proton Mail through Bridge, attachments included, and nothing is sent or deleted until you approve it with Touch ID.">
 <link rel="canonical" href="https://getpostern.vercel.app/">
 <meta name="color-scheme" content="light dark">
 <meta name="theme-color" content="#ffffff" media="(prefers-color-scheme: light)">
 <meta name="theme-color" content="#16141c" media="(prefers-color-scheme: dark)">
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://getpostern.vercel.app/">
-<meta property="og:title" content="Postern: your mailbox, behind a door you hold">
-<meta property="og:description" content="A free, open-source Mac app that lets AI apps work with your Proton Mail. Nothing is sent or deleted until you approve it with Touch ID.">
+<meta property="og:title" content="Postern: the Proton Mail MCP server">
+<meta property="og:description" content="Let Claude, ChatGPT, Cursor and every AI app work with your Proton Mail, on your Mac. Nothing is sent or deleted until you approve it with Touch ID.">
 <meta property="og:image" content="https://getpostern.vercel.app/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -21,6 +21,23 @@
 <link rel="icon" href="favicon.svg" type="image/svg+xml">
 <link rel="icon" href="favicon.ico" sizes="any">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
+<script type="application/ld+json">
+{
+  "@context": "https://schema.org",
+  "@type": "SoftwareApplication",
+  "name": "Postern",
+  "alternateName": "Proton Mail MCP server",
+  "description": "A free, open-source Mac app and MCP server that lets AI apps read, organize, draft and send Proton Mail through Proton Mail Bridge, with every send and deletion approved with Touch ID.",
+  "applicationCategory": "UtilitiesApplication",
+  "operatingSystem": "macOS 26 or later",
+  "url": "https://getpostern.vercel.app/",
+  "downloadUrl": "https://github.com/ruben4reall/postern/releases/latest",
+  "license": "https://opensource.org/licenses/MIT",
+  "isAccessibleForFree": true,
+  "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+  "author": { "@type": "Person", "name": "Ruben Catalao", "url": "https://rubencatalao.ch" }
+}
+</script>
 <link rel="stylesheet" href="site.css">
 <script>if (matchMedia('(prefers-reduced-motion: no-preference)').matches) { document.documentElement.classList.add('motion'); setTimeout(function () { if (!window.posternReady) document.documentElement.classList.remove('motion'); }, 2500); }</script>
 <script src="site.js" defer></script>
