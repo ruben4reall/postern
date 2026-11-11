@@ -234,18 +234,20 @@ struct ApprovalView: View {
 
     private var actions: some View {
         HStack(spacing: 10) {
+            // Longer button titles in other languages take room from the reason field, never from the buttons.
             TextField("Why, for the app (optional)", text: $reason)
                 .textFieldStyle(.roundedBorder)
-                .frame(maxWidth: 210)
-            Spacer()
-            Button("Reject") { decide(.reject(reason: reason.isEmpty ? nil : reason)) }
-            Button("Keep as Draft") { decide(.saveAsDraft) }
+                .frame(minWidth: 110, maxWidth: 210)
+            Spacer(minLength: 0)
+            Button("Reject") { decide(.reject(reason: reason.isEmpty ? nil : reason)) }.fixedSize()
+            Button("Keep as Draft") { decide(.saveAsDraft) }.fixedSize()
             Button {
                 decide(.send)
             } label: {
                 Label("Send with Touch ID", systemImage: "touchid")
             }
             .buttonStyle(.borderedProminent)
+            .fixedSize()
         }
         .controlSize(.large)
     }
@@ -363,9 +365,9 @@ struct DeletionView: View {
             .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
             HStack(spacing: 10) {
                 TextField("Why, for the app (optional)", text: $reason)
-                    .textFieldStyle(.roundedBorder).frame(maxWidth: 210)
-                Spacer()
-                Button("Keep Them") { decide(.reject(reason: reason.isEmpty ? nil : reason)) }
+                    .textFieldStyle(.roundedBorder).frame(minWidth: 110, maxWidth: 210)
+                Spacer(minLength: 0)
+                Button("Keep Them") { decide(.reject(reason: reason.isEmpty ? nil : reason)) }.fixedSize()
                 Button {
                     decide(.send)
                 } label: {
@@ -373,6 +375,7 @@ struct DeletionView: View {
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(request.permanent ? Theme.danger : Theme.warning)
+                .fixedSize()
             }
             .controlSize(.large)
         }

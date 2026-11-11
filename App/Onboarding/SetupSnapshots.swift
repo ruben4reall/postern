@@ -101,7 +101,7 @@ enum SetupSnapshots {
             let request = DeletionRequest(tool: kind == "erase" ? "delete_permanently" : "trash_messages",
                                           client: "Claude Code", items: items, permanent: kind == "erase")
             rootView = AnyView(DeletionView(request: request, deadline: Date().addingTimeInterval(97)) { _ in })
-            title = kind == "erase" ? "Approve Erasing" : "Approve Trash"
+            title = kind == "erase" ? String(localized: "Approve Erasing") : String(localized: "Approve Trash")
         case "batch":
             let messages = (0..<6).map { index -> OutgoingMessage in
                 let companies = ["Acme", "Globex", "Initech", "Umbrella", "Hooli", "Stark"]
@@ -123,11 +123,11 @@ enum SetupSnapshots {
                 schedule: BatchSchedule(start: nil, spacing: 30, sendsPerHour: 100, sendsPerDay: 1000, finish: Date().addingTimeInterval(180))
             )
             rootView = AnyView(BatchApprovalView(request: request, deadline: Date().addingTimeInterval(840), send: { _ in }, reject: { _ in }))
-            title = "Approve 6 Emails"
+            title = String(localized: "Approve \(6) Emails")
         default:
             rootView = AnyView(ApprovalView(request: sampleApproval(attachments: kind == "attachments"),
                                             deadline: Date().addingTimeInterval(97)) { _ in })
-            title = "Approve Email"
+            title = String(localized: "Approve Email")
         }
         let window = NSWindow(contentViewController: NSHostingController(rootView: rootView))
         window.styleMask = [.titled, .closable, .fullSizeContentView]

@@ -123,8 +123,8 @@ struct BatchApprovalView: View {
     private func scheduleText(_ schedule: BatchSchedule) -> String {
         let start = schedule.start.map { String(localized: "Starts \($0.formatted(date: .abbreviated, time: .shortened))") } ?? String(localized: "Starts now")
         let pace = schedule.spacing >= 60 && schedule.spacing.truncatingRemainder(dividingBy: 60) == 0
-            ? Duration.seconds(schedule.spacing).formatted(.units(allowed: [.minutes], width: .abbreviated))
-            : Duration.seconds(schedule.spacing.rounded()).formatted(.units(allowed: [.seconds], width: .abbreviated))
+            ? Duration.seconds(schedule.spacing).formatted(.units(allowed: [.minutes], width: .wide))
+            : Duration.seconds(schedule.spacing.rounded()).formatted(.units(allowed: [.seconds], width: .wide))
         let finish = Calendar.current.isDateInToday(schedule.finish)
             ? schedule.finish.formatted(date: .omitted, time: .shortened)
             : schedule.finish.formatted(date: .abbreviated, time: .shortened)
@@ -216,9 +216,9 @@ struct BatchApprovalView: View {
     private var actions: some View {
         HStack(spacing: 10) {
             TextField("Why, for the app (optional)", text: $reason)
-                .textFieldStyle(.roundedBorder).frame(maxWidth: 210)
-            Spacer()
-            Button("Send None") { reject(reason.isEmpty ? nil : reason) }
+                .textFieldStyle(.roundedBorder).frame(minWidth: 110, maxWidth: 210)
+            Spacer(minLength: 0)
+            Button("Send None") { reject(reason.isEmpty ? nil : reason) }.fixedSize()
             Button {
                 send(chosen)
             } label: {
@@ -227,6 +227,7 @@ struct BatchApprovalView: View {
             .buttonStyle(.borderedProminent)
             .tint(Theme.interaction)
             .disabled(chosen.isEmpty)
+            .fixedSize()
         }
         .controlSize(.large)
     }

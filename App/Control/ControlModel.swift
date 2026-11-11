@@ -377,7 +377,7 @@ struct ToolCopy {
                      risk: String(localized: "Drafts sync to Proton on all your devices."))
         case .createDrafts:
             ToolCopy(title: String(localized: "Write drafts from a template"), verb: String(localized: "write several drafts at once", comment: "Completes the Touch ID sentence “Postern” is trying to let your apps …"),
-                     allows: String(localized: "Save up to 500 drafts at once from one template or a spreadsheet in the outbox, such as one application per company with its own letter."),
+                     allows: String(localized: "Save up to 5,000 drafts at once from one template or a spreadsheet in the outbox, such as one application per company with its own letter."),
                      risk: String(localized: "It fills your Drafts folder; nothing is sent."))
         case .updateDraft:
             ToolCopy(title: String(localized: "Change drafts"), verb: String(localized: "change drafts", comment: "Completes the Touch ID sentence “Postern” is trying to let your apps …"),

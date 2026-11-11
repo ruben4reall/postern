@@ -227,11 +227,13 @@ private struct Tile: View {
                         .monospacedDigit()
                         .foregroundStyle(.white)
                         .lineLimit(1)
+                        .minimumScaleFactor(0.6)
                 }
                 Text(pane.title)
                     .font(.system(size: 12.5, weight: .semibold))
                     .foregroundStyle(selected ? .white : Theme.sidebarTextWeak)
                     .lineLimit(1)
+                    .minimumScaleFactor(0.8)
             }
             .padding(.horizontal, 10)
             .padding(.vertical, 9)
@@ -540,7 +542,9 @@ private struct TierSummaryRow: View {
                 Text(on == 0 ? String(localized: "Off") : String(localized: "\(on) of \(total)"))
                     .foregroundStyle(on == 0 ? .secondary : .primary)
                     .monospacedDigit()
-                    .frame(width: 52, alignment: .trailing)
+                    .lineLimit(1)
+                    .fixedSize()
+                    .frame(minWidth: 52, alignment: .trailing)
                 Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
             }
             .contentShape(Rectangle())
