@@ -28,11 +28,12 @@ import Testing
         let client = Client(name: "test", version: "1")
         _ = try await client.connect(transport: clientTransport)
 
-        let start = Value.string(ISO8601DateFormatter().string(from: Date().addingTimeInterval(2)))
+        let start = Value.string(ISO8601DateFormatter().string(from: Date().addingTimeInterval(5)))
         let ids = base.drafts([5, 6]).map { Value.string($0.opaque) }
         let (_, structured, _) = try await base.call(client, "send_drafts", ["ids": .array(ids), "start_at": start])
         let id = try #require(base.batchID(structured))
-        try await Task.sleep(for: .milliseconds(400))
+        // A loaded CI runner can take seconds to write the batch: wait for it rather than for a fixed time.
+        await eventually { !store.load().isEmpty }
         let kept = try #require(store.load().first)
         #expect(kept.id == id && kept.left == 2)
 
@@ -50,10 +51,10 @@ import Testing
         #expect(await later.batch(id)?.interrupted == true)
 
         #expect(await BatchResumer(board: later, desk: desk, backend: backend, ledger: ledger, policy: { policy }).resume(id))
-        try await Task.sleep(for: .milliseconds(2500))
+        await eventually { await later.batch(id)?.phase == .finished }
         #expect(backend.lock.withLock { backend.sent }.count == 2)
         #expect(await later.batch(id)?.phase == .finished)
-        try await Task.sleep(for: .milliseconds(400))
+        await eventually { await later.batch(id)?.phase == .finished && disk.load().isEmpty }
         #expect(disk.load().isEmpty)
     }
 
@@ -73,6 +74,15 @@ import Testing
         #expect(batch.items.map(\.status) == [.uncertain, .waiting])
         let held = await board.heldDrafts()
         #expect(held.isEmpty)
+    }
+
+    /// Polls a condition every 50 ms for up to 30 s, so the test waits only as long as the machine needs.
+    func eventually(_ condition: () async -> Bool) async {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(30))
+        while ContinuousClock.now < deadline {
+            if await condition() { return }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
     }
 
     func record(_ id: String = "deadbeef", statuses: [String] = ["waiting", "waiting"]) -> BatchRecord {
