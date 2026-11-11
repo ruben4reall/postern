@@ -127,14 +127,14 @@
       if (sw.getAttribute('aria-checked') === 'true') {
         sw.setAttribute('aria-checked', 'false');
         update(tier);
-        live.textContent = label + ' off. Its tools are gone from the list.';
+        live.textContent = (document.documentElement.getAttribute('data-off') || '%s off. Its tools are gone from the list.').replace('%s', label);
         return;
       }
       var turnOn = function () {
         sw.removeAttribute('data-pending');
         sw.setAttribute('aria-checked', 'true');
         update(tier);
-        live.textContent = label + ' on, after Touch ID.';
+        live.textContent = (document.documentElement.getAttribute('data-on') || '%s on, after Touch ID.').replace('%s', label);
       };
       if (!motion()) { turnOn(); return; }
       sw.setAttribute('data-pending', '');
