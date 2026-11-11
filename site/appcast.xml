@@ -6,6 +6,125 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>Postern</title>
         <item>
+            <title>0.2.0</title>
+            <pubDate>Wed, 11 Nov 2026 17:08:23 +0100</pubDate>
+            <link>https://getpostern.vercel.app</link>
+            <sparkle:fullReleaseNotesLink>https://github.com/ruben4reall/postern/releases</sparkle:fullReleaseNotesLink>
+            <sparkle:version>3</sparkle:version>
+            <sparkle:shortVersionString>0.2.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[- **Listed as Proton Mail in your apps.** Postern's entry is now named `proton-mail-postern`, and it introduces
+  itself as "Proton Mail (Postern)", so apps and their tools say which mailbox they reach. An entry made by an
+  earlier version keeps working, and Connect renames it.
+- **Your settings files stay as you wrote them.** Connecting an app now edits its settings file in place: your
+  comments, the order of your keys, your numbers and your indentation stay, where Postern rewrote the whole file
+  before.
+- **Hidden text, caught in more disguises.** Styles are now worked out the way a browser works them out: `<style>`
+  rules by importance, specificity and order, then the element's own style, invalid values dropped, comments and
+  escapes decoded, shorthands, custom properties (`var()`) and inheritance followed, nested rules and `@layer`,
+  `@container` and `@supports` blocks read through. On that, text is judged by its contrast with what is behind it
+  in every CSS color form (`rgb`, `hsl`, `hwb`, `lab`, `lch`, `oklab`, `oklch`, `color()`, `color-mix()`, system and
+  named colors, the old `<font color>` rules), at the size it is drawn after zooms and scales, and through filters,
+  transforms, clips, margins, offsets, letter spacing, `content-visibility`, a closed `<details>` or `<dialog>`, and
+  rules for positions or for `:not(:hover)`. Remote background pictures count as not loaded, as in Proton, and
+  pictures carried in the email do not count either: the color behind them does. Gradient and outlined headlines
+  still show.
+- **A message built to stall the reader is refused.** Before parsing, the page is measured the way the parser builds
+  it; one nested more than 1,000 levels deep, with more than 150,000 elements or megabytes of styles, which no real
+  email has, is not rendered, and the app is told why. Hidden parts are marked instead of removed one by one, every
+  walk through a page is a loop, and thousands of random and broken messages and pages run in the tests.
+- **Attachments with a stray character are read whole.** A base64 attachment with one character too many at its end,
+  or made of pieces put end to end, used to come out empty.
+
+- **No more emails without their files.** An email whose subject or text says a file is attached (`ci-joint`,
+  `pièce jointe`, `en PJ`, `attached`, `anbei`, `adjunto`, `in allegato`, `em anexo`, `bijlage`…) and carries none is
+  refused before it is saved or shown, so the app attaches what it forgot; `no_attachment` says when no file is meant.
+  Every answer names the files that left, with their sizes.
+- **Attach files from anywhere an app can reach.** Besides the outbox, `inline_attachments` takes files the app wrote
+  itself (text, or base64 for anything else), and `email_attachments` attaches files of emails it can read, such as
+  an invoice sent on to your accountant. `reply_to_message` and `forward_message` take files too.
+- **Every draft is checked after it is saved.** Postern reads back how many files Bridge kept; a draft that lost one
+  is removed and the call says so (`attachments_lost`), instead of an email leaving later without them.
+- **Batches of 5,000.** `create_drafts` and `send_drafts` take up to 5,000 drafts. Approving a batch keeps only each
+  email's digest, and each email is composed again from its draft when its turn comes: thousands of emails never sit
+  in memory, and a draft you change in Proton after approving it does not leave.
+- **Batches that survive a restart.** An approved batch is sealed on disk as it goes, under a key in Postern's
+  Keychain. After a restart of the Mac or of Postern it comes back in the Overview, and goes on when you choose Resume
+  with Touch ID. An email caught mid-send comes back `uncertain`, never sent twice.
+- **No second panel when an app calls again.** `send_drafts` answers within a minute, with the outcome or with its
+  batch id while the panel is open, so apps with short timeouts no longer give up and call again; the drafts of a
+  batch stay held until it ends.
+- **Higher limits for those who need them.** The window now allows up to 300 emails an hour and 1,000 a day (Touch
+  ID), with a reminder that Proton sets its own limits.
+- **Works with every MCP app.** One click connects Cursor, VS Code (Copilot), Windsurf, Gemini CLI, Kiro and Cline,
+  besides Claude Code, Claude Desktop and Codex (which ChatGPT's Mac app shares). Any other app gets the entry to
+  paste, in its own format: JSON, VS Code, Zed, TOML, OpenCode, Goose, Continue.
+- **Every model reads every answer.** Claude Code, VS Code and Codex give the model only the structured part of a
+  result, Cursor and Gemini only the text: each answer now carries Postern's sentences in both. Schemas keep to what
+  Gemini and OpenAI's models accept, and the instructions are shorter and depend on the tools you turned on.
+- **Lighter for the model.** Tool descriptions were trimmed: every tool on now costs about 8,500 tokens, read once.
+- **A Proton look.** Postern's window and panels take Proton Mail's colors: the deep purple sidebar, the purple
+  accent, Proton's green, orange and red for states, and its badges.
+- **Updates are named in the window.** When a check finds a new version, a bar at the top of the window says so.
+- **Postern no longer stays closed after starting on a locked Mac.** macOS keeps the Keychain closed until the Mac is
+  unlocked, so a Postern started then, after an update or a crash, said it was not set up until it was restarted. It
+  now says to unlock the Mac and serves again as soon as it can read its settings.
+
+- **Send from your aliases.** Add an alias of your Proton account under Send from in Postern's window (Touch ID);
+  `send_message`, `create_draft`, `update_draft` and `forward_message` take `from`, replies leave from the address
+  the original was sent to, and `list_addresses` lists them. Any other From is refused (`sender_not_allowed`), and a
+  draft written from an address you did not add is not sent.
+- **Write drafts from one template, or from a spreadsheet.** `create_drafts` fills `{{name}}` in the
+  subject, body and attachment names with each draft's values, for example one application per company with its own
+  letter. The values can come from a CSV or JSON file in the outbox, one row per draft, as Numbers or Excel export it.
+  Every draft is checked before any is saved, so a missing value or file stops the batch instead of leaving half of
+  it; `dry_run` shows the first draft without saving anything. With `send_drafts`, hundreds of applications take two
+  calls and one Touch ID.
+- **Sort by search.** The organize tools take `search` instead of ids, to archive, move, label, star or mark as read
+  every message a search finds, up to 1,000 at a time, such as the newsletters older than a month. `dry_run` lists
+  them first and changes nothing. A search must name a condition besides its mailbox.
+- **Find the people who have not answered.** `awaiting_reply` lists who you wrote to without an answer, the longest
+  wait first: the follow-ups to write, such as job applications with no news. An answer is a reply in the
+  conversation, or a later email from the same address or company domain, Spam included.
+- **Read attachments without saving them.** `read_attachment` returns the text of a PDF, of a scanned PDF or a photo
+  of a document (recognized on your Mac by Vision), of text, CSV, JSON, calendar and contact files, and of HTML as a
+  person would see it. Everything is read in the sandboxed reader and marked untrusted, like the email it came in.
+- **Conversations still load when you hide a mailbox.** Hiding a mailbox also hides All Mail, which left every
+  conversation empty; `get_thread` now looks folder by folder then. It also reads only the header of the message
+  instead of downloading it with its attachments.
+- **Drafts keep their attachments when they are sent.** `send_draft` sent the text of a draft without its
+  attachments, and `update_draft` dropped them too. Both now carry them, the panel lists them, and the bytes that
+  leave are the ones you approved. If you sent drafts with attachments through 0.1.1, check your Sent folder.
+- **Send a batch of drafts with one Touch ID.** `send_drafts` takes many drafts, or every draft a
+  `create_drafts` batch saved, and shows them all on one panel: who they go to and from, the files and their total
+  size, then each email with its recipients, warnings, subject, the start of the text and its attachments, with a
+  filter to find one. Untick any that should wait, and one Touch ID sends the rest. Each email is still approved for
+  its exact bytes. The tool is off until you turn it on.
+- **Long batches pace themselves.** Approved emails leave one by one, two seconds apart for a short batch and thirty
+  for a long one (`spacing_seconds` changes it), and when your hourly or daily limit is reached they wait for room
+  instead of being refused. The panel says when the last should leave; `start_at` schedules the first, up to thirty
+  days ahead. The Overview pane follows each batch with a Stop button, and `batch_status` and `cancel_batch` let apps
+  do the same. Pausing Postern holds a batch; a draft leaves Drafts only once its email is sent, and deleting a draft
+  holds its email back. No draft is sent by two batches, each email takes its place in the limits as it leaves, and
+  it carries the time it leaves.
+- **Attachments from folders inside the outbox**, such as `Letters/Acme.pdf`, and `list_outbox` lists what is there.
+  A file attached to many drafts is read once and held once in memory.
+- **Clearer sending errors.** An email Proton refuses comes back as `send_refused`, and one whose connection broke
+  while Bridge was taking it as `send_uncertain`, so it is not sent twice by mistake. A batch retries an email Bridge
+  did not take, and goes on past one Proton refused.
+- **`update_draft` takes `attachments`** to replace a draft's files; without it, they stay.
+- **Calls are up to 2.5 times faster.** After each call, Postern reread and rechecked its whole activity log, and
+  the next call waited for it. It now checks only what was added since, with a full check every five minutes.
+- **HTML emails no longer come out empty.** Font size and color are judged where the text inherits them, so a
+  layout that sets a zero font size on a wrapper keeps its text, and rules meant for phones, print or dark mode no
+  longer hide the desktop version. White text on a dark background set by a style sheet stays; text hidden by a
+  style sheet class is now removed too.
+- **Calls made at the same time no longer hang.** Two apps, or one app calling two tools at once, could leave a call
+  waiting until the client gave up. Postern now runs them one after the other on its Bridge session.
+]]></description>
+            <enclosure url="https://github.com/ruben4reall/postern/releases/download/v0.2.0/Postern-0.2.0.dmg" length="15480345" type="application/octet-stream" sparkle:edSignature="NgaNAhqah24MwhJFufbUGXGoVX0LUnxCw734shtB/okeCCCGqCNaE9wi0mFhR2uxldtJhQQsR/tpX68r4j9pAQ=="/>
+        </item>
+        <item>
             <title>0.1.1</title>
             <pubDate>Sun, 18 Oct 2026 19:25:58 +0200</pubDate>
             <link>https://getpostern.vercel.app</link>
@@ -29,6 +148,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: xBdfO6j0IekDlaI5v9cbUC/iILxx5Nd6Djw7f599gKO+SmpQDUjpGa33A9VNoqoDA9ErdjxeMyr+UxRnrmy2CA==
-length: 2017
+edSignature: dI8+rwrIl0L4I0wakP87Q3jA3nN97kpTXNGZHZq/LOTf4b3sS06PFhsfM6usbmibQTsz9xuHgCM/TjMZtrsTAQ==
+length: 13671
 -->
