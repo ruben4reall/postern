@@ -1,10 +1,12 @@
-import CoreGraphics
 import Foundation
-import ImageIO
-import PDFKit
 import PosternModel
 import PosternText
+#if canImport(PDFKit) && canImport(Vision)
+import CoreGraphics
+import ImageIO
+import PDFKit
 import Vision
+#endif
 
 /// Reads the text of an attachment: a PDF's text, or what Vision recognizes on scanned pages and photos; text, CSV,
 /// JSON, calendar and contact files as they are; HTML as a person would see it. It runs in the parser service, so a
@@ -57,6 +59,7 @@ public enum AttachmentReader {
 
     // MARK: PDF
 
+    #if canImport(PDFKit) && canImport(Vision)
     static func pdf(_ data: Data, maxChars: Int) throws -> (kind: AttachmentContent.Kind, text: String, pages: Int?, recognized: Bool) {
         guard let document = PDFDocument(data: data) else { throw Failure.unreadable("This PDF could not be opened.") }
         guard !document.isLocked else { throw Failure.unreadable("This PDF is protected by a password.") }
@@ -125,6 +128,16 @@ public enum AttachmentReader {
         guard (try? handler.perform([request])) != nil else { return "" }
         return (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }.joined(separator: "\n")
     }
+    #else
+    /// Outside macOS, PDFs and pictures wait for a reader of their own (Poppler and Tesseract on Linux, Windows' own).
+    static func pdf(_ data: Data, maxChars: Int) throws -> (kind: AttachmentContent.Kind, text: String, pages: Int?, recognized: Bool) {
+        throw Failure.unsupported("application/pdf")
+    }
+
+    static func recognize(image data: Data) throws -> String {
+        throw Failure.unsupported("image")
+    }
+    #endif
 
     // MARK: Text
 

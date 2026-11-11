@@ -1,5 +1,7 @@
 import Foundation
+#if canImport(Security)
 import Security
+#endif
 
 /// The items Postern keeps. Each is one Keychain entry in Postern's access group.
 public enum VaultKey: String, CaseIterable, Sendable {
@@ -18,7 +20,8 @@ public enum VaultKey: String, CaseIterable, Sendable {
 }
 
 public enum VaultError: Error, Equatable, Sendable {
-    case keychain(OSStatus)
+    /// The status the platform's secret store returned (an OSStatus on Apple platforms).
+    case keychain(Int32)
     case corrupted(VaultKey)
 }
 
@@ -47,6 +50,7 @@ extension SecretStore {
     }
 }
 
+#if canImport(Security)
 public struct KeychainVault: SecretStore {
     public static let service = "ch.rubencatalao.postern"
     private let accessGroup: String
@@ -93,6 +97,8 @@ public struct KeychainVault: SecretStore {
         guard status == errSecSuccess || status == errSecItemNotFound else { throw VaultError.keychain(status) }
     }
 }
+
+#endif
 
 /// For tests and previews only.
 public final class MemoryVault: SecretStore, @unchecked Sendable {

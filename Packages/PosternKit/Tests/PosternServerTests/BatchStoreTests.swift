@@ -1,4 +1,9 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+// Apple's own implementation of the same API, for Linux and Windows.
+import Crypto
+#endif
 import Foundation
 import MCP
 import PosternApproval
