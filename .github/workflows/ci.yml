@@ -44,7 +44,8 @@ jobs:
 
   windows:
     name: PosternKit on Windows
-    runs-on: windows-2025
+    # Swift 6.2 builds against Visual Studio 2022; the 2025 image ships a newer STL that needs a newer Clang.
+    runs-on: windows-2022
     timeout-minutes: 45
     continue-on-error: true
     steps:
