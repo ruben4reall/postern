@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.3.0 (unreleased)
+## 0.3.0 (2026-11-11)
 
 - **The look of Proton Mail.** Proton's purple frame in light and its Carbon theme in dark, a sidebar that lists
   the panes with counters as Proton's navigation does, warm grey cards, radius 8 buttons, Proton's switch, solid
@@ -15,7 +15,7 @@
 - **The README and the website in the same eleven languages**, with a language menu and links search engines follow.
   Postern is made in Switzerland, in the canton of Valais.
 
-## 0.2.0 (unreleased)
+## 0.2.0 (2026-11-11)
 
 - **Listed as Proton Mail in your apps.** Postern's entry is now named `proton-mail-postern`, and it introduces
   itself as "Proton Mail (Postern)", so apps and their tools say which mailbox they reach. An entry made by an
