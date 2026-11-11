@@ -45,6 +45,7 @@ jobs:
   windows:
     name: PosternKit on Windows
     # Swift 6.2 builds against Visual Studio 2022; the 2025 image ships a newer STL that needs a newer Clang.
+    # swift-crypto 5 needs 6.2.4 or later (it marks its enums @nonexhaustive), the version the Linux job runs too.
     runs-on: windows-2022
     timeout-minutes: 45
     continue-on-error: true
@@ -52,8 +53,8 @@ jobs:
       - uses: actions/checkout@v4
       - uses: compnerd/gha-setup-swift@v0.5.1
         with:
-          branch: swift-6.2-release
-          tag: 6.2-RELEASE
+          branch: swift-6.2.4-release
+          tag: 6.2.4-RELEASE
       - name: Show the toolchain
         run: swift --version
       # The parts with no network. The Bridge and server targets wait for swift-nio-ssl's Windows support
