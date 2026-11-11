@@ -2,6 +2,10 @@
 
 ## 0.3.0 (unreleased)
 
+- **The look of Proton Mail.** Proton's purple frame in light and its Carbon theme in dark, a sidebar that lists
+  the panes with counters as Proton's navigation does, warm grey cards, radius 8 buttons, Proton's switch, solid
+  badges and banners. The approval panels show the email the way Proton shows an opened message, and their action bar
+  is Liquid Glass, with a Send button that stays solid purple. Text on Proton's orange is black, as in Proton.
 - **Postern speaks your language.** The window, the menus, the approval panels and the Touch ID prompts are in
   English, French, German, Spanish, Italian, Portuguese, Dutch, Polish, Japanese, Chinese and Korean, and follow the
   language of your Mac. Counts take their plural forms, and Proton's folders keep the names Proton gives them in your
