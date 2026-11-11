@@ -175,6 +175,24 @@ Apps that launch a local MCP server from a settings file can be connected in one
 
 An app that only reads a format Postern does not write gets a `SetupSnippet` instead: the entry to copy.
 
+## Translating Postern
+
+Postern speaks English, French, German, Spanish, Italian, Portuguese, Dutch, Polish, Japanese, Chinese and Korean. A
+better word in your language, or a new language, is one of the most useful changes you can send.
+
+- **The app.** Every text of the window, the menus, the approval panels and the Touch ID prompts is in
+  `App/Localizable.xcstrings`. Open it in Xcode, pick your language, and edit; or add a language with the + button.
+  Strings whose comment says "Touch ID: “Postern” is trying to …" complete the sentence macOS writes itself, so read
+  them in that sentence. Counts have plural forms: fill each one your language has.
+- **New text in the code.** Write it as a literal in a SwiftUI view (`Text("…")`, `Button("…")`), or with
+  `String(localized: "…")` anywhere else, and build: Xcode adds it to the catalog. A text that is only an identifier
+  in the code takes a key and its English: `String(localized: "tier.send", defaultValue: "Send")`.
+- **What apps read stays English.** Tool descriptions, answers and errors go to the model, not to you; models read
+  English best. The window translates the few core messages it shows (App/KitText.swift).
+- **The README and the website.** `README.<language>.md` and `site/<language>/index.html` are translations of
+  `README.md` and `site/index.html`. Change the English first, then each translation, keeping the markup identical.
+- No em dash in any language, and Apple's own words for macOS (System Settings, Touch ID, Keychain).
+
 ## Bridge behaviors worth knowing
 
 Seen on Proton Mail Bridge 3.27, each one with a test in the fakes:
