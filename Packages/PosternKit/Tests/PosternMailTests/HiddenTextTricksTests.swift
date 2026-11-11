@@ -270,12 +270,21 @@ import Testing
         _ = sanitizer.render(html)
     }
 
+    /// Nine custom properties, each made of eight copies of the one before: 8^9 copies once expanded. Built in a loop,
+    /// as one long concatenation takes some compilers too long to type-check.
+    static let chainedVariables: String = {
+        var style = "--v0:x"
+        for level in 1...9 {
+            style += ";--v\(level):" + String(repeating: "var(--v\(level - 1))", count: 8)
+        }
+        return "<div style=\"\(style);color:var(--v9)\">x</div>"
+    }()
+
     /// What the second review found that stalled the reader for seconds or minutes, or ran out of memory.
     static let stallingPages: [String] = [
         "<style>span div div div div{color:red}</style>" + String(repeating: "<div>", count: 120) + "x" + String(repeating: "</div>", count: 120),
         "<style>div:has(:has(:has(i))){color:red}</style>" + String(repeating: "<div>", count: 300) + "<i>x</i>" + String(repeating: "</div>", count: 300),
-        // A chain of custom properties, each made of eight of the one before.
-        "<div style=\"--v0:x;" + (1...9).map { "--v\($0):" + String(repeating: "var(--v\($0 - 1))", count: 8) + ";" }.joined() + "color:var(--v9)\">x</div>",
+        HiddenTextTricksTests.chainedVariables,
         "<style>" + String(repeating: "*{color:red}", count: 1_000) + "</style>" + String(repeating: "<p>x</p>", count: 8_000),
         "<p>" + (0..<50).map { "<b class=b\($0)>" }.joined() + "x" + String(repeating: "<p>x", count: 2_000),
         "<p>" + (0..<10).map { "<b class=b\($0)>" }.joined() + "x" + String(repeating: "<p>x", count: 5_000),
