@@ -1,0 +1,1716 @@
+{
+  "sourceLanguage" : "en",
+  "strings" : {
+    "" : {
+
+    },
+    "%@ appeared inside an email the app read. Make sure you really want to write to these addresses." : {
+
+    },
+    "%@ appeared inside an email the app read. Make sure you really want to write to this address." : {
+
+    },
+    "%@ in each" : {
+
+    },
+    "%@ is connected. Restart it, or open a new session, to see Postern." : {
+
+    },
+    "%@ is not an email address." : {
+
+    },
+    "%@ of files in all" : {
+
+    },
+    "%@ wants to erase %lld emails for good" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ wants to erase %2$lld emails for good"
+          }
+        }
+      }
+    },
+    "%@ wants to move %lld emails to Trash" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ wants to move %2$lld emails to Trash"
+          }
+        }
+      }
+    },
+    "%@ wants to send %lld emails" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ wants to send %2$lld emails"
+          }
+        }
+      }
+    },
+    "%@ wants to send this email" : {
+
+    },
+    "%@ · %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@ · %2$@"
+          }
+        }
+      }
+    },
+    "%@, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, %2$@"
+          }
+        }
+      }
+    },
+    "%@, one every %@. Within your limits (%lld per hour, %lld per day), the last leaves around %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$@, one every %2$@. Within your limits (%3$lld per hour, %4$lld per day), the last leaves around %5$@."
+          }
+        }
+      }
+    },
+    "%lld" : {
+
+    },
+    "%lld attachments leave with it" : {
+
+    },
+    "%lld being sent" : {
+      "comment" : "Emails of a batch"
+    },
+    "%lld cancelled" : {
+      "comment" : "Emails of a batch"
+    },
+    "%lld emails" : {
+
+    },
+    "%lld emails mention a file but carry none." : {
+
+    },
+    "%lld failed" : {
+      "comment" : "Emails of a batch"
+    },
+    "%lld items" : {
+
+    },
+    "%lld of %lld" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld"
+          }
+        }
+      }
+    },
+    "%lld of %lld on" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld on"
+          }
+        }
+      }
+    },
+    "%lld of %lld saved" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld saved"
+          }
+        }
+      }
+    },
+    "%lld of %lld sent" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld of %2$lld sent"
+          }
+        }
+      }
+    },
+    "%lld other files" : {
+
+    },
+    "%lld per hour, %lld per day" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "%1$lld per hour, %2$lld per day"
+          }
+        }
+      }
+    },
+    "%lld refused" : {
+      "comment" : "Emails of a batch"
+    },
+    "%lld saved" : {
+      "comment" : "Drafts of a batch"
+    },
+    "%lld sent" : {
+      "comment" : "Emails of a batch"
+    },
+    "%lld sessions" : {
+
+    },
+    "%lld skipped" : {
+      "comment" : "Emails of a batch"
+    },
+    "%lld uncertain" : {
+      "comment" : "Emails of a batch whose connection broke as Bridge took them"
+    },
+    "%lld waiting" : {
+      "comment" : "Emails of a batch"
+    },
+    "(no subject)" : {
+
+    },
+    "(no text)" : {
+
+    },
+    "A deleted draft is gone for good." : {
+
+    },
+    "A draft saved in Drafts" : {
+
+    },
+    "A file from a stranger lands on your Mac. macOS checks it before it opens." : {
+
+    },
+    "A message moved to the wrong folder can be hard to find. Never to Trash or Spam." : {
+
+    },
+    "A new email. Read all of it: this is exactly what leaves." : {
+
+    },
+    "About Postern" : {
+
+    },
+    "Accept my Mac password when Touch ID isn't available" : {
+
+    },
+    "Activity" : {
+
+    },
+    "Add Another Claude Code Profile…" : {
+
+    },
+    "Add Profile" : {
+
+    },
+    "Add an address" : {
+
+    },
+    "Add an address you trust" : {
+
+    },
+    "Add an alias of your Proton account" : {
+
+    },
+    "Add labels" : {
+
+    },
+    "Add one of your labels to messages. They stay in their folder." : {
+
+    },
+    "Add or remove the star on messages." : {
+
+    },
+    "Add…" : {
+
+    },
+    "All" : {
+
+    },
+    "Allow Reading" : {
+
+    },
+    "Allow…" : {
+
+    },
+    "Also sent, below your text:" : {
+
+    },
+    "An app" : {
+
+    },
+    "An open-source gate between your mailbox and the apps you connect to it.\nIndependent project, not affiliated with Proton AG." : {
+
+    },
+    "Answer a message, quoting it. Each reply waits for your approval." : {
+
+    },
+    "Any other app" : {
+
+    },
+    "Anyone. Add addresses to send only to them." : {
+
+    },
+    "Approvals" : {
+
+    },
+    "Approve %lld Emails" : {
+
+    },
+    "Approve Email" : {
+
+    },
+    "Approve Erasing" : {
+
+    },
+    "Approve Trash" : {
+
+    },
+    "Approved emails leave one by one within your sending limits, as long as Postern runs. Stopping a batch keeps the drafts of the emails not sent yet." : {
+
+    },
+    "Apps" : {
+
+    },
+    "Apps can attach only files you put in Downloads › Postern › Outbox, or in folders inside it." : {
+
+    },
+    "Apps can only use the tools you turned on. Nothing is sent or deleted without your approval." : {
+
+    },
+    "Apps can send from your account's address and from these aliases; the panel always shows which one. Adding one asks for Touch ID. In Bridge's split mode, an alias needs its own Bridge account." : {
+
+    },
+    "Apps connected" : {
+
+    },
+    "Apps learn the names of those files." : {
+
+    },
+    "Apps learn who you wrote to and who answered, like reading Sent." : {
+
+    },
+    "Apps learn your aliases." : {
+
+    },
+    "Apps lose access while you are away. You resume with Touch ID." : {
+
+    },
+    "Apps read what your attachments say, like reading the messages themselves." : {
+
+    },
+    "Apps see no tool and every call is refused. Resuming asks for Touch ID." : {
+
+    },
+    "Archived messages leave your Inbox." : {
+
+    },
+    "At most per day" : {
+
+    },
+    "At most per hour" : {
+
+    },
+    "Bad request" : {
+      "comment" : "Why Postern refused a call"
+    },
+    "Batches" : {
+
+    },
+    "Bcc" : {
+
+    },
+    "Bridge %@ encrypts its connection with this certificate. Postern will only ever talk to it, so another program cannot pretend to be Bridge." : {
+
+    },
+    "Bridge answered with a certificate Postern doesn't trust. Run setup again if you reinstalled Bridge." : {
+
+    },
+    "Bridge offline" : {
+      "comment" : "Why Postern refused a call"
+    },
+    "Bridge password" : {
+
+    },
+    "Bridge refused the password Postern has. Run setup again with the password Bridge shows now." : {
+
+    },
+    "Bridge refused this username or password. Copy them again from Bridge." : {
+
+    },
+    "Bridge shows a different certificate on each port. Restart Bridge and try again." : {
+
+    },
+    "Bridge's certificate changed while setting up. Start again from the first step." : {
+
+    },
+    "Bring All to Front" : {
+
+    },
+    "Cancel" : {
+
+    },
+    "Cc" : {
+
+    },
+    "Certificate" : {
+
+    },
+    "Certificate pinned" : {
+
+    },
+    "Change drafts" : {
+
+    },
+    "Check Automatically" : {
+
+    },
+    "Check for Updates…" : {
+
+    },
+    "Check for updates automatically" : {
+
+    },
+    "Check for updates automatically?" : {
+
+    },
+    "Choose a Claude Code profile folder, the one CLAUDE_CONFIG_DIR points to." : {
+
+    },
+    "Choose what apps can see. A hidden mailbox doesn't exist for them: missing from lists and searches, its messages refused." : {
+
+    },
+    "Close" : {
+
+    },
+    "Connect" : {
+
+    },
+    "Connect Postern to the apps you use. Connecting only tells an app where Postern is: what it may do stays in Tools." : {
+
+    },
+    "Connected" : {
+
+    },
+    "Connected now" : {
+
+    },
+    "Connected: %@" : {
+
+    },
+    "Connecting writes one entry in the app's settings: the path of Postern's helper, never a password. Tools still stay off until you turn them on." : {
+
+    },
+    "Copied" : {
+
+    },
+    "Copy" : {
+
+    },
+    "Create a new folder or label." : {
+
+    },
+    "Create folders and labels" : {
+
+    },
+    "Cut" : {
+
+    },
+    "Delete a draft from Drafts. Claude Code also asks you each time." : {
+
+    },
+    "Delete drafts" : {
+
+    },
+    "Dismiss" : {
+
+    },
+    "Don't Check" : {
+
+    },
+    "Done" : {
+
+    },
+    "Drafts sync to Proton on all your devices." : {
+
+    },
+    "Each deletion lists every message and needs Touch ID." : {
+
+    },
+    "Each deletion waits for you on a panel that lists every message, and happens only after Touch ID. Erasing works only on messages already in Trash or Spam." : {
+
+    },
+    "Each tool is one thing an app may do with your mail. Turning one on asks for Touch ID; turning it off is immediate, and connected apps see the change at once." : {
+
+    },
+    "Edit" : {
+
+    },
+    "Emails whose every recipient is trusted leave without the panel, such as notes to yourself. Adding someone asks for Touch ID." : {
+
+    },
+    "Enter the username and password that Bridge shows for your account." : {
+
+    },
+    "Entries were removed from the log outside Postern." : {
+
+    },
+    "Erase for good" : {
+
+    },
+    "Erase messages already in Trash or Spam. Each time, with Touch ID." : {
+
+    },
+    "Erase with Touch ID" : {
+
+    },
+    "Erased messages cannot be recovered, not even from Proton." : {
+
+    },
+    "Erased messages cannot be recovered." : {
+
+    },
+    "Every app that speaks MCP can use Postern: paste this into its MCP settings. It names Postern's helper and nothing else." : {
+
+    },
+    "Every call an app made through Postern, kept for 90 days. Postern never writes down what your mail says." : {
+
+    },
+    "Every email waits for you on a panel that shows all of it: recipients, subject, the whole text, every attachment. It leaves only after Touch ID. Limits and trusted recipients are in Security." : {
+
+    },
+    "Every email waits for you on a panel, and leaves only after Touch ID." : {
+
+    },
+    "Every message is labeled as untrusted, with a verdict on its sender." : {
+
+    },
+    "Every tool an app uses through Postern will appear here." : {
+
+    },
+    "Filter by app or tool" : {
+
+    },
+    "Find emails awaiting a reply" : {
+
+    },
+    "Find messages by sender, recipient, subject, words or date." : {
+
+    },
+    "First contact" : {
+      "comment" : "A badge next to a recipient"
+    },
+    "First, Postern looks for Bridge. Make sure it is open and signed in." : {
+
+    },
+    "Flags, folders, labels. Never to Trash or Spam." : {
+
+    },
+    "Folder names can say a lot about your life." : {
+
+    },
+    "Follow a conversation across folders." : {
+
+    },
+    "Follow batches" : {
+
+    },
+    "For a closed lid or an external keyboard. Touch ID can't be typed by a program; a password can, if someone learned it." : {
+
+    },
+    "Format" : {
+
+    },
+    "Forward a message's text to someone. Each one waits for your approval." : {
+
+    },
+    "Forward of %@: %@" : {
+      "comment" : "On the approval panel: the sender, then the subject",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Forward of %1$@: %2$@"
+          }
+        }
+      }
+    },
+    "Found in an email" : {
+      "comment" : "A badge next to a recipient"
+    },
+    "From" : {
+
+    },
+    "Help" : {
+
+    },
+    "Hidden mailbox" : {
+      "comment" : "Why Postern refused a call"
+    },
+    "Hidden mailboxes" : {
+
+    },
+    "Hidden text, invisible characters and remote images are removed first." : {
+
+    },
+    "Hide Others" : {
+
+    },
+    "Hide Postern" : {
+
+    },
+    "Hiding any mailbox also hides All Mail and Starred, which show every folder. Showing a mailbox again asks for Touch ID." : {
+
+    },
+    "How you approve, how much apps may send, the Bridge certificate Postern trusts, and updates. Anything that gives apps more power asks for Touch ID." : {
+
+    },
+    "In Proton Mail Bridge, open your account and copy the username and password shown under Mailbox details. This password is made by Bridge; it is not your Proton password." : {
+
+    },
+    "It can change a draft you wrote yourself." : {
+
+    },
+    "It fills your Drafts folder; nothing is sent." : {
+
+    },
+    "Keep Them" : {
+
+    },
+    "Keep as Draft" : {
+
+    },
+    "Latest activity" : {
+
+    },
+    "Let apps use Postern again (Touch ID)" : {
+
+    },
+    "Let your apps read your mail" : {
+
+    },
+    "Like reading messages, for every message of the conversation." : {
+
+    },
+    "List mailboxes" : {
+
+    },
+    "List the files you put in Downloads › Postern › Outbox." : {
+
+    },
+    "List the people you wrote to who have not answered yet, such as job applications to follow up." : {
+
+    },
+    "List your account's address and the aliases you added under Send from." : {
+
+    },
+    "List, search and read. Every message is cleaned first." : {
+
+    },
+    "Log intact, %lld entries kept for 90 days. Each entry is chained to the one before it." : {
+
+    },
+    "Look for Bridge" : {
+
+    },
+    "Mailboxes" : {
+
+    },
+    "Mark as read" : {
+
+    },
+    "Mark as unread" : {
+
+    },
+    "Mark messages as read." : {
+
+    },
+    "Mark messages as unread, to come back to them." : {
+
+    },
+    "Messages leave your folders; you can move them back until Trash is emptied." : {
+
+    },
+    "Minimize" : {
+
+    },
+    "Move messages to Archive. Labels stay." : {
+
+    },
+    "Move messages to Inbox, Archive or one of your folders. Labels stay." : {
+
+    },
+    "Move messages to Trash. Each time, you approve the list with Touch ID." : {
+
+    },
+    "Move to Trash" : {
+
+    },
+    "Move to Trash with Touch ID" : {
+
+    },
+    "New folders and labels appear in Proton on all your devices." : {
+
+    },
+    "No app connected" : {
+
+    },
+    "No app has used Postern yet." : {
+
+    },
+    "No app is connected right now." : {
+
+    },
+    "Nobody. Every email shows the approval panel." : {
+
+    },
+    "None" : {
+
+    },
+    "None beyond the batch tools." : {
+
+    },
+    "None: stopping only takes power away." : {
+
+    },
+    "Not found" : {
+      "comment" : "Why Postern refused a call"
+    },
+    "Not on this Mac" : {
+
+    },
+    "Not set up" : {
+      "comment" : "Why Postern refused a call"
+    },
+    "Nothing can be sent, moved or deleted: those stay off." : {
+
+    },
+    "Nothing matches." : {
+
+    },
+    "Off" : {
+
+    },
+    "Old message id" : {
+      "comment" : "Why Postern refused a call"
+    },
+    "On" : {
+
+    },
+    "On, %lld of %lld tools on" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "On, %1$lld of %2$lld tools on"
+          }
+        }
+      }
+    },
+    "On, %lld tools on" : {
+
+    },
+    "On, every tool off" : {
+
+    },
+    "Once a day, Postern can look for a new version on getpostern.vercel.app. Updates come from GitHub, signed by Postern's developer, and nothing is installed without asking you. Apart from Bridge, this is the only connection Postern makes. You can change this later in Security." : {
+
+    },
+    "Once a day. Nothing is installed without asking you." : {
+
+    },
+    "Once you approve, it leaves for good." : {
+
+    },
+    "One approval sends every email left ticked, even hours later when your limits make room. You can stop a batch here at any time." : {
+
+    },
+    "Only send to" : {
+
+    },
+    "Only your account's address." : {
+
+    },
+    "Open Login Items" : {
+
+    },
+    "Open Postern" : {
+
+    },
+    "Open a message: its text, links and attachment names." : {
+
+    },
+    "Overview" : {
+
+    },
+    "Paste" : {
+
+    },
+    "Pause" : {
+
+    },
+    "Pause Postern" : {
+
+    },
+    "Pause Postern when the screen locks" : {
+
+    },
+    "Paused" : {
+      "comment" : "Why Postern refused a call"
+    },
+    "Paused: every tool is off" : {
+
+    },
+    "Points to an older copy of Postern" : {
+
+    },
+    "Port %@, %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Port %1$@, %2$@"
+          }
+        }
+      }
+    },
+    "Postern" : {
+
+    },
+    "Postern %@ is available" : {
+
+    },
+    "Postern can't reach Proton Mail Bridge. Open Bridge on this Mac, then try again." : {
+
+    },
+    "Postern couldn't list your mailboxes." : {
+
+    },
+    "Postern couldn't save this change." : {
+
+    },
+    "Postern couldn't save this choice. Try again." : {
+
+    },
+    "Postern couldn't sign in to Bridge. Make sure Bridge is running and try again." : {
+
+    },
+    "Postern couldn't write %@'s settings. Its entry is on the clipboard: paste it into %@." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Postern couldn't write %1$@'s settings. Its entry is on the clipboard: paste it into %2$@."
+          }
+        }
+      }
+    },
+    "Postern guards your mailbox" : {
+
+    },
+    "Postern is guarding your mailbox" : {
+
+    },
+    "Postern is paused" : {
+
+    },
+    "Postern is paused; the batch goes on when you resume it." : {
+
+    },
+    "Postern is reading the drafts for the approval panel." : {
+
+    },
+    "Postern is ready" : {
+
+    },
+    "Postern isn't set up yet." : {
+
+    },
+    "Postern lets apps like Claude Code work with your Proton Mail, through Proton Mail Bridge on this Mac. You decide what they may do, and nothing leaves without you." : {
+
+    },
+    "Postern lets apps like Claude Code work with your Proton Mail, through Proton Mail Bridge on this Mac. You decide what they may do; nothing leaves without you." : {
+
+    },
+    "Postern on GitHub" : {
+
+    },
+    "Postern only talks to the certificate you trusted, and always encrypts before it sends your Bridge password." : {
+
+    },
+    "Postern reads the list of versions on getpostern.vercel.app and downloads updates from GitHub. It installs only those signed by its developer. Apart from Bridge, this is the only connection Postern makes." : {
+
+    },
+    "Postern restarted. Resume the batch to send the %lld emails left." : {
+
+    },
+    "Postern waits for room when a limit is reached. Raise the limits in Postern's window to send faster." : {
+
+    },
+    "Postern's background item is turned off, so apps can't connect. Turn Postern on in Login Items." : {
+
+    },
+    "Postern: %@" : {
+
+    },
+    "Proton Mail Bridge" : {
+
+    },
+    "Proton Mail Bridge isn't answering on this Mac. Open Bridge, sign in, then try again." : {
+
+    },
+    "Quit Postern" : {
+
+    },
+    "Raising a limit asks for Touch ID. A batch waits for room when a limit is reached. Proton sets its own limits by plan and account reputation (150 a day on the free plan) and may stop an account that looks like bulk mail: raise these only as far as your use needs." : {
+
+    },
+    "Read attachments" : {
+
+    },
+    "Read conversations" : {
+
+    },
+    "Read messages" : {
+
+    },
+    "Read the text of PDFs, scans, photos of documents, spreadsheets and text files attached to your mail, without saving them." : {
+
+    },
+    "Reading (IMAP)" : {
+
+    },
+    "Reading is on. Postern starts by itself when an app connects, even with this window closed. Open Postern from the Dock or Applications to choose what apps may do." : {
+
+    },
+    "Reading your mailboxes from Bridge…" : {
+
+    },
+    "Redo" : {
+
+    },
+    "Refused" : {
+
+    },
+    "Reject" : {
+
+    },
+    "Remove" : {
+
+    },
+    "Remove a label from messages. They stay in their folder." : {
+
+    },
+    "Remove labels" : {
+
+    },
+    "Replies can go to a Reply-To address; the panel shows when it differs." : {
+
+    },
+    "Reply to %@: %@" : {
+      "comment" : "On the approval panel: the sender, then the subject",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Reply to %1$@: %2$@"
+          }
+        }
+      }
+    },
+    "Reply-To differs" : {
+      "comment" : "A badge next to a recipient"
+    },
+    "Report a Security Issue" : {
+
+    },
+    "Resume" : {
+
+    },
+    "Resume Postern…" : {
+
+    },
+    "Resume with Touch ID" : {
+
+    },
+    "Rewrite a draft's recipients, subject or text." : {
+
+    },
+    "Right now" : {
+
+    },
+    "Run Setup Again…" : {
+
+    },
+    "SHA-256" : {
+
+    },
+    "SHA-256 %@…" : {
+
+    },
+    "Save an attachment to Downloads › Postern, marked as downloaded." : {
+
+    },
+    "Save attachments" : {
+
+    },
+    "Save drafts in Drafts. Nothing is sent." : {
+
+    },
+    "Save up to 500 drafts at once from one template or a spreadsheet in the outbox, such as one application per company with its own letter." : {
+
+    },
+    "Saving %lld drafts for %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Saving %1$lld drafts for %2$@"
+          }
+        }
+      }
+    },
+    "Says “%@” but carries no file." : {
+
+    },
+    "Search messages" : {
+
+    },
+    "Security" : {
+
+    },
+    "See What's New…" : {
+
+    },
+    "See how a batch of drafts or emails stands." : {
+
+    },
+    "See the outbox" : {
+
+    },
+    "See your folders and labels, with how many messages they hold." : {
+
+    },
+    "See your sender addresses" : {
+
+    },
+    "Select All" : {
+
+    },
+    "Send %lld with Touch ID" : {
+
+    },
+    "Send None" : {
+
+    },
+    "Send a draft as it is, after your approval, then remove it from Drafts." : {
+
+    },
+    "Send drafts" : {
+
+    },
+    "Send drafts together" : {
+
+    },
+    "Send drafts together is off; the batch goes on when you turn it back on." : {
+
+    },
+    "Send from" : {
+
+    },
+    "Send new emails" : {
+
+    },
+    "Send up to 5,000 drafts at once: one panel lists them all, you untick any, one Touch ID sends the rest, one by one within your limits." : {
+
+    },
+    "Send with Touch ID" : {
+
+    },
+    "Sending" : {
+
+    },
+    "Sending %lld emails for %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Sending %1$lld emails for %2$@"
+          }
+        }
+      }
+    },
+    "Sending (SMTP)" : {
+
+    },
+    "Sending limits" : {
+
+    },
+    "Set Up Postern…" : {
+
+    },
+    "Show" : {
+
+    },
+    "Show All" : {
+
+    },
+    "Show Outbox" : {
+
+    },
+    "Show in Menu Bar" : {
+
+    },
+    "Show only the emails to or about…" : {
+
+    },
+    "Sign in to Bridge" : {
+
+    },
+    "Sign-in refused" : {
+      "comment" : "Why Postern refused a call"
+    },
+    "Signed by Postern's developer. Nothing installs until you choose to." : {
+
+    },
+    "Starts %@" : {
+
+    },
+    "Starts now" : {
+
+    },
+    "Stop" : {
+
+    },
+    "Stop a batch before it ends." : {
+
+    },
+    "Stop batches" : {
+
+    },
+    "Subject" : {
+
+    },
+    "The app sees the senders and subjects of what it finds." : {
+
+    },
+    "The approval panel is open: %lld emails wait for your answer." : {
+
+    },
+    "The batch starts at the time you approved." : {
+
+    },
+    "The forwarded text leaves your mailbox." : {
+
+    },
+    "The log was changed outside Postern, at entry %lld." : {
+
+    },
+    "The next email could not be handed to Bridge; Postern tries again." : {
+
+    },
+    "The password goes straight into your Mac's Keychain, where only Postern can read it." : {
+
+    },
+    "The request is rejected when this reaches zero." : {
+
+    },
+    "The text says “%@”, but no file is attached. The app said none is meant." : {
+
+    },
+    "They stay in Trash, where you can move them back, until Trash is emptied." : {
+
+    },
+    "Tick All" : {
+
+    },
+    "To" : {
+
+    },
+    "To %lld people" : {
+
+    },
+    "To double-check, compare it with the certificate Bridge exports in Settings, Advanced settings." : {
+
+    },
+    "Today" : {
+
+    },
+    "Toggle Sidebar" : {
+
+    },
+    "Too large" : {
+      "comment" : "Why Postern refused a call"
+    },
+    "Tool off" : {
+      "comment" : "Why Postern refused a call"
+    },
+    "Tools" : {
+
+    },
+    "Touch ID isn't available right now. Open the lid or connect your Apple Watch, or allow the Mac password in Security." : {
+
+    },
+    "Touch ID isn't available right now. Open the lid or connect your Apple Watch, then try again." : {
+
+    },
+    "Trust Bridge's certificate" : {
+
+    },
+    "Trust This Certificate" : {
+
+    },
+    "Trusted" : {
+      "comment" : "A badge next to a recipient"
+    },
+    "Trusted recipients" : {
+
+    },
+    "Trust…" : {
+
+    },
+    "Turn All Off" : {
+
+    },
+    "Turn All On…" : {
+
+    },
+    "Turn every tool off for all apps, right away" : {
+
+    },
+    "Undo" : {
+
+    },
+    "Unreadable" : {
+      "comment" : "Why Postern refused a call"
+    },
+    "Untick All" : {
+
+    },
+    "Untick any that should wait. The others leave one by one, exactly as shown, after one Touch ID." : {
+
+    },
+    "Update" : {
+
+    },
+    "Update to Postern %@…" : {
+
+    },
+    "Updates" : {
+
+    },
+    "Username" : {
+
+    },
+    "Version" : {
+
+    },
+    "View" : {
+
+    },
+    "Visible to apps" : {
+
+    },
+    "Welcome to Postern" : {
+
+    },
+    "What apps can do" : {
+
+    },
+    "Whatever you can read in a message, the app can read." : {
+
+    },
+    "When this list is not empty, apps cannot write to anyone else, even with your approval." : {
+
+    },
+    "Why, for the app (optional)" : {
+
+    },
+    "Window" : {
+
+    },
+    "With reading on, a connected app can list your mailboxes, search, and read messages and conversations." : {
+
+    },
+    "Write and change drafts. Nothing is sent." : {
+
+    },
+    "Write and send an email. Each one waits for you on the approval panel." : {
+
+    },
+    "Write drafts" : {
+
+    },
+    "Write drafts from a template" : {
+
+    },
+    "Wrong certificate" : {
+      "comment" : "Why Postern refused a call"
+    },
+    "Yesterday" : {
+
+    },
+    "You could miss a message the app marked as read." : {
+
+    },
+    "Your Starred view changes." : {
+
+    },
+    "Your apps" : {
+
+    },
+    "Your label views change." : {
+
+    },
+    "Your sending limit is reached (%lld per hour, %lld per day)." : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Your sending limit is reached (%1$lld per hour, %2$lld per day)."
+          }
+        }
+      }
+    },
+    "Your unread counts change." : {
+
+    },
+    "Zoom" : {
+
+    },
+    "allow your Mac password for Postern" : {
+      "comment" : "Touch ID: “Postern” is trying to …"
+    },
+    "archive your mail" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "change drafts" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "create folders and labels" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "delete drafts" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "delete mail" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "encrypted from the first byte" : {
+
+    },
+    "encrypted with STARTTLS" : {
+
+    },
+    "erase %lld emails for good" : {
+      "comment" : "Touch ID: “Postern” is trying to …"
+    },
+    "erase mail for good" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "finished" : {
+
+    },
+    "follow batches" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "forward your mail" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "from %@" : {
+
+    },
+    "from %lld addresses" : {
+
+    },
+    "in progress" : {
+
+    },
+    "label your mail" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "last one around %@" : {
+
+    },
+    "let your apps %@" : {
+      "comment" : "Touch ID: “Postern” is trying to …"
+    },
+    "let your apps read your mail" : {
+      "comment" : "Touch ID: “Postern” is trying to …"
+    },
+    "let your apps send from %@" : {
+      "comment" : "Touch ID: “Postern” is trying to …"
+    },
+    "let your apps send more emails" : {
+      "comment" : "Touch ID: “Postern” is trying to …"
+    },
+    "let your apps send to %@" : {
+      "comment" : "Touch ID: “Postern” is trying to …"
+    },
+    "let your apps send to anyone" : {
+      "comment" : "Touch ID: “Postern” is trying to …"
+    },
+    "list your mailboxes" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "mailbox.all" : {
+      "comment" : "Proton's view, as Proton names it",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "All Mail"
+          }
+        }
+      }
+    },
+    "mailbox.archive" : {
+      "comment" : "Proton's folder, as Proton names it",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Archive"
+          }
+        }
+      }
+    },
+    "mailbox.drafts" : {
+      "comment" : "Proton's folder, as Proton names it",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Drafts"
+          }
+        }
+      }
+    },
+    "mailbox.inbox" : {
+      "comment" : "Proton's folder, as Proton names it",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Inbox"
+          }
+        }
+      }
+    },
+    "mailbox.sent" : {
+      "comment" : "Proton's folder, as Proton names it",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Sent"
+          }
+        }
+      }
+    },
+    "mailbox.spam" : {
+      "comment" : "Proton's folder, as Proton names it",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Spam"
+          }
+        }
+      }
+    },
+    "mailbox.starred" : {
+      "comment" : "Proton's view, as Proton names it",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Starred"
+          }
+        }
+      }
+    },
+    "mailbox.trash" : {
+      "comment" : "Proton's folder, as Proton names it",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Trash"
+          }
+        }
+      }
+    },
+    "mark your mail as read" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "mark your mail as unread" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "move %lld emails to Trash" : {
+      "comment" : "Touch ID: “Postern” is trying to …"
+    },
+    "move mail to Trash" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "move your mail" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "organize your mail" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "read the text of your attachments" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "read your conversations" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "read your mail" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "read your messages" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "remove labels from your mail" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "reply to your mail" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "resume Postern" : {
+      "comment" : "Touch ID: “Postern” is trying to …"
+    },
+    "resume sending %lld emails approved on %@" : {
+      "comment" : "Touch ID: “Postern” is trying to … (a count, then a date)",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "resume sending %1$lld emails approved on %2$@"
+          }
+        }
+      }
+    },
+    "save attachments to your Mac" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "search your mail" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "see the files in your outbox" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "see which addresses you send from" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "see who has not answered you" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "send %lld emails" : {
+      "comment" : "Touch ID: “Postern” is trying to …"
+    },
+    "send drafts" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "send email" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "send emails" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "send several drafts at once" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "send this email to %@" : {
+      "comment" : "Touch ID: “Postern” is trying to … (an address)"
+    },
+    "send this email to %lld people" : {
+      "comment" : "Touch ID: “Postern” is trying to …"
+    },
+    "send to %@ without asking" : {
+      "comment" : "Touch ID: “Postern” is trying to …"
+    },
+    "show %@ to your apps" : {
+      "comment" : "Touch ID: “Postern” is trying to … (a mailbox name)"
+    },
+    "star your mail" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "stop batches" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "stop pausing Postern when the screen locks" : {
+      "comment" : "Touch ID: “Postern” is trying to …"
+    },
+    "stopped" : {
+
+    },
+    "tier.delete" : {
+      "comment" : "A tier of tools, as a heading",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Delete"
+          }
+        }
+      }
+    },
+    "tier.draft" : {
+      "comment" : "A tier of tools, as a heading",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Drafts"
+          }
+        }
+      }
+    },
+    "tier.organize" : {
+      "comment" : "A tier of tools, as a heading",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Organize"
+          }
+        }
+      }
+    },
+    "tier.read" : {
+      "comment" : "A tier of tools, as a heading",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Read"
+          }
+        }
+      }
+    },
+    "tier.send" : {
+      "comment" : "A tier of tools, as a heading",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Send"
+          }
+        }
+      }
+    },
+    "tool.archive" : {
+      "comment" : "A tool's name, as an action",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Archive"
+          }
+        }
+      }
+    },
+    "tool.forward" : {
+      "comment" : "A tool's name, as an action",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Forward"
+          }
+        }
+      }
+    },
+    "tool.move" : {
+      "comment" : "A tool's name, as an action",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Move"
+          }
+        }
+      }
+    },
+    "tool.reply" : {
+      "comment" : "A tool's name, as an action",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Reply"
+          }
+        }
+      }
+    },
+    "tool.star" : {
+      "comment" : "A tool's name, as an action",
+      "extractionState" : "extracted_with_value",
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "Star"
+          }
+        }
+      }
+    },
+    "waiting until %@. %@" : {
+      "localizations" : {
+        "en" : {
+          "stringUnit" : {
+            "state" : "new",
+            "value" : "waiting until %1$@. %2$@"
+          }
+        }
+      }
+    },
+    "waiting. %@" : {
+
+    },
+    "write drafts" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "write several drafts at once" : {
+      "comment" : "Completes the Touch ID sentence “Postern” is trying to let your apps …"
+    },
+    "·" : {
+
+    }
+  },
+  "version" : "1.0"
+}

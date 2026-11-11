@@ -9,7 +9,8 @@ import Testing
         "Voir la pièce jointe.", "Les pieces jointes sont là.", "Le contrat en PJ.", "PJ : contrat.pdf",
         "Le rapport en annexe.", "Please find the report attached.", "See the attachment.", "I've attached the slides.",
         "Anbei die Rechnung.", "Die Unterlagen im Anhang.", "Te adjunto el contrato.", "Segue anexo o relatório.",
-        "In allegato il preventivo.", "In de bijlage vindt u het rapport.",
+        "In allegato il preventivo.", "In de bijlage vindt u het rapport.", "W załączniku przesyłam fakturę.",
+        "Załączam CV.", "請求書を添付します。", "添付ファイルをご確認ください。", "请查收附件。", "隨附報價單。", "견적서를 첨부합니다.",
     ])
     func findsTheWordsThatAnnounceAFile(_ text: String) {
         #expect(AttachmentMention.found(in: text) != nil, "\(text)")
@@ -24,6 +25,8 @@ import Testing
         "Merci, bien reçu.\n\nLe 3 nov. 2026 à 10:00, Anna a écrit :\n> Vous trouverez ci-joint la facture.",
         "Noted.\n\nOn Mon, 3 Nov 2026, Anna wrote:\n> Please find the invoice attached.",
         "Bien reçu.\n> Ci-joint le devis.",
+        "Dziękuję za odpowiedź.", "ありがとうございます。", "谢谢你的回复。", "감사합니다.",
+        "谢谢。\n本邮件及其附件可能包含保密信息。", "Danke.\nDiese E-Mail und alle Anlagen sind vertraulich, im Anhang nichts.",
     ])
     func leavesOrdinaryTextAlone(_ text: String) {
         if text.hasPrefix("The attachment") {

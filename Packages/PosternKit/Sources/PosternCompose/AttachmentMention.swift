@@ -20,12 +20,27 @@ public enum AttachmentMention {
         "in allegato", #"allegat[oi]"#, "allego",
         // Dutch
         "bijlage", "bijgevoegd",
+        // Polish, folded: "ł" has no accent to drop, "ą" becomes "a".
+        #"w załacz(niku|eniu)"#, #"załaczam"#, #"załacznik(i|ow|ach)?"#,
+    ]
+
+    /// Japanese, Chinese and Korean put no space between words: these match inside a sentence.
+    static let unspacedPhrases: [String] = [
+        // Japanese
+        "添付",
+        // Chinese, simplified and traditional
+        "附件", "随附", "隨附", "附上",
+        // Korean
+        "첨부",
     ]
 
     private static let pattern: NSRegularExpression = {
         let alternatives = phrases.map { "(?:\($0))" }.joined(separator: "|")
-        // Letters on either side would make it part of another word.
-        return try! NSRegularExpression(pattern: "(?<![\\p{L}\\p{N}])(?:\(alternatives))(?![\\p{L}\\p{N}])", options: [])
+        let unspaced = unspacedPhrases.joined(separator: "|")
+        // Letters on either side would make it part of another word, except in the languages written without spaces.
+        return try! NSRegularExpression(
+            pattern: "(?<![\\p{L}\\p{N}])(?:\(alternatives))(?![\\p{L}\\p{N}])|(?:\(unspaced))", options: []
+        )
     }()
 
     /// What the writer wrote: quoted lines (`> …`) and everything from a quote or forward header on are left out,
@@ -42,9 +57,15 @@ public enum AttachmentMention {
             kept.append(line)
         }
         let text = kept.joined(separator: "\n")
-        let sentences = text.split(omittingEmptySubsequences: false) { ".!?\n".contains($0) }
-        return sentences.filter { !$0.lowercased().contains("confidenti") }.joined(separator: "\n")
+        let sentences = text.split(omittingEmptySubsequences: false) { ".!?\n。！？".contains($0) }
+        return sentences.filter { sentence in
+            let lower = sentence.lowercased()
+            return !confidentiality.contains { lower.contains($0) }
+        }.joined(separator: "\n")
     }
+
+    /// The words of the footers that speak of "this email and any attachments", in each language.
+    private static let confidentiality = ["confidenti", "vertraulich", "riservat", "vertrouwelijk", "poufn", "機密", "机密", "保密", "기밀"]
 
     /// "On Mon, 3 Nov 2026, Anna wrote:", "Le 3 nov. 2026 à 10:00, Anna a écrit :", "Am … schrieb …:".
     private static var quoteHeader: Regex<Substring> {

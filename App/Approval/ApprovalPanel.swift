@@ -9,13 +9,13 @@ import SwiftUI
 /// the desk asks for Touch ID itself once Send was clicked.
 struct PanelPresenter: ApprovalPresenter {
     func present(_ request: ApprovalRequest, deadline: Date) async -> ApprovalIntent {
-        await ApprovalPanelController.shared.present(title: "Approve Email", height: request.message.attachments.isEmpty ? 680 : 760) { decide in
+        await ApprovalPanelController.shared.present(title: String(localized: "Approve Email"), height: request.message.attachments.isEmpty ? 680 : 760) { decide in
             AnyView(ApprovalView(request: request, deadline: deadline, decide: decide))
         }
     }
 
     func presentDeletion(_ request: DeletionRequest, deadline: Date) async -> ApprovalIntent {
-        await ApprovalPanelController.shared.present(title: request.permanent ? "Approve Erasing" : "Approve Trash", height: DeletionView.height(for: request)) { decide in
+        await ApprovalPanelController.shared.present(title: request.permanent ? String(localized: "Approve Erasing") : String(localized: "Approve Trash"), height: DeletionView.height(for: request)) { decide in
             AnyView(DeletionView(request: request, deadline: deadline, decide: decide))
         }
     }
@@ -135,7 +135,7 @@ struct ApprovalView: View {
                 .symbolRenderingMode(.hierarchical)
             VStack(alignment: .leading, spacing: 3) {
                 Text("\(request.client) wants to send this email").font(.title3.weight(.semibold))
-                Text(request.context ?? "A new email. Read all of it: this is exactly what leaves.")
+                Text(request.context.map(KitText.localize) ?? String(localized: "A new email. Read all of it: this is exactly what leaves."))
                     .foregroundStyle(.secondary)
                     .lineLimit(2)
             }
@@ -156,14 +156,14 @@ struct ApprovalView: View {
             row("To") { recipients(message.to) }
             if !message.cc.isEmpty { row("Cc") { recipients(message.cc) } }
             if !message.bcc.isEmpty { row("Bcc") { recipients(message.bcc) } }
-            row("Subject") { Text(message.subject.isEmpty ? "(no subject)" : message.subject).fontWeight(.medium) }
+            row("Subject") { Text(message.subject.isEmpty ? String(localized: "(no subject)") : message.subject).fontWeight(.medium) }
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
     }
 
-    private func row(_ title: String, @ViewBuilder _ content: () -> some View) -> some View {
+    private func row(_ title: LocalizedStringKey, @ViewBuilder _ content: () -> some View) -> some View {
         GridRow {
             Text(title).foregroundStyle(.secondary).gridColumnAlignment(.trailing)
             content().textSelection(.enabled)
@@ -188,7 +188,9 @@ struct ApprovalView: View {
 
     private var warning: some View {
         Label {
-            Text("\(cameFromEmail.joined(separator: ", ")) appeared inside an email the app read. Make sure you really want to write to \(cameFromEmail.count == 1 ? "this address" : "these addresses").")
+            Text(cameFromEmail.count == 1
+                 ? String(localized: "\(cameFromEmail[0]) appeared inside an email the app read. Make sure you really want to write to this address.")
+                 : String(localized: "\(cameFromEmail.joined(separator: ", ")) appeared inside an email the app read. Make sure you really want to write to these addresses."))
                 .fixedSize(horizontal: false, vertical: true)
         } icon: {
             Image(systemName: "exclamationmark.triangle.fill")
@@ -202,7 +204,7 @@ struct ApprovalView: View {
     private var bodyText: some View {
         ScrollView {
             VStack(alignment: .leading, spacing: 12) {
-                Text(message.body.isEmpty ? "(no text)" : message.body)
+                Text(message.body.isEmpty ? String(localized: "(no text)") : message.body)
                     .frame(maxWidth: .infinity, alignment: .leading)
                 if let quoted = message.quoted, !quoted.isEmpty {
                     Divider()
@@ -220,7 +222,7 @@ struct ApprovalView: View {
 
     private var attachmentList: some View {
         VStack(alignment: .leading, spacing: 6) {
-            Text(message.attachments.count == 1 ? "1 attachment leaves with it" : "\(message.attachments.count) attachments leave with it")
+            Text("\(message.attachments.count) attachments leave with it")
                 .font(.caption).foregroundStyle(.secondary)
             ScrollView(.horizontal) {
                 HStack(spacing: 10) {
@@ -262,10 +264,10 @@ struct BadgeView: View {
 
     private var title: String {
         switch badge {
-        case .firstContact: "First contact"
-        case .cameFromEmail: "Found in an email"
-        case .replyToDiffers: "Reply-To differs"
-        case .trusted: "Trusted"
+        case .firstContact: String(localized: "First contact", comment: "A badge next to a recipient")
+        case .cameFromEmail: String(localized: "Found in an email", comment: "A badge next to a recipient")
+        case .replyToDiffers: String(localized: "Reply-To differs", comment: "A badge next to a recipient")
+        case .trusted: String(localized: "Trusted", comment: "A badge next to a recipient")
         }
     }
 
@@ -327,8 +329,8 @@ struct DeletionView: View {
                 VStack(alignment: .leading, spacing: 3) {
                     Text(title).font(.title3.weight(.semibold))
                     Text(request.permanent
-                         ? "Erased messages cannot be recovered, not even from Proton."
-                         : "They stay in Trash, where you can move them back, until Trash is emptied.")
+                         ? String(localized: "Erased messages cannot be recovered, not even from Proton.")
+                         : String(localized: "They stay in Trash, where you can move them back, until Trash is emptied."))
                         .foregroundStyle(.secondary)
                 }
                 Spacer()
@@ -343,11 +345,11 @@ struct DeletionView: View {
                     ForEach(Array(request.items.enumerated()), id: \.element.id) { index, item in
                         if index > 0 { Divider() }
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(item.subject.isEmpty ? "(no subject)" : item.subject).fontWeight(.medium).lineLimit(1)
+                            Text(item.subject.isEmpty ? String(localized: "(no subject)") : item.subject).fontWeight(.medium).lineLimit(1)
                             HStack(spacing: 6) {
                                 Text(item.from).lineLimit(1).truncationMode(.middle)
                                 Text("·")
-                                Text(item.mailbox)
+                                Text(KitText.mailbox(item.mailbox))
                                 if let date = item.date { Text("·"); Text(date.formatted(date: .abbreviated, time: .shortened)) }
                             }
                             .font(.callout).foregroundStyle(.secondary)
@@ -367,7 +369,7 @@ struct DeletionView: View {
                 Button {
                     decide(.send)
                 } label: {
-                    Label(request.permanent ? "Erase with Touch ID" : "Move to Trash with Touch ID", systemImage: "touchid")
+                    Label(request.permanent ? String(localized: "Erase with Touch ID") : String(localized: "Move to Trash with Touch ID"), systemImage: "touchid")
                 }
                 .buttonStyle(.borderedProminent)
                 .tint(request.permanent ? Theme.danger : Theme.warning)
@@ -387,7 +389,8 @@ struct DeletionView: View {
 
     private var title: String {
         let count = request.items.count
-        let what = count == 1 ? "1 email" : "\(count) emails"
-        return request.permanent ? "\(request.client) wants to erase \(what) for good" : "\(request.client) wants to move \(what) to Trash"
+        return request.permanent
+            ? String(localized: "\(request.client) wants to erase \(count) emails for good")
+            : String(localized: "\(request.client) wants to move \(count) emails to Trash")
     }
 }

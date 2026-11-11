@@ -30,6 +30,7 @@ Proton Mail, on your Mac. Nothing leaves or disappears until you approve it with
   <img src="https://img.shields.io/badge/macOS-26%2B-111" alt="macOS 26 or later">
   <img src="https://img.shields.io/badge/MCP-stdio-6d4aff" alt="Model Context Protocol over stdio">
   <a href="LICENSE"><img src="https://img.shields.io/badge/license-MIT-111" alt="MIT license"></a>
+  <img src="https://img.shields.io/badge/made%20in-Switzerland%20%C2%B7%20Valais-d52b1e" alt="Made in Switzerland, in the canton of Valais">
 </p>
 
 <p align="center">
@@ -52,6 +53,9 @@ Proton Mail through [Proton Mail Bridge](https://proton.me/mail/bridge), with 27
 draft and send email, attachments included, and batches of up to 5,000 emails. It is the most complete way to use
 Proton Mail with AI, and it is built so that an app, or a stranger's email, can never act behind your back: you turn
 on each power yourself, and every email that leaves waits for you on a panel and for your fingerprint.
+
+Postern is made in Switzerland, in the canton of Valais. Proton Mail is Swiss too: your mail and the door to it
+come from the same country.
 
 ## Contents
 
@@ -331,8 +335,8 @@ Region). Your AI app can read and write email in any language.
 <details>
 <summary><strong>Is it free? Is it made by Proton?</strong></summary>
 
-Postern is free and open source under the MIT license. It is an independent project, not affiliated with or endorsed
-by Proton AG.
+Postern is free and open source under the MIT license. It is an independent project, made in the canton of Valais,
+in Switzerland, like Proton is Swiss. It is not affiliated with or endorsed by Proton AG.
 </details>
 
 ## What Postern cannot protect against

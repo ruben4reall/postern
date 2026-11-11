@@ -50,7 +50,7 @@ final class Updates {
 
     /// "Check for Updates…", or the version waiting for you.
     var menuTitle: String {
-        pendingVersion.map { "Update to Postern \($0)…" } ?? "Check for Updates…"
+        pendingVersion.map { String(localized: "Update to Postern \($0)…") } ?? String(localized: "Check for Updates…")
     }
 
     /// The version and build of this copy, as the About panel shows them.
@@ -77,14 +77,14 @@ final class Updates {
     func askAboutAutomaticChecks(in window: NSWindow) {
         guard active, UserDefaults.standard.object(forKey: Self.automaticChecksKey) == nil, window.attachedSheet == nil else { return }
         let alert = NSAlert()
-        alert.messageText = "Check for updates automatically?"
-        alert.informativeText = """
+        alert.messageText = String(localized: "Check for updates automatically?")
+        alert.informativeText = String(localized: """
             Once a day, Postern can look for a new version on getpostern.vercel.app. Updates come from GitHub, signed \
             by Postern's developer, and nothing is installed without asking you. Apart from Bridge, this is the only \
             connection Postern makes. You can change this later in Security.
-            """
-        alert.addButton(withTitle: "Check Automatically")
-        alert.addButton(withTitle: "Don't Check")
+            """)
+        alert.addButton(withTitle: String(localized: "Check Automatically"))
+        alert.addButton(withTitle: String(localized: "Don't Check"))
         alert.beginSheetModal(for: window) { [weak self] response in
             // Closed by an update about to install: no answer yet, the question comes back next time.
             guard response == .alertFirstButtonReturn || response == .alertSecondButtonReturn else { return }

@@ -8,7 +8,7 @@ extension PanelPresenter {
     /// One panel for a batch of drafts. The view only collects which emails stay ticked; the desk asks for Touch ID.
     func presentBatch(_ request: BatchApprovalRequest, deadline: Date) async -> BatchIntent {
         let chosen = OSAllocatedUnfairLock(initialState: Set<UUID>())
-        let title = "Approve \(request.items.count) Emails"
+        let title = String(localized: "Approve \(request.items.count) Emails")
         let intent = await ApprovalPanelController.shared.present(title: title, height: BatchApprovalView.height(for: request)) { decide in
             AnyView(BatchApprovalView(request: request, deadline: deadline, send: { ids in
                 chosen.withLock { $0 = ids }
@@ -104,27 +104,31 @@ struct BatchApprovalView: View {
         let messages = request.items
         let people = Set(messages.flatMap(\.recipients)).count
         let senders = Set(messages.map { $0.from.email })
-        var parts = [people == 1 ? "To 1 person" : "To \(people) people"]
-        parts.append(senders.count == 1 ? "from \(senders.first!)" : "from \(senders.count) addresses")
+        var parts = [String(localized: "To \(people) people")]
+        parts.append(senders.count == 1 ? String(localized: "from \(senders.first!)") : String(localized: "from \(senders.count) addresses"))
         let names = messages.map { Set($0.files.map(\.filename)) }
         let shared = names.dropFirst().reduce(names.first ?? []) { $0.intersection($1) }
         let own = Set(names.flatMap { $0 }).subtracting(shared)
-        if !shared.isEmpty { parts.append(shared.sorted().joined(separator: ", ") + (messages.count > 1 ? " in each" : "")) }
-        if !own.isEmpty { parts.append(own.count == 1 ? "1 other file" : "\(own.count) other files") }
+        if !shared.isEmpty {
+            let files = shared.sorted().joined(separator: ", ")
+            parts.append(messages.count > 1 ? String(localized: "\(files) in each") : files)
+        }
+        if !own.isEmpty { parts.append(String(localized: "\(own.count) other files")) }
         let bytes = messages.reduce(0) { $0 + $1.files.reduce(0) { $0 + $1.size } }
-        if bytes > 0 { parts.append(size(bytes) + " of files in all") }
+        if bytes > 0 { parts.append(String(localized: "\(size(bytes)) of files in all")) }
         return parts.joined(separator: " · ")
     }
 
     /// When the emails leave, and when the last should, at the user's limits.
     private func scheduleText(_ schedule: BatchSchedule) -> String {
-        let start = schedule.start.map { "Starts " + $0.formatted(date: .abbreviated, time: .shortened) } ?? "Starts now"
+        let start = schedule.start.map { String(localized: "Starts \($0.formatted(date: .abbreviated, time: .shortened))") } ?? String(localized: "Starts now")
         let pace = schedule.spacing >= 60 && schedule.spacing.truncatingRemainder(dividingBy: 60) == 0
-            ? "\(Int(schedule.spacing / 60)) min" : "\(Int(schedule.spacing.rounded())) s"
+            ? Duration.seconds(schedule.spacing).formatted(.units(allowed: [.minutes], width: .abbreviated))
+            : Duration.seconds(schedule.spacing.rounded()).formatted(.units(allowed: [.seconds], width: .abbreviated))
         let finish = Calendar.current.isDateInToday(schedule.finish)
             ? schedule.finish.formatted(date: .omitted, time: .shortened)
             : schedule.finish.formatted(date: .abbreviated, time: .shortened)
-        return "\(start), one every \(pace). Within your limits (\(schedule.sendsPerHour) per hour, \(schedule.sendsPerDay) per day), the last leaves around \(finish)."
+        return String(localized: "\(start), one every \(pace). Within your limits (\(schedule.sendsPerHour) per hour, \(schedule.sendsPerDay) per day), the last leaves around \(finish).")
     }
 
     private var header: some View {
@@ -140,7 +144,7 @@ struct BatchApprovalView: View {
                     .fixedSize(horizontal: false, vertical: true)
                 Text(summary).font(.callout).lineLimit(2)
                 if unannounced > 0 {
-                    Label(unannounced == 1 ? "1 email mentions a file but carries none." : "\(unannounced) emails mention a file but carry none.",
+                    Label("\(unannounced) emails mention a file but carry none.",
                           systemImage: "exclamationmark.triangle.fill")
                         .font(.callout).foregroundStyle(Theme.warning)
                 }
@@ -159,7 +163,7 @@ struct BatchApprovalView: View {
                     Text(String(format: "%d:%02d", remaining / 60, remaining % 60))
                         .font(.callout.monospacedDigit()).foregroundStyle(remaining < 60 ? Theme.warning : Theme.textWeak)
                 }
-                Button(chosen.isEmpty ? "Tick All" : "Untick All") {
+                Button(chosen.isEmpty ? String(localized: "Tick All") : String(localized: "Untick All")) {
                     chosen = chosen.isEmpty ? Set(request.items.map(\.id)) : []
                 }
                 .buttonStyle(.link)
@@ -176,16 +180,16 @@ struct BatchApprovalView: View {
         return HStack(alignment: .top, spacing: 12) {
             Toggle("", isOn: included).toggleStyle(.checkbox).labelsHidden()
             VStack(alignment: .leading, spacing: 5) {
-                Text(item.subject.isEmpty ? "(no subject)" : item.subject).fontWeight(.medium).lineLimit(1)
+                Text(item.subject.isEmpty ? String(localized: "(no subject)") : item.subject).fontWeight(.medium).lineLimit(1)
                 HStack(spacing: 6) {
-                    Text("From").foregroundStyle(.secondary).frame(width: 30, alignment: .leading)
+                    Text("From").foregroundStyle(.secondary).frame(minWidth: 30, alignment: .leading)
                     Text(item.from.email).lineLimit(1).truncationMode(.middle)
                 }
                 .font(.callout)
                 ForEach(Array(addresses(item).enumerated()), id: \.offset) { _, entry in
                     let (kind, address) = entry
                     HStack(spacing: 6) {
-                        Text(kind).foregroundStyle(.secondary).frame(width: 30, alignment: .leading)
+                        Text(kind).foregroundStyle(.secondary).frame(minWidth: 30, alignment: .leading)
                         Text(address.name.map { "\($0) <\(address.email)>" } ?? address.email).lineLimit(1).truncationMode(.middle)
                         ForEach(item.badges[address.email.lowercased()] ?? [], id: \.self) { BadgeView(badge: $0) }
                     }
@@ -218,7 +222,7 @@ struct BatchApprovalView: View {
             Button {
                 send(chosen)
             } label: {
-                Label(chosen.count == 1 ? "Send 1 with Touch ID" : "Send \(chosen.count) with Touch ID", systemImage: "touchid")
+                Label("Send \(chosen.count) with Touch ID", systemImage: "touchid")
             }
             .buttonStyle(.borderedProminent)
             .tint(Theme.interaction)
@@ -228,7 +232,7 @@ struct BatchApprovalView: View {
     }
 
     private func addresses(_ item: BatchItem) -> [(String, Address)] {
-        item.to.map { ("To", $0) } + item.cc.map { ("Cc", $0) } + item.bcc.map { ("Bcc", $0) }
+        item.to.map { (String(localized: "To"), $0) } + item.cc.map { (String(localized: "Cc"), $0) } + item.bcc.map { (String(localized: "Bcc"), $0) }
     }
 
     private func preview(_ body: String) -> String {

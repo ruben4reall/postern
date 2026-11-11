@@ -94,7 +94,7 @@ struct OnboardingView: View {
     }
 
     @ViewBuilder private var primaryButton: some View {
-        let button: (String, () -> Void) = switch model.step {
+        let button: (LocalizedStringKey, () -> Void) = switch model.step {
         case .detect: ("Look for Bridge", { Task { await model.detect() } })
         case .trust: ("Trust This Certificate", { model.trust() })
         case .signIn: ("Connect", { Task { await model.connect() } })
@@ -112,8 +112,8 @@ struct OnboardingView: View {
 private struct StepHeader: View {
     /// nil shows Postern's own symbol.
     let symbol: String?
-    let title: String
-    let text: String
+    let title: LocalizedStringKey
+    let text: LocalizedStringKey
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -136,7 +136,7 @@ private struct StepHeader: View {
 
 private struct Point: View {
     let symbol: String
-    let text: String
+    let text: LocalizedStringKey
 
     var body: some View {
         Label {

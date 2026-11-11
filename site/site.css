@@ -626,6 +626,11 @@ mark { background: var(--tint-strong); color: inherit; border-radius: 3px; paddi
 .foot nav a:hover { color: var(--text); text-decoration: underline; }
 .disclaimer { grid-column: 1 / -1; padding-top: 20px; border-top: 1px solid var(--border-weak); font-size: 13px; }
 
+/* Languages written without spaces between words: Japanese headings break between phrases (<wbr> and punctuation),
+   Korean keeps its words whole, as its typography expects. */
+:lang(ja) :is(h1, h2, h3) { word-break: keep-all; overflow-wrap: anywhere; }
+:lang(ko) { word-break: keep-all; overflow-wrap: anywhere; }
+
 /* Reveal on scroll */
 .motion .reveal { opacity: 0; transform: translateY(14px); transition: opacity 600ms var(--ease-out), transform 700ms var(--ease-out); }
 .motion .reveal.in { opacity: 1; transform: none; }

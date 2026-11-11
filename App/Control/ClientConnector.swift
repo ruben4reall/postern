@@ -78,8 +78,8 @@ enum ClientConnector {
         panel.canChooseFiles = false
         panel.showsHiddenFiles = true
         panel.directoryURL = realHome
-        panel.message = "Choose a Claude Code profile folder, the one CLAUDE_CONFIG_DIR points to."
-        panel.prompt = "Add Profile"
+        panel.message = String(localized: "Choose a Claude Code profile folder, the one CLAUDE_CONFIG_DIR points to.")
+        panel.prompt = String(localized: "Add Profile")
         guard panel.runModal() == .OK, let folder = panel.url,
               let bookmark = try? folder.bookmarkData(options: .withSecurityScope) else { return nil }
         var stored = UserDefaults.standard.array(forKey: profilesKey) as? [Data] ?? []

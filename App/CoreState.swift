@@ -253,6 +253,6 @@ struct KeychainBatchIndex: BatchIndex {
 /// Touch ID or an Apple Watch; the Mac password only when the user allowed it.
 struct PolicyAuthenticator: Authenticating {
     func confirm(reason: String) async -> Bool {
-        await Authenticator.confirm(reason, allowPassword: CoreState.shared.policy.allowPasswordFallback) == .confirmed
+        await Authenticator.confirm(KitText.localize(reason), allowPassword: CoreState.shared.policy.allowPasswordFallback) == .confirmed
     }
 }

@@ -35,10 +35,10 @@ struct ControlView: View {
                     Button {
                         Task { await model.setPaused(!model.policy.paused) }
                     } label: {
-                        Label(model.policy.paused ? "Resume" : "Pause",
+                        Label(model.policy.paused ? String(localized: "Resume") : String(localized: "Pause"),
                               systemImage: model.policy.paused ? "play.fill" : "pause.fill")
                     }
-                    .help(model.policy.paused ? "Let apps use Postern again (Touch ID)" : "Turn every tool off for all apps, right away")
+                    .help(model.policy.paused ? String(localized: "Let apps use Postern again (Touch ID)") : String(localized: "Turn every tool off for all apps, right away"))
                     .disabled(!model.configured)
                 }
             }
@@ -108,10 +108,10 @@ struct ControlSnapshot: View {
 
 extension ControlModel {
     var statusLine: String {
-        if !configured { return "Not set up" }
-        if policy.paused { return "Paused: every tool is off" }
+        if !configured { return String(localized: "Not set up") }
+        if policy.paused { return String(localized: "Paused: every tool is off") }
         let count = policy.enabledTools.count
-        return count == 0 ? "On, every tool off" : "On, \(count) of \(ToolID.switchable.count) tools on"
+        return count == 0 ? String(localized: "On, every tool off") : String(localized: "On, \(count) of \(ToolID.switchable.count) tools on")
     }
 
     var statusTint: Color {
@@ -191,7 +191,7 @@ private struct Sidebar: View {
     private func value(for pane: ControlModel.Pane) -> String {
         guard model.configured else { return "" }
         switch pane {
-        case .overview: return model.policy.paused ? "Off" : "On"
+        case .overview: return model.policy.paused ? String(localized: "Off") : String(localized: "On")
         case .tools: return "\(model.policy.enabledTools.count)"
         case .mailboxes: return model.visibleMailboxCount.map(String.init) ?? ""
         case .clients: return "\(model.appsConnectedCount)"
@@ -253,8 +253,8 @@ private struct Tile: View {
 struct PaneHero: View {
     let symbol: String
     let tint: Color
-    let title: String
-    let text: String
+    let title: LocalizedStringKey
+    let text: LocalizedStringKey
 
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
@@ -373,15 +373,15 @@ private struct OverviewPane: View {
                             .offset(x: 6, y: 6)
                     }
                     VStack(alignment: .leading, spacing: 4) {
-                        Text(model.policy.paused ? "Postern is paused" : "Postern is guarding your mailbox")
+                        Text(model.policy.paused ? String(localized: "Postern is paused") : String(localized: "Postern is guarding your mailbox"))
                             .font(.title2.weight(.semibold))
                         Text(model.policy.paused
-                             ? "Apps see no tool and every call is refused. Resuming asks for Touch ID."
-                             : "Apps can only use the tools you turned on. Nothing is sent or deleted without your approval.")
+                             ? String(localized: "Apps see no tool and every call is refused. Resuming asks for Touch ID.")
+                             : String(localized: "Apps can only use the tools you turned on. Nothing is sent or deleted without your approval."))
                             .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
                     }
                     Spacer()
-                    Button(model.policy.paused ? "Resume" : "Pause") {
+                    Button(model.policy.paused ? String(localized: "Resume") : String(localized: "Pause")) {
                         Task { await model.setPaused(!model.policy.paused) }
                     }
                     .controlSize(.large)
@@ -410,10 +410,10 @@ private struct OverviewPane: View {
                 Text("What apps can do")
             }
             Section {
-                LabeledContent("Apps connected", value: model.connectedApps.isEmpty ? "None" : appsText)
-                LabeledContent("Hidden mailboxes", value: model.policy.hiddenMailboxes.isEmpty ? "None" : "\(model.policy.hiddenMailboxes.count)")
-                LabeledContent("Sending limits", value: "\(model.policy.sendsPerHour) per hour, \(model.policy.sendsPerDay) per day")
-                LabeledContent("Proton Mail Bridge", value: model.pin == nil ? "Not set up" : "Certificate pinned")
+                LabeledContent("Apps connected", value: model.connectedApps.isEmpty ? String(localized: "None") : appsText)
+                LabeledContent("Hidden mailboxes", value: model.policy.hiddenMailboxes.isEmpty ? String(localized: "None") : "\(model.policy.hiddenMailboxes.count)")
+                LabeledContent("Sending limits", value: String(localized: "\(model.policy.sendsPerHour) per hour, \(model.policy.sendsPerDay) per day"))
+                LabeledContent("Proton Mail Bridge", value: model.pin == nil ? String(localized: "Not set up") : String(localized: "Certificate pinned"))
             } header: {
                 Text("Right now")
             }
@@ -469,30 +469,50 @@ private struct BatchRow: View {
     }
 
     private var title: String {
-        let what = batch.kind == .sends ? "Sending \(batch.items.count) emails" : "Saving \(batch.items.count) drafts"
-        return "\(what) for \(batch.client)"
+        batch.kind == .sends
+            ? String(localized: "Sending \(batch.items.count) emails for \(batch.client)")
+            : String(localized: "Saving \(batch.items.count) drafts for \(batch.client)")
     }
 
     private var done: Int { batch.items.filter { $0.status != .waiting }.count }
 
     private var status: String {
         let good = batch.kind == .sends ? batch.count(.sent) : batch.count(.saved)
-        let word = batch.kind == .sends ? "sent" : "saved"
-        var parts = ["\(good) of \(batch.items.count) \(word)"]
+        let total = batch.items.count
+        var parts = [batch.kind == .sends ? String(localized: "\(good) of \(total) sent") : String(localized: "\(good) of \(total) saved")]
         let other = BatchBoard.ItemStatus.allCases.filter { ![.waiting, .sent, .saved].contains($0) }
-        for status in other where batch.count(status) > 0 { parts.append("\(batch.count(status)) \(status.rawValue)") }
+        for status in other where batch.count(status) > 0 { parts.append(Self.count(batch.count(status), status)) }
         switch batch.phase {
-        case .running: parts.append("in progress")
-        case .finished: parts.append("finished")
-        case .cancelled: parts.append("stopped")
+        case .running: parts.append(String(localized: "in progress"))
+        case .finished: parts.append(String(localized: "finished"))
+        case .cancelled: parts.append(String(localized: "stopped"))
         case .waiting(let until, let reason):
-            let time = until.map { " until " + $0.formatted(date: Calendar.current.isDateInToday($0) ? .omitted : .abbreviated, time: .shortened) } ?? ""
-            parts.append("waiting\(time). \(reason)")
+            let why = KitText.localize(reason)
+            parts.append(until.map { String(localized: "waiting until \(Self.time($0)). \(why)") } ?? String(localized: "waiting. \(why)"))
         }
         if batch.kind == .sends, !batch.isOver, let estimate = batch.estimate {
-            parts.append("last one around " + estimate.formatted(date: Calendar.current.isDateInToday(estimate) ? .omitted : .abbreviated, time: .shortened))
+            parts.append(String(localized: "last one around \(Self.time(estimate))"))
         }
         return parts.joined(separator: " · ")
+    }
+
+    private static func time(_ date: Date) -> String {
+        date.formatted(date: Calendar.current.isDateInToday(date) ? .omitted : .abbreviated, time: .shortened)
+    }
+
+    /// How many emails of a batch are in one state, such as "2 failed".
+    private static func count(_ count: Int, _ status: BatchBoard.ItemStatus) -> String {
+        switch status {
+        case .sending: String(localized: "\(count) being sent", comment: "Emails of a batch")
+        case .uncertain: String(localized: "\(count) uncertain", comment: "Emails of a batch whose connection broke as Bridge took them")
+        case .refused: String(localized: "\(count) refused", comment: "Emails of a batch")
+        case .skipped: String(localized: "\(count) skipped", comment: "Emails of a batch")
+        case .failed: String(localized: "\(count) failed", comment: "Emails of a batch")
+        case .cancelled: String(localized: "\(count) cancelled", comment: "Emails of a batch")
+        case .waiting: String(localized: "\(count) waiting", comment: "Emails of a batch")
+        case .sent: String(localized: "\(count) sent", comment: "Emails of a batch")
+        case .saved: String(localized: "\(count) saved", comment: "Drafts of a batch")
+        }
     }
 }
 
@@ -517,7 +537,7 @@ private struct TierSummaryRow: View {
                 }
                 Spacer()
                 Meter(on: on, total: total, tint: tier.tint)
-                Text(on == 0 ? "Off" : "\(on) of \(total)")
+                Text(on == 0 ? String(localized: "Off") : String(localized: "\(on) of \(total)"))
                     .foregroundStyle(on == 0 ? .secondary : .primary)
                     .monospacedDigit()
                     .frame(width: 52, alignment: .trailing)
@@ -603,7 +623,7 @@ private struct TierHeader: View {
                 .frame(width: 22, height: 22)
                 .background(tier.tint.gradient, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
             Text(copy.title).font(.headline)
-            Text(on == 0 ? "Off" : "\(on) of \(total) on").foregroundStyle(.secondary)
+            Text(on == 0 ? String(localized: "Off") : String(localized: "\(on) of \(total) on")).foregroundStyle(.secondary)
             Spacer()
             if on > 0 {
                 Button("Turn All Off") { Task { await model.setTier(tier, enabled: false) } }
@@ -685,10 +705,7 @@ private struct MailboxesPane: View {
         .task { if model.mailboxState == .idle { await model.loadMailboxes() } }
     }
 
-    private func display(_ name: String) -> String {
-        if name == "INBOX" { return "Inbox" }
-        return name.replacingOccurrences(of: "Folders/", with: "").replacingOccurrences(of: "Labels/", with: "").replacingOccurrences(of: "/", with: " › ")
-    }
+    private func display(_ name: String) -> String { KitText.mailbox(name) }
 
     private func symbol(for mailbox: MailboxInfo) -> String {
         switch mailbox.kind {
@@ -729,7 +746,7 @@ private struct ClientsPane: View {
                             Circle().fill(Theme.success).frame(width: 8, height: 8)
                             Text(app.name)
                             Spacer()
-                            Text(app.count == 1 ? "1 session" : "\(app.count) sessions").foregroundStyle(.secondary)
+                            Text("\(app.count) sessions").foregroundStyle(.secondary)
                         }
                     }
                 }
@@ -778,7 +795,7 @@ private struct ClientsPane: View {
     }
 
     private func caption(_ row: ClientRow) -> String {
-        if case .connectedElsewhere = row.status { return "Points to an older copy of Postern" }
+        if case .connectedElsewhere = row.status { return String(localized: "Points to an older copy of Postern") }
         return "~/" + row.target.fileURL.path.replacingOccurrences(of: ClientConnector.realHome.path + "/", with: "")
     }
 }
@@ -802,7 +819,7 @@ private struct OtherAppSection: View {
                 .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border))
             HStack {
                 Spacer()
-                Button(copied ? "Copied" : "Copy") {
+                Button(copied ? String(localized: "Copied") : String(localized: "Copy")) {
                     NSPasteboard.general.clearContents()
                     NSPasteboard.general.setString(snippet.text(relayPath: ClientConnector.relayPath), forType: .string)
                     copied = true
@@ -874,8 +891,8 @@ private struct ActivityPane: View {
         }
         return Dictionary(grouping: matching) { calendar.startOfDay(for: $0.record.date) }
             .map { day, records in
-                let title = calendar.isDateInToday(day) ? "Today"
-                    : calendar.isDateInYesterday(day) ? "Yesterday" : day.formatted(date: .complete, time: .omitted)
+                let title = calendar.isDateInToday(day) ? String(localized: "Today")
+                    : calendar.isDateInYesterday(day) ? String(localized: "Yesterday") : day.formatted(date: .complete, time: .omitted)
                 return (day, title, records)
             }
             .sorted { $0.day > $1.day }
@@ -893,7 +910,7 @@ private struct ActivityDetailRow: View {
             Text(record.client).frame(width: 130, alignment: .leading).lineLimit(1)
             Text(record.tool).font(.system(.body, design: .monospaced)).lineLimit(1)
             Spacer()
-            if let items = record.items { Text(items == 1 ? "1 item" : "\(items) items").foregroundStyle(.secondary).monospacedDigit() }
+            if let items = record.items { Text("\(items) items").foregroundStyle(.secondary).monospacedDigit() }
             if record.outcome != "ok" {
                 OutcomeLabel(outcome: record.outcome).labelStyle(.titleOnly)
             }
@@ -917,7 +934,7 @@ private struct IntegrityBanner: View {
     var body: some View {
         switch integrity {
         case .intact(let count)?:
-            Label("Log intact, \(count) entr\(count == 1 ? "y" : "ies") kept for 90 days. Each entry is chained to the one before it.",
+            Label("Log intact, \(count) entries kept for 90 days. Each entry is chained to the one before it.",
                   systemImage: "checkmark.seal.fill")
                 .foregroundStyle(.secondary).symbolRenderingMode(.multicolor)
         case .broken(let line)?:
@@ -938,18 +955,18 @@ private struct OutcomeLabel: View {
     /// Short words for the refusal codes clients receive.
     static func text(for outcome: String) -> String {
         switch outcome {
-        case "policy_disabled": "Tool off"
-        case "scope_hidden": "Hidden mailbox"
-        case "paused": "Paused"
-        case "not_configured": "Not set up"
-        case "invalid_argument": "Bad request"
-        case "stale_id": "Old message id"
-        case "not_found": "Not found"
-        case "bridge_unreachable": "Bridge offline"
-        case "certificate_mismatch": "Wrong certificate"
-        case "authentication_failed": "Sign-in refused"
-        case "too_large": "Too large"
-        case "parse_failed": "Unreadable"
+        case "policy_disabled": String(localized: "Tool off", comment: "Why Postern refused a call")
+        case "scope_hidden": String(localized: "Hidden mailbox", comment: "Why Postern refused a call")
+        case "paused": String(localized: "Paused", comment: "Why Postern refused a call")
+        case "not_configured": String(localized: "Not set up", comment: "Why Postern refused a call")
+        case "invalid_argument": String(localized: "Bad request", comment: "Why Postern refused a call")
+        case "stale_id": String(localized: "Old message id", comment: "Why Postern refused a call")
+        case "not_found": String(localized: "Not found", comment: "Why Postern refused a call")
+        case "bridge_unreachable": String(localized: "Bridge offline", comment: "Why Postern refused a call")
+        case "certificate_mismatch": String(localized: "Wrong certificate", comment: "Why Postern refused a call")
+        case "authentication_failed": String(localized: "Sign-in refused", comment: "Why Postern refused a call")
+        case "too_large": String(localized: "Too large", comment: "Why Postern refused a call")
+        case "parse_failed": String(localized: "Unreadable", comment: "Why Postern refused a call")
         default: outcome.replacingOccurrences(of: "_", with: " ")
         }
     }
@@ -1027,8 +1044,8 @@ private struct SecurityPane: View {
                     }
                 }
                 if let endpoint = model.endpoint {
-                    LabeledContent("Reading (IMAP)", value: "Port \(endpoint.imap.port), \(modeText(endpoint.imap.mode))")
-                    LabeledContent("Sending (SMTP)", value: "Port \(endpoint.smtp.port), \(modeText(endpoint.smtp.mode))")
+                    LabeledContent("Reading (IMAP)", value: String(localized: "Port \(String(endpoint.imap.port)), \(modeText(endpoint.imap.mode))"))
+                    LabeledContent("Sending (SMTP)", value: String(localized: "Port \(String(endpoint.smtp.port)), \(modeText(endpoint.smtp.mode))"))
                 }
                 Button("Run Setup Again…") { model.openSetup() }
             } header: {
@@ -1042,7 +1059,7 @@ private struct SecurityPane: View {
     }
 
     private func modeText(_ mode: TLSMode) -> String {
-        mode == .startTLS ? "encrypted with STARTTLS" : "encrypted from the first byte"
+        mode == .startTLS ? String(localized: "encrypted with STARTTLS") : String(localized: "encrypted from the first byte")
     }
 }
 
@@ -1089,12 +1106,12 @@ private struct SendingSection: View {
             Stepper(value: Binding(get: { model.policy.sendsPerHour },
                                    set: { value in Task { await model.setLimits(perHour: value, perDay: model.policy.sendsPerDay) } }),
                     in: 1...300) {
-                LabeledContent("At most per hour", value: "\(model.policy.sendsPerHour) emails")
+                LabeledContent("At most per hour", value: String(localized: "\(model.policy.sendsPerHour) emails"))
             }
             Stepper(value: Binding(get: { model.policy.sendsPerDay },
                                    set: { value in Task { await model.setLimits(perHour: model.policy.sendsPerHour, perDay: value) } }),
                     in: 1...1000) {
-                LabeledContent("At most per day", value: "\(model.policy.sendsPerDay) emails")
+                LabeledContent("At most per day", value: String(localized: "\(model.policy.sendsPerDay) emails"))
             }
         } header: {
             Text("Sending")
@@ -1163,7 +1180,7 @@ private struct SendingSection: View {
 
 private struct AddressList: View {
     let addresses: [String]
-    let empty: String
+    let empty: LocalizedStringKey
     let remove: (String) -> Void
 
     var body: some View {

@@ -119,7 +119,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         NSApp.setActivationPolicy(.regular)
         NSApp.activate()
         let credits = NSAttributedString(
-            string: "An open-source gate between your mailbox and the apps you connect to it.\nIndependent project, not affiliated with Proton AG.",
+            string: String(localized: "An open-source gate between your mailbox and the apps you connect to it.\nIndependent project, not affiliated with Proton AG."),
             attributes: [.font: NSFont.systemFont(ofSize: 11), .foregroundColor: NSColor.secondaryLabelColor]
         )
         NSApp.orderFrontStandardAboutPanel(options: [.credits: credits])
@@ -182,10 +182,10 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     var statusText: String {
         let state = CoreState.shared
-        if state.backend == nil { return "Not set up" }
-        if state.policy.paused { return "Paused" }
+        if state.backend == nil { return String(localized: "Not set up") }
+        if state.policy.paused { return String(localized: "Paused") }
         let count = state.policy.enabledTools.count
-        return count == 0 ? "On, every tool off" : "On, \(count) tool\(count == 1 ? "" : "s") on"
+        return count == 0 ? String(localized: "On, every tool off") : String(localized: "On, \(count) tools on")
     }
 }
 
@@ -197,27 +197,27 @@ extension AppDelegate: NSMenuDelegate {
         }
         menu.removeAllItems()
         let state = CoreState.shared
-        let header = NSMenuItem(title: "Postern: \(statusText)", action: nil, keyEquivalent: "")
+        let header = NSMenuItem(title: String(localized: "Postern: \(statusText)"), action: nil, keyEquivalent: "")
         header.isEnabled = false
         menu.addItem(header)
         let apps = state.connectedApps
-        let connected = NSMenuItem(title: apps.isEmpty ? "No app connected" : "Connected: \(Set(apps).sorted().joined(separator: ", "))", action: nil, keyEquivalent: "")
+        let connected = NSMenuItem(title: apps.isEmpty ? String(localized: "No app connected") : String(localized: "Connected: \(Set(apps).sorted().joined(separator: ", "))"), action: nil, keyEquivalent: "")
         connected.isEnabled = false
         menu.addItem(connected)
         menu.addItem(.separator())
         if state.backend != nil {
-            let pause = NSMenuItem(title: state.policy.paused ? "Resume Postern…" : "Pause Postern", action: #selector(togglePause), keyEquivalent: "")
+            let pause = NSMenuItem(title: state.policy.paused ? String(localized: "Resume Postern…") : String(localized: "Pause Postern"), action: #selector(togglePause), keyEquivalent: "")
             pause.target = self
             menu.addItem(pause)
         }
-        let open = NSMenuItem(title: state.backend == nil ? "Set Up Postern…" : "Open Postern", action: #selector(openMain), keyEquivalent: "")
+        let open = NSMenuItem(title: state.backend == nil ? String(localized: "Set Up Postern…") : String(localized: "Open Postern"), action: #selector(openMain), keyEquivalent: "")
         open.target = self
         menu.addItem(open)
         let update = NSMenuItem(title: updates.menuTitle, action: #selector(checkForUpdates), keyEquivalent: "")
         update.target = self
         menu.addItem(update)
         menu.addItem(.separator())
-        menu.addItem(NSMenuItem(title: "Quit Postern", action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
+        menu.addItem(NSMenuItem(title: String(localized: "Quit Postern"), action: #selector(NSApplication.terminate(_:)), keyEquivalent: "q"))
     }
 }
 

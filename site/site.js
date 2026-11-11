@@ -143,6 +143,20 @@
   });
   update();
 
+  // The language menu closes on a click elsewhere or on Escape, like a menu.
+  var langMenu = document.querySelector('details.lang');
+  if (langMenu) {
+    document.addEventListener('click', function (event) {
+      if (langMenu.open && !langMenu.contains(event.target)) langMenu.open = false;
+    });
+    document.addEventListener('keydown', function (event) {
+      if (event.key === 'Escape' && langMenu.open) {
+        langMenu.open = false;
+        langMenu.querySelector('summary').focus();
+      }
+    });
+  }
+
   // Copy buttons.
   Array.prototype.forEach.call(document.querySelectorAll('[data-copy]'), function (box) {
     var button = box.querySelector('.copy');

@@ -33,7 +33,7 @@ final class OnboardingModel {
             let imap = try await BridgeProbe.inspect(port: 1143, service: .imap)
             let smtp = try await BridgeProbe.inspect(port: 1025, service: .smtp)
             guard imap.pin == smtp.pin else {
-                error = "Bridge shows a different certificate on each port. Restart Bridge and try again."
+                error = String(localized: "Bridge shows a different certificate on each port. Restart Bridge and try again.")
                 return
             }
             self.imap = imap
@@ -41,7 +41,7 @@ final class OnboardingModel {
             bridgeVersion = imap.greeting.firstMatch(of: /Proton Mail Bridge ([0-9.]+)/).map { String($0.1) }
             step = .trust
         } catch {
-            self.error = "Proton Mail Bridge isn't answering on this Mac. Open Bridge, sign in, then try again."
+            self.error = String(localized: "Proton Mail Bridge isn't answering on this Mac. Open Bridge, sign in, then try again.")
         }
     }
 
@@ -53,7 +53,7 @@ final class OnboardingModel {
         guard let imap, let smtp else { step = .detect; return }
         let name = username.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !name.isEmpty, !password.isEmpty else {
-            error = "Enter the username and password that Bridge shows for your account."
+            error = String(localized: "Enter the username and password that Bridge shows for your account.")
             return
         }
         working = true
@@ -72,30 +72,30 @@ final class OnboardingModel {
             CoreState.shared.reload()
             step = .allow
         } catch BridgeError.authenticationFailed {
-            error = "Bridge refused this username or password. Copy them again from Bridge."
+            error = String(localized: "Bridge refused this username or password. Copy them again from Bridge.")
         } catch BridgeError.certificateMismatch {
-            error = "Bridge's certificate changed while setting up. Start again from the first step."
+            error = String(localized: "Bridge's certificate changed while setting up. Start again from the first step.")
             step = .detect
         } catch {
-            self.error = "Postern couldn't sign in to Bridge. Make sure Bridge is running and try again."
+            self.error = String(localized: "Postern couldn't sign in to Bridge. Make sure Bridge is running and try again.")
         }
     }
 
     func allowReading() async {
         error = nil
-        switch await Authenticator.confirm("let your apps read your mail", allowPassword: false) {
+        switch await Authenticator.confirm(String(localized: "let your apps read your mail", comment: "Touch ID: “Postern” is trying to …"), allowPassword: false) {
         case .confirmed:
             do {
                 try PolicyStore(vault: vault).save(.readOnly)
                 CoreState.shared.reloadPolicy()
                 step = .done
             } catch {
-                self.error = "Postern couldn't save this choice. Try again."
+                self.error = String(localized: "Postern couldn't save this choice. Try again.")
             }
         case .cancelled:
             break
         case .unavailable:
-            error = "Touch ID isn't available right now. Open the lid or connect your Apple Watch, then try again."
+            error = String(localized: "Touch ID isn't available right now. Open the lid or connect your Apple Watch, then try again.")
         }
     }
 
