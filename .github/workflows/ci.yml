@@ -56,12 +56,16 @@ jobs:
           tag: 6.2-RELEASE
       - name: Show the toolchain
         run: swift --version
-      - name: Build
+      # The parts with no network: swift-nio-ssl and the MCP SDK do not build on Windows yet (see
+      # docs/windows-linux.md in postern-private), so the Bridge and server targets wait for them.
+      - name: Build the parts that run on Windows today
         working-directory: Packages/PosternKit
-        run: swift build
-      - name: Run the tests
-        working-directory: Packages/PosternKit
-        run: swift test
+        shell: pwsh
+        run: |
+          foreach ($target in "PosternModel", "PosternText", "PosternMail", "PosternVault", "PosternPolicy", "PosternAudit", "PosternClients", "PosternCompose", "PosternApproval") {
+            swift build --target $target
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
 
   scripts:
     name: Release script tests

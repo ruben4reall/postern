@@ -256,8 +256,14 @@ public enum ClientConfigurator {
 
     /// JSON, with the comments and trailing commas VS Code and others allow.
     private static func parse(_ data: Data) -> [String: Any]? {
-        (try? JSONSerialization.jsonObject(with: data) as? [String: Any])
-            ?? (try? JSONSerialization.jsonObject(with: data, options: .json5Allowed) as? [String: Any])
+        if let plain = try? JSONSerialization.jsonObject(with: data) as? [String: Any] { return plain }
+        #if canImport(Darwin)
+        return try? JSONSerialization.jsonObject(with: data, options: .json5Allowed) as? [String: Any]
+        #else
+        // Foundation outside Apple platforms reads strict JSON only: comments and trailing commas go first.
+        let strict = JSONCEditor.strictJSON(String(decoding: data, as: UTF8.self))
+        return try? JSONSerialization.jsonObject(with: Data(strict.utf8)) as? [String: Any]
+        #endif
     }
 }
 
