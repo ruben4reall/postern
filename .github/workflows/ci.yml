@@ -56,8 +56,8 @@ jobs:
           tag: 6.2-RELEASE
       - name: Show the toolchain
         run: swift --version
-      # The parts with no network: swift-nio-ssl and the MCP SDK do not build on Windows yet (see
-      # docs/windows-linux.md in postern-private), so the Bridge and server targets wait for them.
+      # The parts with no network. The Bridge and server targets wait for swift-nio-ssl's Windows support
+      # (apple/swift-nio-ssl#567) and the MCP SDK's (modelcontextprotocol/swift-sdk#261).
       - name: Build the parts that run on Windows today
         working-directory: Packages/PosternKit
         shell: pwsh
