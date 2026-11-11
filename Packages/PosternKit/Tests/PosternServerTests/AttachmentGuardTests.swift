@@ -177,13 +177,14 @@ import Testing
     @Test func aDraftChangedAfterApprovalDoesNotLeave() async throws {
         let backend = FakeBackend()
         _ = try base.applicationDraft(backend)
-        let (client, _) = try await base.connect(backend: backend)
+        let (client, presenter) = try await base.connect(backend: backend, inlineWait: .seconds(30))
         let ids = base.drafts([5, 6])
+        // The draft changes once the panel has shown it, whatever the machine's speed.
         let edit = Task {
-            try await Task.sleep(for: .milliseconds(700))
+            await presenter.untilABatchIsShown()
             backend.lock.withLock { backend.editedDrafts[ids[0]] = "Bonjour, voici ma candidature, et un lien." }
         }
-        let start = Value.string(ISO8601DateFormatter().string(from: Date().addingTimeInterval(2)))
+        let start = Value.string(ISO8601DateFormatter().string(from: Date().addingTimeInterval(5)))
         let (_, structured, _) = try await base.call(client, "send_drafts", ["ids": .array(ids.map { .string($0.opaque) }), "start_at": start])
         try await edit.value
         #expect(base.statuses(structured) == ["refused", "sent"])

@@ -211,13 +211,13 @@ import PosternCompose
     @Test func aDraftDeletedWhileItWaitsDoesNotLeave() async throws {
         let backend = FakeBackend()
         _ = try base.applicationDraft(backend)
-        let (client, _) = try await base.connect(policy: withAlias, backend: backend)
+        let (client, presenter) = try await base.connect(policy: withAlias, backend: backend, inlineWait: .seconds(30))
         let ids = base.drafts([5, 6])
         let removal = Task {
-            try await Task.sleep(for: .milliseconds(700))
+            await presenter.untilABatchIsShown()
             backend.lock.withLock { _ = backend.goneDrafts.insert(ids[0]) }
         }
-        let (_, structured, _) = try await base.call(client, "send_drafts", ["ids": .array(ids.map { .string($0.opaque) }), "start_at": soon()])
+        let (_, structured, _) = try await base.call(client, "send_drafts", ["ids": .array(ids.map { .string($0.opaque) }), "start_at": soon(5)])
         try await removal.value
         #expect(base.statuses(structured) == ["skipped", "sent"])
         #expect(backend.lock.withLock { backend.sent }.count == 1)

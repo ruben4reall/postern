@@ -412,6 +412,14 @@ final class CapturingPresenter: ApprovalPresenter, @unchecked Sendable {
 
     init(_ intent: ApprovalIntent?) { self.intent = intent }
 
+    /// Returns once a batch panel has been shown, polling for up to 30 s.
+    func untilABatchIsShown() async {
+        let deadline = ContinuousClock.now.advanced(by: .seconds(30))
+        while ContinuousClock.now < deadline, lock.withLock({ batches.isEmpty }) {
+            try? await Task.sleep(for: .milliseconds(20))
+        }
+    }
+
     func presentBatch(_ request: BatchApprovalRequest, deadline: Date) async -> BatchIntent {
         let (leaveOut, delay) = lock.withLock { batches.append(request); return (self.leaveOut, batchDelay) }
         if delay > .zero { try? await Task.sleep(for: delay) }
