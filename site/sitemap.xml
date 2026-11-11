@@ -1,0 +1,168 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9" xmlns:xhtml="http://www.w3.org/1999/xhtml">
+  <url>
+    <loc>https://getpostern.vercel.app/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://getpostern.vercel.app/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://getpostern.vercel.app/fr/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://getpostern.vercel.app/de/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://getpostern.vercel.app/es/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://getpostern.vercel.app/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://getpostern.vercel.app/pt-br/"/>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://getpostern.vercel.app/nl/"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://getpostern.vercel.app/pl/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://getpostern.vercel.app/ja/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://getpostern.vercel.app/zh/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://getpostern.vercel.app/ko/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://getpostern.vercel.app/"/>
+  </url>
+  <url>
+    <loc>https://getpostern.vercel.app/fr/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://getpostern.vercel.app/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://getpostern.vercel.app/fr/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://getpostern.vercel.app/de/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://getpostern.vercel.app/es/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://getpostern.vercel.app/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://getpostern.vercel.app/pt-br/"/>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://getpostern.vercel.app/nl/"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://getpostern.vercel.app/pl/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://getpostern.vercel.app/ja/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://getpostern.vercel.app/zh/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://getpostern.vercel.app/ko/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://getpostern.vercel.app/"/>
+  </url>
+  <url>
+    <loc>https://getpostern.vercel.app/de/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://getpostern.vercel.app/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://getpostern.vercel.app/fr/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://getpostern.vercel.app/de/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://getpostern.vercel.app/es/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://getpostern.vercel.app/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://getpostern.vercel.app/pt-br/"/>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://getpostern.vercel.app/nl/"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://getpostern.vercel.app/pl/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://getpostern.vercel.app/ja/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://getpostern.vercel.app/zh/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://getpostern.vercel.app/ko/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://getpostern.vercel.app/"/>
+  </url>
+  <url>
+    <loc>https://getpostern.vercel.app/es/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://getpostern.vercel.app/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://getpostern.vercel.app/fr/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://getpostern.vercel.app/de/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://getpostern.vercel.app/es/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://getpostern.vercel.app/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://getpostern.vercel.app/pt-br/"/>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://getpostern.vercel.app/nl/"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://getpostern.vercel.app/pl/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://getpostern.vercel.app/ja/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://getpostern.vercel.app/zh/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://getpostern.vercel.app/ko/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://getpostern.vercel.app/"/>
+  </url>
+  <url>
+    <loc>https://getpostern.vercel.app/it/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://getpostern.vercel.app/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://getpostern.vercel.app/fr/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://getpostern.vercel.app/de/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://getpostern.vercel.app/es/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://getpostern.vercel.app/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://getpostern.vercel.app/pt-br/"/>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://getpostern.vercel.app/nl/"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://getpostern.vercel.app/pl/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://getpostern.vercel.app/ja/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://getpostern.vercel.app/zh/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://getpostern.vercel.app/ko/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://getpostern.vercel.app/"/>
+  </url>
+  <url>
+    <loc>https://getpostern.vercel.app/pt-br/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://getpostern.vercel.app/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://getpostern.vercel.app/fr/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://getpostern.vercel.app/de/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://getpostern.vercel.app/es/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://getpostern.vercel.app/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://getpostern.vercel.app/pt-br/"/>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://getpostern.vercel.app/nl/"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://getpostern.vercel.app/pl/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://getpostern.vercel.app/ja/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://getpostern.vercel.app/zh/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://getpostern.vercel.app/ko/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://getpostern.vercel.app/"/>
+  </url>
+  <url>
+    <loc>https://getpostern.vercel.app/nl/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://getpostern.vercel.app/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://getpostern.vercel.app/fr/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://getpostern.vercel.app/de/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://getpostern.vercel.app/es/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://getpostern.vercel.app/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://getpostern.vercel.app/pt-br/"/>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://getpostern.vercel.app/nl/"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://getpostern.vercel.app/pl/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://getpostern.vercel.app/ja/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://getpostern.vercel.app/zh/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://getpostern.vercel.app/ko/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://getpostern.vercel.app/"/>
+  </url>
+  <url>
+    <loc>https://getpostern.vercel.app/pl/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://getpostern.vercel.app/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://getpostern.vercel.app/fr/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://getpostern.vercel.app/de/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://getpostern.vercel.app/es/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://getpostern.vercel.app/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://getpostern.vercel.app/pt-br/"/>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://getpostern.vercel.app/nl/"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://getpostern.vercel.app/pl/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://getpostern.vercel.app/ja/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://getpostern.vercel.app/zh/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://getpostern.vercel.app/ko/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://getpostern.vercel.app/"/>
+  </url>
+  <url>
+    <loc>https://getpostern.vercel.app/ja/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://getpostern.vercel.app/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://getpostern.vercel.app/fr/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://getpostern.vercel.app/de/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://getpostern.vercel.app/es/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://getpostern.vercel.app/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://getpostern.vercel.app/pt-br/"/>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://getpostern.vercel.app/nl/"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://getpostern.vercel.app/pl/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://getpostern.vercel.app/ja/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://getpostern.vercel.app/zh/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://getpostern.vercel.app/ko/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://getpostern.vercel.app/"/>
+  </url>
+  <url>
+    <loc>https://getpostern.vercel.app/zh/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://getpostern.vercel.app/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://getpostern.vercel.app/fr/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://getpostern.vercel.app/de/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://getpostern.vercel.app/es/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://getpostern.vercel.app/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://getpostern.vercel.app/pt-br/"/>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://getpostern.vercel.app/nl/"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://getpostern.vercel.app/pl/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://getpostern.vercel.app/ja/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://getpostern.vercel.app/zh/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://getpostern.vercel.app/ko/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://getpostern.vercel.app/"/>
+  </url>
+  <url>
+    <loc>https://getpostern.vercel.app/ko/</loc>
+    <xhtml:link rel="alternate" hreflang="en" href="https://getpostern.vercel.app/"/>
+    <xhtml:link rel="alternate" hreflang="fr" href="https://getpostern.vercel.app/fr/"/>
+    <xhtml:link rel="alternate" hreflang="de" href="https://getpostern.vercel.app/de/"/>
+    <xhtml:link rel="alternate" hreflang="es" href="https://getpostern.vercel.app/es/"/>
+    <xhtml:link rel="alternate" hreflang="it" href="https://getpostern.vercel.app/it/"/>
+    <xhtml:link rel="alternate" hreflang="pt-BR" href="https://getpostern.vercel.app/pt-br/"/>
+    <xhtml:link rel="alternate" hreflang="nl" href="https://getpostern.vercel.app/nl/"/>
+    <xhtml:link rel="alternate" hreflang="pl" href="https://getpostern.vercel.app/pl/"/>
+    <xhtml:link rel="alternate" hreflang="ja" href="https://getpostern.vercel.app/ja/"/>
+    <xhtml:link rel="alternate" hreflang="zh-Hans" href="https://getpostern.vercel.app/zh/"/>
+    <xhtml:link rel="alternate" hreflang="ko" href="https://getpostern.vercel.app/ko/"/>
+    <xhtml:link rel="alternate" hreflang="x-default" href="https://getpostern.vercel.app/"/>
+  </url>
+</urlset>

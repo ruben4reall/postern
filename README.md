@@ -5,6 +5,20 @@
   </picture>
 </p>
 
+<p align="center">
+  <strong>English</strong> ·
+  <a href="README.fr.md">Français</a> ·
+  <a href="README.de.md">Deutsch</a> ·
+  <a href="README.es.md">Español</a> ·
+  <a href="README.it.md">Italiano</a> ·
+  <a href="README.pt-BR.md">Português</a> ·
+  <a href="README.nl.md">Nederlands</a> ·
+  <a href="README.pl.md">Polski</a> ·
+  <a href="README.ja.md">日本語</a> ·
+  <a href="README.zh-CN.md">简体中文</a> ·
+  <a href="README.ko.md">한국어</a>
+</p>
+
 <h1 align="center">Postern: the Proton Mail MCP server</h1>
 
 <p align="center"><strong>Let Claude, ChatGPT, Cursor, Copilot, Gemini and every MCP app read, sort, write and send your
@@ -70,7 +84,7 @@ and the app only ever sees the tools you turned on.
 - **Every email approved with Touch ID.** The panel shows the whole email, every recipient and every file with its
   size and fingerprint, and warns you about a first contact, a changed Reply-To or an address taken from an email.
 - **No more forgotten attachments.** An email that says "please find attached", "ci-joint", "anbei" or "in allegato"
-  and carries no file is refused before it reaches you, in seven languages. Every saved draft is read back to check
+  and carries no file is refused before it reaches you, in eleven languages. Every saved draft is read back to check
   its files are still there.
 - **Attach anything.** Files from a dedicated outbox folder, files the AI writes itself (a CSV, a summary, an
   invoice), or the attachments of an email you received, forwarded on.
@@ -81,7 +95,9 @@ and the app only ever sees the tools you turned on.
 - **Your aliases.** Send from the Proton addresses and aliases you allow.
 - **Nothing stored, nothing tracked.** No copy of your mail, no analytics, no server: Postern talks to Bridge on
   your Mac and nowhere else.
-- **A native Mac app** in Proton Mail's colors, light and dark, with an activity log chained against tampering.
+- **A native Mac app in your language**, in Proton Mail's colors, light and dark: English, French, German,
+  Spanish, Italian, Portuguese, Dutch, Polish, Japanese, Chinese and Korean, with an activity log chained against
+  tampering.
 
 <picture>
   <source media="(prefers-color-scheme: dark)" srcset="docs/assets/window-overview-dark.png">
@@ -302,6 +318,14 @@ may stop an account that looks like bulk mail, so raise yours only as far as you
 
 No. Postern needs macOS 26 or later, Touch ID or your Mac password, the Mac Keychain and Proton Mail Bridge on the
 same Mac.
+</details>
+
+<details>
+<summary><strong>Does Postern speak my language?</strong></summary>
+
+Postern's window, menus and approval panels are in English, French, German, Spanish, Italian, Portuguese, Dutch,
+Polish, Japanese, Chinese and Korean, and follow the language of your Mac (System Settings › General › Language &
+Region). Your AI app can read and write email in any language.
 </details>
 
 <details>

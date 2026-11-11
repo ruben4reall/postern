@@ -154,7 +154,7 @@
       var done = function () {
         button.classList.add('copied');
         if (icon) icon.setAttribute('href', '#i-check');
-        live.textContent = 'Copied';
+        live.textContent = document.documentElement.getAttribute('data-copied') || 'Copied';
         clearTimeout(button.copyTimer);
         button.copyTimer = setTimeout(function () {
           button.classList.remove('copied');
