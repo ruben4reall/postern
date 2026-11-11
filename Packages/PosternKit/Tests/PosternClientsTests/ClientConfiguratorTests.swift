@@ -188,4 +188,20 @@ import Testing
         let json = SetupSnippet.json.text(relayPath: relay)
         #expect((try? JSONSerialization.jsonObject(with: Data(json.utf8))) != nil)
     }
+
+    @Test func readsCommentsAndTrailingCommasAsStrictJSON() throws {
+        let jsonc = """
+        {
+          // VS Code's own comment
+          "servers": { "a": { "command": "/x", "args": ["--y", ], }, }, /* block, with a comma */
+          "url": "https://example.com//not-a-comment", "quote": "a \\"//\\" b",
+        }
+        """
+        let strict = JSONCEditor.strictJSON(jsonc)
+        let object = try #require(try JSONSerialization.jsonObject(with: Data(strict.utf8)) as? [String: Any])
+        #expect(object["url"] as? String == "https://example.com//not-a-comment")
+        #expect(object["quote"] as? String == #"a "//" b"#)
+        let servers = try #require(object["servers"] as? [String: Any])
+        #expect((servers["a"] as? [String: Any])?["args"] as? [String] == ["--y"])
+    }
 }

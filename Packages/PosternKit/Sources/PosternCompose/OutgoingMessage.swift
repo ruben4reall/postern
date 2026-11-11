@@ -5,7 +5,9 @@ import CryptoKit
 import Crypto
 #endif
 import Foundation
+#if canImport(UniformTypeIdentifiers)
 import UniformTypeIdentifiers
+#endif
 import PosternModel
 import PosternText
 
@@ -40,7 +42,7 @@ public struct OutgoingAttachment: Codable, Sendable, Equatable {
         // header into the part that leaves.
         let given = mimeType?.lowercased()
         let valid = given.flatMap { $0.wholeMatch(of: #/[a-z0-9][a-z0-9!#$&^_.+-]{0,63}\/[a-z0-9][a-z0-9!#$&^_.+-]{0,63}/#) != nil ? $0 : nil }
-        let type = valid ?? UTType(filenameExtension: (name as NSString).pathExtension)?.preferredMIMEType
+        let type = valid ?? OutgoingAttachment.mimeType(forExtension: (name as NSString).pathExtension)
             ?? "application/octet-stream"
         return OutgoingAttachment(filename: name, mimeType: type, data: data)
     }
@@ -259,4 +261,33 @@ enum QuotedPrintable {
         output.append(current)
         return output.joined(separator: "\r\n")
     }
+}
+
+extension OutgoingAttachment {
+    /// The type a file name's extension stands for: the system's own table on Apple platforms, the common ones
+    /// elsewhere.
+    static func mimeType(forExtension ext: String) -> String? {
+        #if canImport(UniformTypeIdentifiers)
+        return UTType(filenameExtension: ext)?.preferredMIMEType
+        #else
+        return commonTypes[ext.lowercased()]
+        #endif
+    }
+
+    static let commonTypes: [String: String] = [
+        "pdf": "application/pdf", "png": "image/png", "jpg": "image/jpeg", "jpeg": "image/jpeg", "gif": "image/gif",
+        "webp": "image/webp", "heic": "image/heic", "tif": "image/tiff", "tiff": "image/tiff", "svg": "image/svg+xml",
+        "txt": "text/plain", "md": "text/markdown", "csv": "text/csv", "tsv": "text/tab-separated-values",
+        "html": "text/html", "htm": "text/html", "json": "application/json", "xml": "application/xml",
+        "ics": "text/calendar", "vcf": "text/vcard", "eml": "message/rfc822", "rtf": "application/rtf",
+        "zip": "application/zip", "gz": "application/gzip", "7z": "application/x-7z-compressed",
+        "doc": "application/msword", "xls": "application/vnd.ms-excel", "ppt": "application/vnd.ms-powerpoint",
+        "docx": "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+        "xlsx": "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+        "pptx": "application/vnd.openxmlformats-officedocument.presentationml.presentation",
+        "odt": "application/vnd.oasis.opendocument.text", "ods": "application/vnd.oasis.opendocument.spreadsheet",
+        "odp": "application/vnd.oasis.opendocument.presentation", "pages": "application/vnd.apple.pages",
+        "numbers": "application/vnd.apple.numbers", "key": "application/vnd.apple.keynote",
+        "mp3": "audio/mpeg", "m4a": "audio/mp4", "wav": "audio/wav", "mp4": "video/mp4", "mov": "video/quicktime",
+    ]
 }
