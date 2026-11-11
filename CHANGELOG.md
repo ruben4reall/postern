@@ -1,5 +1,16 @@
 # Changelog
 
+## 0.3.0 (unreleased)
+
+- **Postern speaks your language.** The window, the menus, the approval panels and the Touch ID prompts are in
+  English, French, German, Spanish, Italian, Portuguese, Dutch, Polish, Japanese, Chinese and Korean, and follow the
+  language of your Mac. Counts take their plural forms, and Proton's folders keep the names Proton gives them in your
+  language. Apps still receive Postern's answers in English, the language every model reads best.
+- **Forgotten files caught in eleven languages.** `w załączniku`, `添付`, `附件` and `첨부` join the words that announce
+  a file, and the confidentiality footers that mention attachments are recognized in more languages.
+- **The README and the website in the same eleven languages**, with a language menu and links search engines follow.
+  Postern is made in Switzerland, in the canton of Valais.
+
 ## 0.2.0 (unreleased)
 
 - **Listed as Proton Mail in your apps.** Postern's entry is now named `proton-mail-postern`, and it introduces
