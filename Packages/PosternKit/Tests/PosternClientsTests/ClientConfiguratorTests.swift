@@ -8,7 +8,12 @@ import Testing
 
     func json(_ data: Data?) throws -> [String: Any] {
         let bytes = try #require(data)
+        #if canImport(Darwin)
         return try #require(JSONSerialization.jsonObject(with: bytes, options: .json5Allowed) as? [String: Any])
+        #else
+        let strict = Data(JSONCEditor.strictJSON(String(decoding: bytes, as: UTF8.self)).utf8)
+        return try #require(JSONSerialization.jsonObject(with: strict) as? [String: Any])
+        #endif
     }
 
     @Test func addsPosternToClaudeCodeAndKeepsEverythingElse() throws {
