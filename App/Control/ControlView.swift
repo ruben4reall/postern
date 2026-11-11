@@ -7,14 +7,14 @@ import PosternPolicy
 import PosternServer
 import SwiftUI
 
-/// The main window: a sidebar of tiles that show the state at a glance, and one pane at a time.
+/// The main window, in Proton's frame: a deep purple sidebar listing the panes, a white work area of warm grey cards.
 struct ControlView: View {
     @Bindable var model: ControlModel
 
     var body: some View {
         NavigationSplitView {
             Sidebar(model: model)
-                .navigationSplitViewColumnWidth(min: 248, ideal: 264, max: 320)
+                .navigationSplitViewColumnWidth(min: 232, ideal: 250, max: 300)
         } detail: {
             VStack(spacing: 0) {
                 if model.backgroundServiceOff { ServiceOffBar() }
@@ -26,20 +26,12 @@ struct ControlView: View {
                 }
                 if model.configured { detail } else { WelcomePane(model: model) }
             }
-            .scrollContentBackground(.hidden)
             .background(Theme.canvas)
             .navigationTitle(model.configured ? model.pane.title : "Postern")
             .navigationSubtitle(model.statusLine)
             .toolbar {
                 ToolbarItem(placement: .primaryAction) {
-                    Button {
-                        Task { await model.setPaused(!model.policy.paused) }
-                    } label: {
-                        Label(model.policy.paused ? String(localized: "Resume") : String(localized: "Pause"),
-                              systemImage: model.policy.paused ? "play.fill" : "pause.fill")
-                    }
-                    .help(model.policy.paused ? String(localized: "Let apps use Postern again (Touch ID)") : String(localized: "Turn every tool off for all apps, right away"))
-                    .disabled(!model.configured)
+                    PauseToolbarButton(model: model)
                 }
             }
         }
@@ -65,6 +57,28 @@ struct ControlView: View {
     }
 }
 
+/// Pause in the glass toolbar; Resume stands out in Proton's purple, as Proton's active filters do.
+private struct PauseToolbarButton: View {
+    @Bindable var model: ControlModel
+
+    var body: some View {
+        let paused = model.policy.paused
+        let button = Button {
+            Task { await model.setPaused(!paused) }
+        } label: {
+            Label(paused ? String(localized: "Resume") : String(localized: "Pause"),
+                  systemImage: paused ? "play.fill" : "pause.fill")
+        }
+        .help(paused ? String(localized: "Let apps use Postern again (Touch ID)") : String(localized: "Turn every tool off for all apps, right away"))
+        .disabled(!model.configured)
+        if paused {
+            button.buttonStyle(.glassProminent).tint(Theme.interaction)
+        } else {
+            button
+        }
+    }
+}
+
 #if DEBUG
 /// The sidebar and the pane side by side, without the split view, which offscreen renders cannot draw.
 struct ControlSnapshot: View {
@@ -72,14 +86,15 @@ struct ControlSnapshot: View {
 
     var body: some View {
         HStack(spacing: 0) {
-            Sidebar(model: model).frame(width: 264)
+            Sidebar(model: model).frame(width: 250).background(Theme.sidebar)
             VStack(alignment: .leading, spacing: 0) {
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(model.configured ? model.pane.title : "Postern").font(.headline)
-                    Text(model.statusLine).font(.subheadline).foregroundStyle(Theme.textWeak)
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(model.configured ? model.pane.title : "Postern").font(.system(size: 15, weight: .bold)).foregroundStyle(Theme.text)
+                    Text(model.statusLine).font(.system(size: 12)).foregroundStyle(Theme.textWeak)
                 }
-                .padding(.horizontal, 20).padding(.vertical, 12)
-                Divider()
+                .padding(.horizontal, 16).padding(.vertical, 12)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .overlay(alignment: .bottom) { Rectangle().fill(Theme.border).frame(height: 1) }
                 if let updates = model.updates, let version = updates.pendingVersion {
                     UpdateBar(version: version) { updates.checkForUpdates() }
                 }
@@ -97,7 +112,6 @@ struct ControlSnapshot: View {
                         }
                     }
                 }
-                .scrollContentBackground(.hidden)
             }
             .background(Theme.canvas)
         }
@@ -120,138 +134,179 @@ extension ControlModel {
     }
 }
 
-extension ControlModel.Pane {
-    var tint: Color { Theme.interaction }
-}
-
 extension Tier {
     /// Purple for what only reads, writes or files; Proton's warning and danger for what leaves or is lost.
-    var tint: Color {
+    var signal: Theme.Signal {
         switch self {
-        case .read, .organize, .draft: Theme.interaction
-        case .send: Theme.warning
-        case .delete: Theme.danger
+        case .read, .organize, .draft: .accent
+        case .send: .warning
+        case .delete: .danger
         }
     }
 }
 
 // MARK: Sidebar
 
+/// Proton's navigation: Postern's own mark and name, then one row per pane, a subtle highlight and bold label on the
+/// current one, small purple counters.
 private struct Sidebar: View {
     @Bindable var model: ControlModel
+    @Environment(\.appearsActive) private var active
 
     var body: some View {
         ScrollView {
-            VStack(alignment: .leading, spacing: 22) {
-                LazyVGrid(columns: [GridItem(.flexible(), spacing: 8), GridItem(.flexible(), spacing: 8)], spacing: 8) {
+            VStack(alignment: .leading, spacing: 0) {
+                HStack(spacing: 8) {
+                    PosternMark().fill(.white).frame(width: 18, height: 18)
+                    Text(verbatim: "Postern").font(.system(size: 15, weight: .bold)).foregroundStyle(Theme.sidebarText)
+                }
+                .padding(.horizontal, 12)
+                .frame(height: 44, alignment: .leading)
+                VStack(spacing: 2) {
                     ForEach(ControlModel.Pane.allCases) { pane in
-                        Tile(pane: pane, value: value(for: pane), tint: pane == .overview ? model.statusTint : Theme.interaction,
-                             symbol: pane == .overview && model.policy.paused ? "pause.fill" : pane.symbol,
-                             selected: model.pane == pane && model.configured) {
+                        SidebarRow(title: pane.title,
+                                   symbol: pane == .overview && model.policy.paused ? "pause.circle" : pane.symbol,
+                                   selected: model.pane == pane && model.configured) {
                             model.pane = pane
+                        } trailing: {
+                            trailing(for: pane)
                         }
                         .disabled(!model.configured)
                     }
                 }
                 if !model.connectedApps.isEmpty {
-                    VStack(alignment: .leading, spacing: 8) {
-                        Text("Connected now").font(.caption.weight(.semibold)).textCase(.uppercase).kerning(0.4)
-                            .foregroundStyle(Theme.sidebarTextWeak)
-                        ForEach(sessionsByApp, id: \.name) { app in
-                            HStack(spacing: 8) {
-                                Circle().fill(Theme.success).frame(width: 7, height: 7)
-                                Text(app.name).foregroundStyle(Theme.sidebarText)
-                                Spacer()
-                                if app.count > 1 {
-                                    Text("\(app.count)").font(.caption.weight(.semibold)).monospacedDigit()
-                                        .foregroundStyle(.white)
-                                        .padding(.horizontal, 6).padding(.vertical, 1)
-                                        .background(Theme.interaction, in: RoundedRectangle(cornerRadius: 4))
-                                }
-                            }
-                            .font(.callout)
+                    Rectangle().fill(Theme.sidebarBorder).frame(height: 1).padding(.horizontal, 12).padding(.vertical, 12)
+                    Text("Connected now")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.sidebarTextWeak)
+                        .padding(.horizontal, 12)
+                        .frame(height: 32, alignment: .leading)
+                    ForEach(sessionsByApp, id: \.name) { app in
+                        HStack(spacing: 8) {
+                            Circle().fill(Theme.success).frame(width: 8, height: 8).frame(width: 18)
+                            Text(app.name).font(.system(size: 13)).foregroundStyle(Theme.sidebarText).lineLimit(1)
+                            Spacer(minLength: 4)
+                            if app.count > 1 { Counter(value: "\(app.count)") }
                         }
+                        .padding(.leading, 12).padding(.trailing, 8)
+                        .frame(height: 32)
                     }
-                    .padding(.horizontal, 6)
                 }
                 Spacer(minLength: 0)
             }
-            .padding(.horizontal, 10)
-            .padding(.top, 6)
+            .padding(.horizontal, 12)
+            .padding(.top, 4)
         }
         .scrollContentBackground(.hidden)
+        .scrollIndicators(.never)
         .background(Theme.sidebar)
-        .environment(\.colorScheme, .dark)
+        .opacity(active ? 1 : 0.85)
+        .saturation(active ? 1 : 0.85)
     }
 
     private var sessionsByApp: [(name: String, count: Int)] {
         Dictionary(grouping: model.connectedApps, by: { $0 }).map { ($0.key, $0.value.count) }.sorted { $0.name < $1.name }
     }
 
-    private func value(for pane: ControlModel.Pane) -> String {
-        guard model.configured else { return "" }
-        switch pane {
-        case .overview: return model.policy.paused ? String(localized: "Off") : String(localized: "On")
-        case .tools: return "\(model.policy.enabledTools.count)"
-        case .mailboxes: return model.visibleMailboxCount.map(String.init) ?? ""
-        case .clients: return "\(model.appsConnectedCount)"
-        case .activity: return "\(model.activityToday)"
-        case .security:
-            if case .intact? = model.integrity { return "OK" }
-            return model.integrity == nil ? "" : "!"
+    @ViewBuilder private func trailing(for pane: ControlModel.Pane) -> some View {
+        if model.configured {
+            switch pane {
+            case .overview:
+                Circle().fill(model.statusTint).frame(width: 8, height: 8)
+                    .accessibilityLabel(model.policy.paused ? String(localized: "Off") : String(localized: "On"))
+            case .tools: Counter(value: "\(model.policy.enabledTools.count)")
+            case .mailboxes: if let count = model.visibleMailboxCount { Counter(value: "\(count)") }
+            case .clients: if model.appsConnectedCount > 0 { Counter(value: "\(model.appsConnectedCount)") }
+            case .activity: if model.activityToday > 0 { Counter(value: "\(model.activityToday)") }
+            case .security:
+                if case .intact? = model.integrity {
+                    Image(systemName: "checkmark.circle").font(.system(size: 13)).foregroundStyle(Theme.success)
+                } else if model.integrity != nil {
+                    Counter(value: "!", color: Theme.danger)
+                }
+            }
         }
     }
 }
 
-/// A sidebar tile, like the smart lists of Reminders and Passwords: a colored symbol, a count, a name.
-private struct Tile: View {
-    let pane: ControlModel.Pane
-    let value: String
-    let tint: Color
+/// One pane in the sidebar: 36pt tall, radius 8, outline symbol, bold when current.
+private struct SidebarRow<Trailing: View>: View {
+    let title: String
     let symbol: String
     let selected: Bool
     let action: () -> Void
+    @ViewBuilder var trailing: Trailing
+    @State private var hovering = false
 
     var body: some View {
         Button(action: action) {
-            VStack(alignment: .leading, spacing: 9) {
-                HStack(alignment: .top) {
-                    Image(systemName: symbol)
-                        .font(.system(size: 12, weight: .semibold))
-                        .foregroundStyle(selected ? Theme.interaction : .white)
-                        .frame(width: 26, height: 26)
-                        .background(selected ? AnyShapeStyle(.white) : AnyShapeStyle(tint), in: Circle())
-                    Spacer(minLength: 4)
-                    Text(value)
-                        .font(.system(size: 20, weight: .bold, design: .rounded))
-                        .monospacedDigit()
-                        .foregroundStyle(.white)
-                        .lineLimit(1)
-                        .minimumScaleFactor(0.6)
-                }
-                Text(pane.title)
-                    .font(.system(size: 12.5, weight: .semibold))
-                    .foregroundStyle(selected ? .white : Theme.sidebarTextWeak)
+            HStack(spacing: 8) {
+                Image(systemName: symbol)
+                    .font(.system(size: 14))
+                    .foregroundStyle(selected ? Theme.sidebarIconOn : Theme.sidebarTextWeak)
+                    .frame(width: 18)
+                Text(title)
+                    .font(.system(size: 13, weight: selected ? .bold : .regular))
+                    .foregroundStyle(Theme.sidebarText)
                     .lineLimit(1)
-                    .minimumScaleFactor(0.8)
+                Spacer(minLength: 4)
+                trailing
             }
-            .padding(.horizontal, 10)
-            .padding(.vertical, 9)
-            .frame(maxWidth: .infinity, alignment: .leading)
-            .background(selected ? Theme.interaction : Theme.sidebarTile,
-                        in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
-                .strokeBorder(.white.opacity(selected ? 0.18 : 0.06)))
-            .contentShape(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
+            .padding(.leading, 12)
+            .padding(.trailing, 8)
+            .frame(height: 36)
+            .background(selected || hovering ? Theme.sidebarHover : .clear,
+                        in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+            .contentShape(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
         }
-        .buttonStyle(.plain)
-        .accessibilityLabel("\(pane.title), \(value)")
+        .buttonStyle(SidebarPress())
+        .onHover { hovering = $0 }
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+}
+
+private struct SidebarPress: ButtonStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        configuration.label.background(configuration.isPressed ? Theme.sidebarPressed : .clear,
+                                       in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+    }
+}
+
+/// Proton's navigation counter: a small purple rectangle with white figures.
+private struct Counter: View {
+    let value: String
+    var color: Color = Theme.sidebarCounter
+
+    var body: some View {
+        Text(value)
+            .font(.system(size: 11))
+            .monospacedDigit()
+            .foregroundStyle(.white)
+            .padding(.horizontal, 4)
+            .frame(minWidth: 20, minHeight: 18)
+            .background(color, in: RoundedRectangle(cornerRadius: Theme.radiusSmall, style: .continuous))
     }
 }
 
 // MARK: Shared pieces
 
-/// The card at the top of each pane: what this place is for, in one or two sentences.
+/// A pane's scrolling body: cards on the white canvas, blurred under the glass toolbar as it scrolls.
+private struct PaneScroll<Content: View>: View {
+    @ViewBuilder var content: Content
+
+    var body: some View {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 24) { content }
+                .padding(24)
+                .frame(maxWidth: 880, alignment: .leading)
+                .frame(maxWidth: .infinity, alignment: .leading)
+        }
+        .scrollEdgeEffectStyle(.soft, for: .top)
+        .background(Theme.canvas)
+    }
+}
+
+/// What this place is for, in one or two sentences, under a flat tinted symbol.
 struct PaneHero: View {
     let symbol: String
     let tint: Color
@@ -260,17 +315,14 @@ struct PaneHero: View {
 
     var body: some View {
         HStack(alignment: .center, spacing: 14) {
-            Image(systemName: symbol)
-                .font(.system(size: 21, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 44, height: 44)
-                .background(tint, in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
+            SymbolTile(symbol: symbol, size: 40)
             VStack(alignment: .leading, spacing: 3) {
-                Text(title).font(.title3.weight(.semibold))
-                Text(text).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                Text(title).font(.system(size: 20, weight: .bold)).foregroundStyle(Theme.text)
+                Text(text).font(.system(size: 13)).foregroundStyle(Theme.textWeak)
+                    .frame(maxWidth: 560, alignment: .leading)
+                    .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(.vertical, 4)
     }
 }
 
@@ -279,15 +331,9 @@ private struct NoticeBar: View {
     let dismiss: () -> Void
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Image(systemName: "info.circle").foregroundStyle(.tint)
-            Text(text).fixedSize(horizontal: false, vertical: true)
-            Spacer()
-            Button("Dismiss", action: dismiss).buttonStyle(.borderless)
+        ProtonBanner(kind: .accent, symbol: "info.circle", text: Text(text), flat: true) {
+            Button("Dismiss", action: dismiss).buttonStyle(.proton(.ghost, size: .small))
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 10)
-        .background(Theme.accentSoft)
     }
 }
 
@@ -297,33 +343,22 @@ private struct UpdateBar: View {
     let open: () -> Void
 
     var body: some View {
-        HStack(alignment: .center, spacing: 10) {
-            Image(systemName: "arrow.down.circle.fill").foregroundStyle(Theme.accent).font(.title3)
-            VStack(alignment: .leading, spacing: 1) {
-                Text("Postern \(version) is available").fontWeight(.semibold)
-                Text("Signed by Postern's developer. Nothing installs until you choose to.").font(.callout).foregroundStyle(Theme.textWeak)
-            }
-            Spacer()
-            Button("See What's New…", action: open).buttonStyle(.borderedProminent)
+        ProtonBanner(kind: .accent, symbol: "arrow.down.circle",
+                     text: Text("Postern \(version) is available").fontWeight(.semibold)
+                         + Text(verbatim: "  ") + Text("Signed by Postern's developer. Nothing installs until you choose to."),
+                     flat: true) {
+            Button("See What's New…", action: open).buttonStyle(.proton(.primary, size: .small))
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 10)
-        .background(Theme.accentSoft)
     }
 }
 
 private struct ServiceOffBar: View {
     var body: some View {
-        HStack(alignment: .firstTextBaseline) {
-            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning)
-            Text("Postern's background item is turned off, so apps can't connect. Turn Postern on in Login Items.")
-                .fixedSize(horizontal: false, vertical: true)
-            Spacer()
-            Button("Open Login Items") { SMAppServiceSettings.open() }.buttonStyle(.borderless)
+        ProtonBanner(kind: .warning, symbol: "exclamationmark.triangle.fill",
+                     text: Text("Postern's background item is turned off, so apps can't connect. Turn Postern on in Login Items."),
+                     flat: true) {
+            Button("Open Login Items") { SMAppServiceSettings.open() }.buttonStyle(.proton(.secondary, size: .small))
         }
-        .padding(.horizontal, 20)
-        .padding(.vertical, 10)
-        .background(Theme.warning.opacity(0.12))
     }
 }
 
@@ -335,22 +370,23 @@ private struct WelcomePane: View {
     var body: some View {
         VStack(spacing: 18) {
             PosternMark()
-                .fill(.primary)
-                .frame(width: 84, height: 84)
-                .padding(18)
-                .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 26, style: .continuous))
-            Text("Welcome to Postern").font(.largeTitle.weight(.semibold))
+                .fill(Theme.text)
+                .frame(width: 72, height: 72)
+                .padding(20)
+                .background(Theme.weak, in: RoundedRectangle(cornerRadius: 24, style: .continuous))
+            Text("Welcome to Postern").font(.system(size: 28, weight: .bold)).foregroundStyle(Theme.text)
             Text("Postern lets apps like Claude Code work with your Proton Mail, through Proton Mail Bridge on this Mac. You decide what they may do, and nothing leaves without you.")
+                .font(.system(size: 14))
                 .multilineTextAlignment(.center)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textWeak)
                 .frame(maxWidth: 460)
             Button("Set Up Postern…") { model.openSetup() }
-                .buttonStyle(.borderedProminent)
-                .controlSize(.extraLarge)
+                .buttonStyle(.proton(.primary, size: .large))
                 .padding(.top, 6)
         }
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
+        .background(Theme.canvas)
     }
 }
 
@@ -360,82 +396,74 @@ private struct OverviewPane: View {
     @Bindable var model: ControlModel
 
     var body: some View {
-        Form {
-            Section {
-                HStack(spacing: 18) {
-                    ZStack(alignment: .bottomTrailing) {
-                        PosternMark()
-                            .fill(.primary)
-                            .frame(width: 46, height: 46)
-                            .padding(12)
-                            .background(.fill.quaternary, in: RoundedRectangle(cornerRadius: 16, style: .continuous))
-                        Image(systemName: model.policy.paused ? "pause.circle.fill" : "checkmark.circle.fill")
-                            .font(.system(size: 22))
-                            .foregroundStyle(.white, model.statusTint)
-                            .offset(x: 6, y: 6)
-                    }
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text(model.policy.paused ? String(localized: "Postern is paused") : String(localized: "Postern is guarding your mailbox"))
-                            .font(.title2.weight(.semibold))
-                        Text(model.policy.paused
-                             ? String(localized: "Apps see no tool and every call is refused. Resuming asks for Touch ID.")
-                             : String(localized: "Apps can only use the tools you turned on. Nothing is sent or deleted without your approval."))
-                            .foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
-                    }
-                    Spacer()
-                    Button(model.policy.paused ? String(localized: "Resume") : String(localized: "Pause")) {
-                        Task { await model.setPaused(!model.policy.paused) }
-                    }
-                    .controlSize(.large)
+        PaneScroll {
+            HStack(spacing: 18) {
+                ZStack(alignment: .bottomTrailing) {
+                    PosternMark()
+                        .fill(Theme.text)
+                        .frame(width: 40, height: 40)
+                        .padding(12)
+                        .background(Theme.canvas, in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
+                    Image(systemName: model.policy.paused ? "pause.circle.fill" : "checkmark.circle.fill")
+                        .font(.system(size: 20))
+                        .foregroundStyle(.white, model.statusTint)
+                        .offset(x: 6, y: 6)
                 }
-                .padding(.vertical, 8)
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(model.policy.paused ? String(localized: "Postern is paused") : String(localized: "Postern is guarding your mailbox"))
+                        .font(.system(size: 20, weight: .bold)).foregroundStyle(Theme.text)
+                    Text(model.policy.paused
+                         ? String(localized: "Apps see no tool and every call is refused. Resuming asks for Touch ID.")
+                         : String(localized: "Apps can only use the tools you turned on. Nothing is sent or deleted without your approval."))
+                        .font(.system(size: 13)).foregroundStyle(Theme.textWeak).fixedSize(horizontal: false, vertical: true)
+                }
+                Spacer(minLength: 12)
+                Button(model.policy.paused ? String(localized: "Resume") : String(localized: "Pause")) {
+                    Task { await model.setPaused(!model.policy.paused) }
+                }
+                .buttonStyle(.proton(model.policy.paused ? .primary : .secondary))
+                .fixedSize()
             }
+            .padding(20)
+            .background(Theme.weak, in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous).strokeBorder(Theme.border))
             if !model.batches.isEmpty {
-                Section {
+                ProtonSection("Batches", footer: Text("Approved emails leave one by one within your sending limits, as long as Postern runs. Stopping a batch keeps the drafts of the emails not sent yet.")) {
                     ForEach(model.batches.prefix(5)) { batch in
                         BatchRow(batch: batch, cancel: { model.cancelBatch(batch.id) }, resume: { model.resumeBatch(batch.id) })
                     }
-                } header: {
-                    Text("Batches")
-                } footer: {
-                    Text("Approved emails leave one by one within your sending limits, as long as Postern runs. Stopping a batch keeps the drafts of the emails not sent yet.")
                 }
             }
-            Section {
+            ProtonSection("What apps can do") {
                 ForEach(Tier.allCases, id: \.self) { tier in
                     TierSummaryRow(tier: tier, on: model.enabledCount(tier),
                                    total: ToolID.switchable.filter { $0.tier == tier }.count) {
                         model.pane = .tools
                     }
                 }
-            } header: {
-                Text("What apps can do")
             }
-            Section {
-                LabeledContent("Apps connected", value: model.connectedApps.isEmpty ? String(localized: "None") : appsText)
-                LabeledContent("Hidden mailboxes", value: model.policy.hiddenMailboxes.isEmpty ? String(localized: "None") : "\(model.policy.hiddenMailboxes.count)")
-                LabeledContent("Sending limits", value: String(localized: "\(model.policy.sendsPerHour) per hour, \(model.policy.sendsPerDay) per day"))
-                LabeledContent("Proton Mail Bridge", value: model.pin == nil ? String(localized: "Not set up") : String(localized: "Certificate pinned"))
-            } header: {
-                Text("Right now")
+            ProtonSection("Right now") {
+                ProtonValueRow(label: "Apps connected", value: model.connectedApps.isEmpty ? String(localized: "None") : appsText)
+                ProtonValueRow(label: "Hidden mailboxes", value: model.policy.hiddenMailboxes.isEmpty ? String(localized: "None") : "\(model.policy.hiddenMailboxes.count)")
+                ProtonValueRow(label: "Sending limits", value: String(localized: "\(model.policy.sendsPerHour) per hour, \(model.policy.sendsPerDay) per day"))
+                ProtonValueRow(label: "Proton Mail Bridge", value: model.pin == nil ? String(localized: "Not set up") : String(localized: "Certificate pinned"))
             }
-            Section {
-                if model.activity.isEmpty {
-                    Text("No app has used Postern yet.").foregroundStyle(.secondary)
-                } else {
-                    ForEach(Array(model.activity.prefix(5).enumerated()), id: \.offset) { _, record in
-                        ActivityRow(record: record)
-                    }
-                }
-            } header: {
-                HStack {
+            ProtonSection(header: {
+                HStack(alignment: .firstTextBaseline) {
                     Text("Latest activity")
                     Spacer()
-                    Button("Show All") { model.pane = .activity }.buttonStyle(.link).font(.callout)
+                    Button("Show All") { model.pane = .activity }.buttonStyle(.proton(.ghost))
+                }
+            }) {
+                if model.activity.isEmpty {
+                    ProtonRow { Text("No app has used Postern yet.").foregroundStyle(Theme.textWeak) }
+                } else {
+                    ForEach(Array(model.activity.prefix(5).enumerated()), id: \.offset) { _, record in
+                        ProtonRow { ActivityRow(record: record) }
+                    }
                 }
             }
         }
-        .formStyle(.grouped)
     }
 
     private var appsText: String {
@@ -452,22 +480,24 @@ private struct BatchRow: View {
     var resume: () -> Void = {}
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            HStack(alignment: .firstTextBaseline) {
-                Label(title, systemImage: batch.kind == .sends ? "paperplane" : "doc.on.doc")
-                    .font(.body.weight(.medium))
-                Spacer()
-                if batch.interrupted {
-                    Button("Resume with Touch ID", action: resume).buttonStyle(.borderedProminent).controlSize(.small)
+        ProtonRow {
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .center, spacing: 10) {
+                    SymbolTile(symbol: batch.kind == .sends ? "paperplane" : "doc.on.doc",
+                               signal: batch.kind == .sends ? .warning : .accent, size: 28)
+                    Text(title).font(.system(size: 13, weight: .semibold))
+                    Spacer()
+                    if batch.interrupted {
+                        Button("Resume with Touch ID", action: resume).buttonStyle(.proton(.primary, size: .small)).fixedSize()
+                    }
+                    if !batch.isOver {
+                        Button("Stop", role: .destructive, action: cancel).buttonStyle(.proton(.secondary, size: .small)).fixedSize()
+                    }
                 }
-                if !batch.isOver {
-                    Button("Stop", role: .destructive, action: cancel).controlSize(.small)
-                }
+                ProgressView(value: Double(done), total: Double(max(1, batch.items.count))).tint(Theme.interaction)
+                Text(status).font(.system(size: 12)).foregroundStyle(Theme.textWeak).fixedSize(horizontal: false, vertical: true)
             }
-            ProgressView(value: Double(done), total: Double(max(1, batch.items.count))).tint(Theme.accent)
-            Text(status).font(.callout).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
         }
-        .padding(.vertical, 4)
     }
 
     private var title: String {
@@ -527,42 +557,39 @@ private struct TierSummaryRow: View {
     var body: some View {
         let copy = TierCopy.for(tier)
         Button(action: open) {
-            HStack(spacing: 12) {
-                Image(systemName: copy.symbol)
-                    .font(.system(size: 13, weight: .semibold))
-                    .foregroundStyle(.white)
-                    .frame(width: 28, height: 28)
-                    .background(tier.tint.gradient, in: RoundedRectangle(cornerRadius: 7, style: .continuous))
-                VStack(alignment: .leading, spacing: 1) {
-                    Text(copy.title)
-                    Text(copy.summary).font(.callout).foregroundStyle(.secondary).lineLimit(1)
+            ProtonRow(hoverable: true) {
+                HStack(spacing: 12) {
+                    SymbolTile(symbol: copy.symbol, signal: tier.signal)
+                    VStack(alignment: .leading, spacing: 1) {
+                        Text(copy.title).foregroundStyle(Theme.text)
+                        Text(copy.summary).font(.system(size: 12)).foregroundStyle(Theme.textWeak).lineLimit(1)
+                    }
+                    Spacer()
+                    Meter(on: on, total: total, signal: tier.signal)
+                    Text(on == 0 ? String(localized: "Off") : String(localized: "\(on) of \(total)"))
+                        .foregroundStyle(on == 0 ? Theme.hint : Theme.textWeak)
+                        .monospacedDigit()
+                        .lineLimit(1)
+                        .fixedSize()
+                        .frame(minWidth: 52, alignment: .trailing)
+                    Image(systemName: "chevron.right").font(.system(size: 11, weight: .semibold)).foregroundStyle(Theme.hint)
                 }
-                Spacer()
-                Meter(on: on, total: total, tint: tier.tint)
-                Text(on == 0 ? String(localized: "Off") : String(localized: "\(on) of \(total)"))
-                    .foregroundStyle(on == 0 ? .secondary : .primary)
-                    .monospacedDigit()
-                    .lineLimit(1)
-                    .fixedSize()
-                    .frame(minWidth: 52, alignment: .trailing)
-                Image(systemName: "chevron.right").font(.caption.weight(.semibold)).foregroundStyle(.tertiary)
             }
-            .contentShape(Rectangle())
         }
         .buttonStyle(.plain)
     }
 }
 
-/// One small segment per tool, filled when it is on.
+/// One small segment per tool, filled in the tier's color when it is on.
 private struct Meter: View {
     let on: Int
     let total: Int
-    let tint: Color
+    let signal: Theme.Signal
 
     var body: some View {
         HStack(spacing: 3) {
             ForEach(0..<total, id: \.self) { index in
-                Capsule().fill(index < on ? AnyShapeStyle(tint) : AnyShapeStyle(.quaternary)).frame(width: 9, height: 6)
+                Capsule().fill(index < on ? signal.solid : Theme.strong).frame(width: 10, height: 6)
             }
         }
     }
@@ -574,24 +601,20 @@ private struct ToolsPane: View {
     @Bindable var model: ControlModel
 
     var body: some View {
-        Form {
-            Section {
-                PaneHero(symbol: "switch.2", tint: Theme.interaction, title: "Tools",
-                         text: "Each tool is one thing an app may do with your mail. Turning one on asks for Touch ID; turning it off is immediate, and connected apps see the change at once.")
-            }
+        PaneScroll {
+            PaneHero(symbol: "switch.2", tint: Theme.interaction, title: "Tools",
+                     text: "Each tool is one thing an app may do with your mail. Turning one on asks for Touch ID; turning it off is immediate, and connected apps see the change at once.")
             ForEach(Tier.allCases, id: \.self) { tier in
-                Section {
-                    ForEach(ToolID.switchable.filter { $0.tier == tier }, id: \.self) { tool in
-                        ToolRow(tool: tool, model: model)
+                VStack(alignment: .leading, spacing: 8) {
+                    ProtonSection(header: { TierHeader(tier: tier, model: model) }) {
+                        ForEach(ToolID.switchable.filter { $0.tier == tier }, id: \.self) { tool in
+                            ToolRow(tool: tool, model: model)
+                        }
                     }
-                } header: {
-                    TierHeader(tier: tier, model: model)
-                } footer: {
                     footer(for: tier)
                 }
             }
         }
-        .formStyle(.grouped)
     }
 
     @ViewBuilder private func footer(for tier: Tier) -> some View {
@@ -601,11 +624,13 @@ private struct ToolsPane: View {
                 Text("Every email waits for you on a panel that shows all of it: recipients, subject, the whole text, every attachment. It leaves only after Touch ID. Limits and trusted recipients are in Security.")
                 HStack(spacing: 6) {
                     Text("Apps can attach only files you put in Downloads › Postern › Outbox, or in folders inside it.")
-                    Button("Show Outbox") { model.showOutbox() }.buttonStyle(.link)
+                    Button("Show Outbox") { model.showOutbox() }.buttonStyle(.proton(.ghost))
                 }
             }
+            .font(.system(size: 12)).foregroundStyle(Theme.textWeak).fixedSize(horizontal: false, vertical: true)
         case .delete:
             Text("Each deletion waits for you on a panel that lists every message, and happens only after Touch ID. Erasing works only on messages already in Trash or Spam.")
+                .font(.system(size: 12)).foregroundStyle(Theme.textWeak).fixedSize(horizontal: false, vertical: true)
         default:
             EmptyView()
         }
@@ -621,24 +646,20 @@ private struct TierHeader: View {
         let on = model.enabledCount(tier)
         let total = ToolID.switchable.filter { $0.tier == tier }.count
         HStack(spacing: 8) {
-            Image(systemName: copy.symbol)
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.white)
-                .frame(width: 22, height: 22)
-                .background(tier.tint.gradient, in: RoundedRectangle(cornerRadius: 6, style: .continuous))
-            Text(copy.title).font(.headline)
-            Text(on == 0 ? String(localized: "Off") : String(localized: "\(on) of \(total) on")).foregroundStyle(.secondary)
+            SymbolTile(symbol: copy.symbol, signal: tier.signal, size: 24)
+            Text(copy.title)
+            Text(on == 0 ? String(localized: "Off") : String(localized: "\(on) of \(total) on"))
+                .font(.system(size: 13, weight: .regular)).foregroundStyle(Theme.textWeak)
             Spacer()
             if on > 0 {
                 Button("Turn All Off") { Task { await model.setTier(tier, enabled: false) } }
-                    .buttonStyle(.link).font(.callout)
+                    .buttonStyle(.proton(.ghost)).font(.system(size: 13, weight: .regular))
             }
             if on < total {
                 Button("Turn All On…") { Task { await model.setTier(tier, enabled: true) } }
-                    .buttonStyle(.link).font(.callout)
+                    .buttonStyle(.proton(.ghost)).font(.system(size: 13, weight: .regular))
             }
         }
-        .padding(.bottom, 2)
     }
 }
 
@@ -648,19 +669,22 @@ private struct ToolRow: View {
 
     var body: some View {
         let copy = ToolCopy.for(tool)
-        Toggle(isOn: Binding(
-            get: { model.policy.enabledTools.contains(tool) },
-            set: { enabled in Task { await model.setTool(tool, enabled: enabled) } }
-        )) {
-            VStack(alignment: .leading, spacing: 3) {
-                Text(copy.title)
-                Text(copy.allows).font(.callout).foregroundStyle(.secondary)
-                Label(copy.risk, systemImage: "exclamationmark.triangle")
-                    .font(.caption).foregroundStyle(.secondary)
+        ProtonRow {
+            Toggle(isOn: Binding(
+                get: { model.policy.enabledTools.contains(tool) },
+                set: { enabled in Task { await model.setTool(tool, enabled: enabled) } }
+            )) {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(copy.title).foregroundStyle(Theme.text)
+                    Text(copy.allows).font(.system(size: 12)).foregroundStyle(Theme.textWeak)
+                    Label(copy.risk, systemImage: "exclamationmark.triangle")
+                        .font(.system(size: 11)).foregroundStyle(Theme.hint)
+                }
+                .fixedSize(horizontal: false, vertical: true)
             }
+            .toggleStyle(.proton)
+            .disabled(!model.configured)
         }
-        .toggleStyle(.switch)
-        .disabled(!model.configured)
     }
 }
 
@@ -670,42 +694,39 @@ private struct MailboxesPane: View {
     @Bindable var model: ControlModel
 
     var body: some View {
-        Form {
-            Section {
-                PaneHero(symbol: "tray.2", tint: Theme.interaction, title: "Mailboxes",
-                         text: "Choose what apps can see. A hidden mailbox doesn't exist for them: missing from lists and searches, its messages refused.")
-            }
-            Section {
+        PaneScroll {
+            PaneHero(symbol: "tray.2", tint: Theme.interaction, title: "Mailboxes",
+                     text: "Choose what apps can see. A hidden mailbox doesn't exist for them: missing from lists and searches, its messages refused.")
+            ProtonSection("Visible to apps", footer: Text("Hiding any mailbox also hides All Mail and Starred, which show every folder. Showing a mailbox again asks for Touch ID.")) {
                 switch model.mailboxState {
                 case .idle, .loading:
-                    HStack { ProgressView().controlSize(.small); Text("Reading your mailboxes from Bridge…").foregroundStyle(.secondary) }
+                    ProtonRow {
+                        HStack { ProgressView().controlSize(.small); Text("Reading your mailboxes from Bridge…").foregroundStyle(Theme.textWeak) }
+                    }
                 case .failed(let message):
-                    Text(message).foregroundStyle(.secondary)
+                    ProtonRow { Text(message).foregroundStyle(Theme.textWeak) }
                 case .loaded:
                     ForEach(model.mailboxes, id: \.name) { mailbox in
-                        Toggle(isOn: Binding(
-                            get: { !model.policy.isHidden(mailbox.name) },
-                            set: { visible in Task { await model.setMailbox(mailbox.name, visible: visible) } }
-                        )) {
-                            HStack {
-                                Image(systemName: symbol(for: mailbox)).foregroundStyle(.secondary).frame(width: 18)
-                                Text(display(mailbox.name))
-                                if let total = mailbox.total {
-                                    Text("\(total)").foregroundStyle(.tertiary).monospacedDigit()
+                        ProtonRow {
+                            Toggle(isOn: Binding(
+                                get: { !model.policy.isHidden(mailbox.name) },
+                                set: { visible in Task { await model.setMailbox(mailbox.name, visible: visible) } }
+                            )) {
+                                HStack(spacing: 8) {
+                                    Image(systemName: symbol(for: mailbox)).foregroundStyle(Theme.textWeak).frame(width: 18)
+                                    Text(display(mailbox.name))
+                                    if let total = mailbox.total {
+                                        Text("\(total)").foregroundStyle(Theme.hint).monospacedDigit()
+                                    }
                                 }
                             }
+                            .toggleStyle(.proton)
+                            .disabled(Policy.aggregateViews.contains(mailbox.name) && !model.policy.hiddenMailboxes.isEmpty)
                         }
-                        .toggleStyle(.switch)
-                        .disabled(Policy.aggregateViews.contains(mailbox.name) && !model.policy.hiddenMailboxes.isEmpty)
                     }
                 }
-            } header: {
-                Text("Visible to apps")
-            } footer: {
-                Text("Hiding any mailbox also hides All Mail and Starred, which show every folder. Showing a mailbox again asks for Touch ID.")
             }
         }
-        .formStyle(.grouped)
         .task { if model.mailboxState == .idle { await model.loadMailboxes() } }
     }
 
@@ -736,47 +757,44 @@ private struct ClientsPane: View {
     @Bindable var model: ControlModel
 
     var body: some View {
-        Form {
-            Section {
-                PaneHero(symbol: "app.connected.to.app.below.fill", tint: Theme.interaction, title: "Apps",
-                         text: "Connect Postern to the apps you use. Connecting only tells an app where Postern is: what it may do stays in Tools.")
-            }
-            Section {
+        PaneScroll {
+            PaneHero(symbol: "app.connected.to.app.below.fill", tint: Theme.interaction, title: "Apps",
+                     text: "Connect Postern to the apps you use. Connecting only tells an app where Postern is: what it may do stays in Tools.")
+            ProtonSection("Connected now") {
                 if model.connectedApps.isEmpty {
-                    Text("No app is connected right now.").foregroundStyle(.secondary)
+                    ProtonRow { Text("No app is connected right now.").foregroundStyle(Theme.textWeak) }
                 } else {
                     ForEach(sessionsByApp, id: \.name) { app in
-                        HStack(spacing: 10) {
-                            Circle().fill(Theme.success).frame(width: 8, height: 8)
-                            Text(app.name)
-                            Spacer()
-                            Text("\(app.count) sessions").foregroundStyle(.secondary)
+                        ProtonRow {
+                            HStack(spacing: 10) {
+                                Circle().fill(Theme.success).frame(width: 8, height: 8)
+                                Text(app.name)
+                                Spacer()
+                                Text("\(app.count) sessions").foregroundStyle(Theme.textWeak)
+                            }
                         }
                     }
                 }
-            } header: {
-                Text("Connected now")
             }
-            Section {
+            ProtonSection("Your apps", footer: Text("Connecting writes one entry in the app's settings: the path of Postern's helper, never a password. Tools still stay off until you turn them on.")) {
                 ForEach(model.clients.filter(\.installed) + model.clients.filter { !$0.installed }) { row in
-                    LabeledContent {
-                        clientAction(row)
-                    } label: {
-                        VStack(alignment: .leading, spacing: 2) {
-                            Text(row.target.title)
-                            Text(caption(row)).font(.caption).foregroundStyle(.secondary)
+                    ProtonRow {
+                        HStack(alignment: .center) {
+                            VStack(alignment: .leading, spacing: 2) {
+                                Text(row.target.title)
+                                Text(caption(row)).font(.system(size: 12)).foregroundStyle(Theme.textWeak)
+                            }
+                            Spacer(minLength: 12)
+                            clientAction(row)
                         }
                     }
                 }
-                Button("Add Another Claude Code Profile…") { model.addProfile() }
-            } header: {
-                Text("Your apps")
-            } footer: {
-                Text("Connecting writes one entry in the app's settings: the path of Postern's helper, never a password. Tools still stay off until you turn them on.")
+                ProtonRow {
+                    Button("Add Another Claude Code Profile…") { model.addProfile() }.buttonStyle(.proton(.ghost))
+                }
             }
             OtherAppSection()
         }
-        .formStyle(.grouped)
     }
 
     private var sessionsByApp: [(name: String, count: Int)] {
@@ -785,15 +803,15 @@ private struct ClientsPane: View {
 
     @ViewBuilder private func clientAction(_ row: ClientRow) -> some View {
         if !row.installed {
-            Text("Not on this Mac").foregroundStyle(.secondary)
+            Text("Not on this Mac").foregroundStyle(Theme.hint)
         } else {
             switch row.status {
             case .connected:
-                Label("Connected", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.success)
+                Label("Connected", systemImage: "checkmark.circle.fill").foregroundStyle(Theme.successStrong)
             case .notConnected:
-                Button("Connect") { model.connect(row) }
+                Button("Connect") { model.connect(row) }.buttonStyle(.proton(.primary, size: .small)).fixedSize()
             case .connectedElsewhere:
-                Button("Update") { model.connect(row) }
+                Button("Update") { model.connect(row) }.buttonStyle(.proton(.secondary, size: .small)).fixedSize()
             }
         }
     }
@@ -810,31 +828,32 @@ private struct OtherAppSection: View {
     @State private var copied = false
 
     var body: some View {
-        Section {
-            Picker("Format", selection: $snippet) {
-                ForEach(SetupSnippet.allCases) { Text($0.title).tag($0) }
-            }
-            Text(snippet.text(relayPath: ClientConnector.relayPath))
-                .font(.system(.callout, design: .monospaced))
-                .textSelection(.enabled)
-                .frame(maxWidth: .infinity, alignment: .leading)
-                .padding(10)
-                .background(Theme.lowered, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
-                .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border))
-            HStack {
-                Spacer()
-                Button(copied ? String(localized: "Copied") : String(localized: "Copy")) {
-                    NSPasteboard.general.clearContents()
-                    NSPasteboard.general.setString(snippet.text(relayPath: ClientConnector.relayPath), forType: .string)
-                    copied = true
-                    Task { try? await Task.sleep(for: .seconds(2)); copied = false }
+        ProtonSection("Any other app", footer: Text("Every app that speaks MCP can use Postern: paste this into its MCP settings. It names Postern's helper and nothing else.")) {
+            ProtonRow {
+                VStack(alignment: .leading, spacing: 12) {
+                    Picker("Format", selection: $snippet) {
+                        ForEach(SetupSnippet.allCases) { Text($0.title).tag($0) }
+                    }
+                    Text(snippet.text(relayPath: ClientConnector.relayPath))
+                        .font(.system(size: 12, design: .monospaced))
+                        .textSelection(.enabled)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(12)
+                        .background(Theme.canvas, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+                        .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border))
+                    HStack {
+                        Spacer()
+                        Button(copied ? String(localized: "Copied") : String(localized: "Copy")) {
+                            NSPasteboard.general.clearContents()
+                            NSPasteboard.general.setString(snippet.text(relayPath: ClientConnector.relayPath), forType: .string)
+                            copied = true
+                            Task { try? await Task.sleep(for: .seconds(2)); copied = false }
+                        }
+                        .buttonStyle(.proton(.primary))
+                        .fixedSize()
+                    }
                 }
-                .buttonStyle(.borderedProminent)
             }
-        } header: {
-            Text("Any other app")
-        } footer: {
-            Text("Every app that speaks MCP can use Postern: paste this into its MCP settings. It names Postern's helper and nothing else.")
         }
     }
 }
@@ -847,43 +866,49 @@ private struct ActivityPane: View {
     @State private var refusedOnly = false
 
     var body: some View {
-        Form {
-            Section {
-                PaneHero(symbol: "list.bullet.rectangle", tint: Theme.interaction, title: "Activity",
-                         text: "Every call an app made through Postern, kept for 90 days. Postern never writes down what your mail says.")
-                IntegrityBanner(integrity: model.integrity)
-            }
+        PaneScroll {
+            PaneHero(symbol: "list.bullet.rectangle", tint: Theme.interaction, title: "Activity",
+                     text: "Every call an app made through Postern, kept for 90 days. Postern never writes down what your mail says.")
+            IntegrityBanner(integrity: model.integrity)
             if model.activity.isEmpty {
-                Section {
-                    Text("Every tool an app uses through Postern will appear here.").foregroundStyle(.secondary)
+                ProtonSection {
+                    ProtonRow { Text("Every tool an app uses through Postern will appear here.").foregroundStyle(Theme.textWeak) }
                 }
             } else {
-                Section {
-                    HStack(spacing: 12) {
-                        Image(systemName: "line.3.horizontal.decrease").foregroundStyle(.secondary)
-                        TextField("Filter by app or tool", text: $search).textFieldStyle(.plain)
-                        Picker("Show", selection: $refusedOnly) {
-                            Text("All").tag(false)
-                            Text("Refused").tag(true)
+                HStack(spacing: 12) {
+                    ProtonField(placeholder: "Filter by app or tool", text: $search, symbol: "magnifyingglass")
+                    // Proton's glass filter chips.
+                    GlassEffectContainer(spacing: 8) {
+                        HStack(spacing: 8) {
+                            chip("All", selected: !refusedOnly) { refusedOnly = false }
+                            chip("Refused", selected: refusedOnly) { refusedOnly = true }
                         }
-                        .pickerStyle(.segmented)
-                        .labelsHidden()
-                        .frame(width: 170)
                     }
                 }
                 if days.isEmpty {
-                    Section { Text("Nothing matches.").foregroundStyle(.secondary) }
+                    ProtonSection {
+                        ProtonRow { Text("Nothing matches.").foregroundStyle(Theme.textWeak) }
+                    }
                 }
                 ForEach(days, id: \.day) { group in
-                    Section(group.title) {
+                    ProtonSection(header: { Text(verbatim: group.title) }) {
                         ForEach(group.records) { item in
-                            ActivityDetailRow(record: item.record)
+                            ProtonRow { ActivityDetailRow(record: item.record) }
                         }
                     }
                 }
             }
         }
-        .formStyle(.grouped)
+    }
+
+    private func chip(_ title: LocalizedStringKey, selected: Bool, action: @escaping () -> Void) -> some View {
+        Button(action: action) {
+            Text(title).font(.system(size: 12)).padding(.vertical, 6).padding(.horizontal, 12)
+        }
+        .buttonStyle(.plain)
+        .foregroundStyle(selected ? Theme.chipSelectedText : Theme.text)
+        .glassEffect(.regular.interactive().tint(selected ? Theme.chipSelected : nil), in: .capsule)
+        .accessibilityAddTraits(selected ? .isSelected : [])
     }
 
     private var days: [(day: Date, title: String, records: [IndexedRecord])] {
@@ -910,13 +935,13 @@ private struct ActivityDetailRow: View {
         HStack(spacing: 12) {
             OutcomeLabel(outcome: record.outcome).labelStyle(.iconOnly).frame(width: 18)
             Text(record.date.formatted(date: .omitted, time: .shortened))
-                .monospacedDigit().foregroundStyle(.secondary).frame(width: 64, alignment: .leading)
+                .monospacedDigit().foregroundStyle(Theme.textWeak).frame(width: 64, alignment: .leading)
             Text(record.client).frame(width: 130, alignment: .leading).lineLimit(1)
-            Text(record.tool).font(.system(.body, design: .monospaced)).lineLimit(1)
+            Text(record.tool).font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.textWeak).lineLimit(1)
             Spacer()
-            if let items = record.items { Text("\(items) items").foregroundStyle(.secondary).monospacedDigit() }
+            if let items = record.items { Text("\(items) items").foregroundStyle(Theme.textWeak).monospacedDigit() }
             if record.outcome != "ok" {
-                OutcomeLabel(outcome: record.outcome).labelStyle(.titleOnly)
+                Pill(text: OutcomeLabel.text(for: record.outcome), color: Theme.warning, onColor: .black)
             }
         }
     }
@@ -938,15 +963,14 @@ private struct IntegrityBanner: View {
     var body: some View {
         switch integrity {
         case .intact(let count)?:
-            Label("Log intact, \(count) entries kept for 90 days. Each entry is chained to the one before it.",
-                  systemImage: "checkmark.seal.fill")
-                .foregroundStyle(.secondary).symbolRenderingMode(.multicolor)
+            ProtonBanner(kind: .success, symbol: "checkmark.seal",
+                         text: Text("Log intact, \(count) entries kept for 90 days. Each entry is chained to the one before it."))
         case .broken(let line)?:
-            Label("The log was changed outside Postern, at entry \(line).", systemImage: "exclamationmark.octagon.fill")
-                .foregroundStyle(Theme.danger)
+            ProtonBanner(kind: .danger, symbol: "exclamationmark.octagon.fill",
+                         text: Text("The log was changed outside Postern, at entry \(line)."))
         case .headMismatch?:
-            Label("Entries were removed from the log outside Postern.", systemImage: "exclamationmark.octagon.fill")
-                .foregroundStyle(Theme.danger)
+            ProtonBanner(kind: .danger, symbol: "exclamationmark.octagon.fill",
+                         text: Text("Entries were removed from the log outside Postern."))
         case nil:
             EmptyView()
         }
@@ -977,9 +1001,9 @@ private struct OutcomeLabel: View {
 
     var body: some View {
         if outcome == "ok" {
-            Label("Done", systemImage: "checkmark").foregroundStyle(.secondary)
+            Label("Done", systemImage: "checkmark").foregroundStyle(Theme.successStrong)
         } else {
-            Label(Self.text(for: outcome), systemImage: "hand.raised").foregroundStyle(Theme.warning)
+            Label(Self.text(for: outcome), systemImage: "hand.raised").foregroundStyle(Theme.dynamic(light: 0xE66300, dark: 0xFFAD33))
         }
     }
 }
@@ -991,9 +1015,9 @@ struct ActivityRow: View {
         HStack {
             OutcomeLabel(outcome: record.outcome).labelStyle(.iconOnly).frame(width: 18)
             Text(record.client)
-            Text(record.tool).foregroundStyle(.secondary)
+            Text(record.tool).font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.textWeak)
             Spacer()
-            Text(record.date.formatted(.relative(presentation: .named))).foregroundStyle(.tertiary)
+            Text(record.date.formatted(.relative(presentation: .named))).foregroundStyle(Theme.hint)
         }
     }
 }
@@ -1004,66 +1028,73 @@ private struct SecurityPane: View {
     @Bindable var model: ControlModel
 
     var body: some View {
-        Form {
-            Section {
-                PaneHero(symbol: "lock.shield", tint: Theme.interaction, title: "Security",
-                         text: "How you approve, how much apps may send, the Bridge certificate Postern trusts, and updates. Anything that gives apps more power asks for Touch ID.")
-            }
-            Section {
-                Toggle(isOn: Binding(
-                    get: { model.policy.allowPasswordFallback },
-                    set: { value in Task { await model.setPasswordFallback(value) } }
-                )) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Accept my Mac password when Touch ID isn't available")
-                        Text("For a closed lid or an external keyboard. Touch ID can't be typed by a program; a password can, if someone learned it.")
-                            .font(.callout).foregroundStyle(.secondary)
+        PaneScroll {
+            PaneHero(symbol: "lock.shield", tint: Theme.interaction, title: "Security",
+                     text: "How you approve, how much apps may send, the Bridge certificate Postern trusts, and updates. Anything that gives apps more power asks for Touch ID.")
+            ProtonSection("Approvals") {
+                ProtonRow {
+                    Toggle(isOn: Binding(
+                        get: { model.policy.allowPasswordFallback },
+                        set: { value in Task { await model.setPasswordFallback(value) } }
+                    )) {
+                        SettingLabel(title: "Accept my Mac password when Touch ID isn't available",
+                                     detail: "For a closed lid or an external keyboard. Touch ID can't be typed by a program; a password can, if someone learned it.")
                     }
+                    .toggleStyle(.proton)
                 }
-                .toggleStyle(.switch)
-            } header: {
-                Text("Approvals")
             }
             SendingSection(model: model)
-            Section {
-                Toggle(isOn: Binding(
-                    get: { model.policy.pauseWhenLocked },
-                    set: { value in Task { await model.setPauseWhenLocked(value) } }
-                )) {
-                    VStack(alignment: .leading, spacing: 3) {
-                        Text("Pause Postern when the screen locks")
-                        Text("Apps lose access while you are away. You resume with Touch ID.")
-                            .font(.callout).foregroundStyle(.secondary)
+            ProtonSection("Pause") {
+                ProtonRow {
+                    Toggle(isOn: Binding(
+                        get: { model.policy.pauseWhenLocked },
+                        set: { value in Task { await model.setPauseWhenLocked(value) } }
+                    )) {
+                        SettingLabel(title: "Pause Postern when the screen locks",
+                                     detail: "Apps lose access while you are away. You resume with Touch ID.")
                     }
+                    .toggleStyle(.proton)
                 }
-                .toggleStyle(.switch)
-            } header: {
-                Text("Pause")
             }
-            Section {
+            ProtonSection("Proton Mail Bridge", footer: Text("Postern only talks to the certificate you trusted, and always encrypts before it sends your Bridge password.")) {
                 if let pin = model.pin {
-                    LabeledContent("Certificate") {
-                        Text(pin.display.split(separator: ":").prefix(8).joined(separator: " ") + " …")
-                            .font(.system(.body, design: .monospaced)).textSelection(.enabled)
+                    ProtonRow {
+                        HStack(alignment: .firstTextBaseline) {
+                            Text("Certificate")
+                            Spacer(minLength: 12)
+                            Text(pin.display.split(separator: ":").prefix(8).joined(separator: " ") + " …")
+                                .font(.system(size: 12, design: .monospaced)).foregroundStyle(Theme.textWeak).textSelection(.enabled)
+                        }
                     }
                 }
                 if let endpoint = model.endpoint {
-                    LabeledContent("Reading (IMAP)", value: String(localized: "Port \(String(endpoint.imap.port)), \(modeText(endpoint.imap.mode))"))
-                    LabeledContent("Sending (SMTP)", value: String(localized: "Port \(String(endpoint.smtp.port)), \(modeText(endpoint.smtp.mode))"))
+                    ProtonValueRow(label: "Reading (IMAP)", value: String(localized: "Port \(String(endpoint.imap.port)), \(modeText(endpoint.imap.mode))"))
+                    ProtonValueRow(label: "Sending (SMTP)", value: String(localized: "Port \(String(endpoint.smtp.port)), \(modeText(endpoint.smtp.mode))"))
                 }
-                Button("Run Setup Again…") { model.openSetup() }
-            } header: {
-                Text("Proton Mail Bridge")
-            } footer: {
-                Text("Postern only talks to the certificate you trusted, and always encrypts before it sends your Bridge password.")
+                ProtonRow {
+                    Button("Run Setup Again…") { model.openSetup() }.buttonStyle(.proton(.secondary)).fixedSize()
+                }
             }
             if let updates = model.updates { UpdatesSection(updates: updates) }
         }
-        .formStyle(.grouped)
     }
 
     private func modeText(_ mode: TLSMode) -> String {
         mode == .startTLS ? String(localized: "encrypted with STARTTLS") : String(localized: "encrypted from the first byte")
+    }
+}
+
+/// A setting's title and the sentence that explains it.
+private struct SettingLabel: View {
+    let title: LocalizedStringKey
+    let detail: LocalizedStringKey
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 3) {
+            Text(title).foregroundStyle(Theme.text)
+            Text(detail).font(.system(size: 12)).foregroundStyle(Theme.textWeak)
+        }
+        .fixedSize(horizontal: false, vertical: true)
     }
 }
 
@@ -1073,26 +1104,24 @@ private struct UpdatesSection: View {
     let updates: Updates
 
     var body: some View {
-        Section {
-            Toggle(isOn: Binding(
-                get: { updates.checksAutomatically },
-                set: { updates.setChecksAutomatically($0) }
-            )) {
-                VStack(alignment: .leading, spacing: 3) {
-                    Text("Check for updates automatically")
-                    Text("Once a day. Nothing is installed without asking you.")
-                        .font(.callout).foregroundStyle(.secondary)
+        ProtonSection("Updates", footer: Text("Postern reads the list of versions on getpostern.vercel.app and downloads updates from GitHub. It installs only those signed by its developer. Apart from Bridge, this is the only connection Postern makes.")) {
+            ProtonRow {
+                Toggle(isOn: Binding(
+                    get: { updates.checksAutomatically },
+                    set: { updates.setChecksAutomatically($0) }
+                )) {
+                    SettingLabel(title: "Check for updates automatically", detail: "Once a day. Nothing is installed without asking you.")
                 }
+                .toggleStyle(.proton)
+                .disabled(!updates.active)
             }
-            .toggleStyle(.switch)
-            .disabled(!updates.active)
-            LabeledContent("Version", value: Updates.currentVersion)
-            Button(updates.menuTitle) { updates.checkForUpdates() }
-                .disabled(!updates.canCheck)
-        } header: {
-            Text("Updates")
-        } footer: {
-            Text("Postern reads the list of versions on getpostern.vercel.app and downloads updates from GitHub. It installs only those signed by its developer. Apart from Bridge, this is the only connection Postern makes.")
+            ProtonValueRow(label: "Version", value: Updates.currentVersion)
+            ProtonRow {
+                Button(updates.menuTitle) { updates.checkForUpdates() }
+                    .buttonStyle(.proton(.secondary))
+                    .fixedSize()
+                    .disabled(!updates.canCheck)
+            }
         }
     }
 }
@@ -1106,60 +1135,54 @@ private struct SendingSection: View {
     @State private var newSender = ""
 
     var body: some View {
-        Section {
-            Stepper(value: Binding(get: { model.policy.sendsPerHour },
-                                   set: { value in Task { await model.setLimits(perHour: value, perDay: model.policy.sendsPerDay) } }),
-                    in: 1...300) {
-                LabeledContent("At most per hour", value: String(localized: "\(model.policy.sendsPerHour) emails"))
+        ProtonSection("Sending", footer: Text("Raising a limit asks for Touch ID. A batch waits for room when a limit is reached. Proton sets its own limits by plan and account reputation (150 a day on the free plan) and may stop an account that looks like bulk mail: raise these only as far as your use needs.")) {
+            ProtonRow {
+                Stepper(value: Binding(get: { model.policy.sendsPerHour },
+                                       set: { value in Task { await model.setLimits(perHour: value, perDay: model.policy.sendsPerDay) } }),
+                        in: 1...300) {
+                    LabeledContent("At most per hour", value: String(localized: "\(model.policy.sendsPerHour) emails"))
+                }
             }
-            Stepper(value: Binding(get: { model.policy.sendsPerDay },
-                                   set: { value in Task { await model.setLimits(perHour: model.policy.sendsPerHour, perDay: value) } }),
-                    in: 1...1000) {
-                LabeledContent("At most per day", value: String(localized: "\(model.policy.sendsPerDay) emails"))
+            ProtonRow {
+                Stepper(value: Binding(get: { model.policy.sendsPerDay },
+                                       set: { value in Task { await model.setLimits(perHour: model.policy.sendsPerHour, perDay: value) } }),
+                        in: 1...1000) {
+                    LabeledContent("At most per day", value: String(localized: "\(model.policy.sendsPerDay) emails"))
+                }
             }
-        } header: {
-            Text("Sending")
-        } footer: {
-            Text("Raising a limit asks for Touch ID. A batch waits for room when a limit is reached. Proton sets its own limits by plan and account reputation (150 a day on the free plan) and may stop an account that looks like bulk mail: raise these only as far as your use needs.")
         }
-        Section {
+        ProtonSection("Trusted recipients", footer: Text("Emails whose every recipient is trusted leave without the panel, such as notes to yourself. Adding someone asks for Touch ID.")) {
             AddressList(addresses: model.policy.trustedRecipients.sorted(), empty: "Nobody. Every email shows the approval panel.") { email in
                 Task { await model.untrust(email) }
             }
-            HStack {
-                TextField("Add an address you trust", text: $newTrusted).onSubmit(addTrusted)
-                Button("Trust…", action: addTrusted).disabled(newTrusted.isEmpty)
+            ProtonRow {
+                HStack {
+                    ProtonField(placeholder: "Add an address you trust", text: $newTrusted, onSubmit: addTrusted)
+                    Button("Trust…", action: addTrusted).buttonStyle(.proton(.secondary)).fixedSize().disabled(newTrusted.isEmpty)
+                }
             }
-        } header: {
-            Text("Trusted recipients")
-        } footer: {
-            Text("Emails whose every recipient is trusted leave without the panel, such as notes to yourself. Adding someone asks for Touch ID.")
         }
-        Section {
+        ProtonSection("Only send to", footer: Text("When this list is not empty, apps cannot write to anyone else, even with your approval.")) {
             AddressList(addresses: model.policy.allowedRecipients.sorted(), empty: "Anyone. Add addresses to send only to them.") { email in
                 Task { await model.disallow(email) }
             }
-            HStack {
-                TextField("Add an address", text: $newAllowed).onSubmit(addAllowed)
-                Button("Allow…", action: addAllowed).disabled(newAllowed.isEmpty)
+            ProtonRow {
+                HStack {
+                    ProtonField(placeholder: "Add an address", text: $newAllowed, onSubmit: addAllowed)
+                    Button("Allow…", action: addAllowed).buttonStyle(.proton(.secondary)).fixedSize().disabled(newAllowed.isEmpty)
+                }
             }
-        } header: {
-            Text("Only send to")
-        } footer: {
-            Text("When this list is not empty, apps cannot write to anyone else, even with your approval.")
         }
-        Section {
+        ProtonSection("Send from", footer: Text("Apps can send from your account's address and from these aliases; the panel always shows which one. Adding one asks for Touch ID. In Bridge's split mode, an alias needs its own Bridge account.")) {
             AddressList(addresses: model.policy.senderAddresses.sorted(), empty: "Only your account's address.") { email in
                 Task { await model.removeSender(email) }
             }
-            HStack {
-                TextField("Add an alias of your Proton account", text: $newSender).onSubmit(addSender)
-                Button("Add…", action: addSender).disabled(newSender.isEmpty)
+            ProtonRow {
+                HStack {
+                    ProtonField(placeholder: "Add an alias of your Proton account", text: $newSender, onSubmit: addSender)
+                    Button("Add…", action: addSender).buttonStyle(.proton(.secondary)).fixedSize().disabled(newSender.isEmpty)
+                }
             }
-        } header: {
-            Text("Send from")
-        } footer: {
-            Text("Apps can send from your account's address and from these aliases; the panel always shows which one. Adding one asks for Touch ID. In Bridge's split mode, an alias needs its own Bridge account.")
         }
     }
 
@@ -1189,13 +1212,15 @@ private struct AddressList: View {
 
     var body: some View {
         if addresses.isEmpty {
-            Text(empty).foregroundStyle(.secondary)
+            ProtonRow { Text(empty).foregroundStyle(Theme.textWeak) }
         } else {
             ForEach(addresses, id: \.self) { email in
-                HStack {
-                    Text(email)
-                    Spacer()
-                    Button("Remove") { remove(email) }.buttonStyle(.borderless)
+                ProtonRow {
+                    HStack {
+                        Text(email)
+                        Spacer()
+                        Button("Remove") { remove(email) }.buttonStyle(.proton(.ghost)).foregroundStyle(Theme.danger)
+                    }
                 }
             }
         }

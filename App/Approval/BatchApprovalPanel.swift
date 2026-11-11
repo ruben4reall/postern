@@ -58,25 +58,27 @@ struct BatchApprovalView: View {
         VStack(alignment: .leading, spacing: 14) {
             header
             if request.items.count > Self.filterThreshold {
-                TextField("Show only the emails to or about…", text: $filter)
-                    .textFieldStyle(.roundedBorder)
+                ProtonField(placeholder: "Show only the emails to or about…", text: $filter, symbol: "magnifyingglass")
             }
             ScrollView {
                 LazyVStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(shown.enumerated()), id: \.element.id) { index, item in
-                        if index > 0 { Divider() }
+                        if index > 0 { Rectangle().fill(Theme.border).frame(height: 1) }
                         row(item)
                     }
                 }
             }
-            .background(Theme.lowered, in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
-            .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous).strokeBorder(Theme.border))
-            actions
+            .scrollEdgeEffectStyle(.soft, for: .bottom)
+            .background(Theme.lowered)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border))
         }
         .padding(.horizontal, 24)
         .padding(.top, 36)
-        .padding(.bottom, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .safeAreaInset(edge: .bottom, spacing: 0) { actions }
         .frame(width: 720, height: Self.height(for: request))
+        .background(Theme.canvas)
         .tint(Theme.accent)
     }
 
@@ -87,7 +89,7 @@ struct BatchApprovalView: View {
         let filter = request.items.count > filterThreshold ? 36 : 0
         let schedule = request.schedule == nil ? 0 : 44
         let rows = request.items.count > filterThreshold ? 3 : min(request.items.count, 4)
-        return CGFloat(236 + filter + schedule + 132 * rows)
+        return CGFloat(270 + filter + schedule + 132 * rows)
     }
 
     private var shown: [BatchItem] {
@@ -132,42 +134,35 @@ struct BatchApprovalView: View {
     }
 
     private var header: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: "paperplane.circle.fill")
-                .font(.system(size: 34))
-                .foregroundStyle(Theme.accent)
-                .symbolRenderingMode(.hierarchical)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("\(request.client) wants to send \(request.items.count) emails").font(.title3.weight(.semibold))
-                Text("Untick any that should wait. The others leave one by one, exactly as shown, after one Touch ID.")
-                    .foregroundStyle(.secondary)
-                    .fixedSize(horizontal: false, vertical: true)
-                Text(summary).font(.callout).lineLimit(2)
-                if unannounced > 0 {
-                    Label("\(unannounced) emails mention a file but carry none.",
-                          systemImage: "exclamationmark.triangle.fill")
-                        .font(.callout).foregroundStyle(Theme.warning)
-                }
-                if let schedule = request.schedule {
-                    Label(scheduleText(schedule), systemImage: "clock")
-                        .font(.callout)
-                        .foregroundStyle(schedule.finish.timeIntervalSinceNow > 86_400 ? Theme.warning : Theme.textWeak)
-                        .fixedSize(horizontal: false, vertical: true)
-                        .help("Postern waits for room when a limit is reached. Raise the limits in Postern's window to send faster.")
-                }
-            }
-            Spacer()
-            VStack(alignment: .trailing, spacing: 6) {
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    let remaining = max(0, Int(deadline.timeIntervalSince(context.date)))
-                    Text(String(format: "%d:%02d", remaining / 60, remaining % 60))
-                        .font(.callout.monospacedDigit()).foregroundStyle(remaining < 60 ? Theme.warning : Theme.textWeak)
-                }
+        VStack(alignment: .leading, spacing: 10) {
+            PanelHeader(symbol: "paperplane", signal: .accent,
+                        title: Text("\(request.client) wants to send \(request.items.count) emails"),
+                        detail: Text("Untick any that should wait. The others leave one by one, exactly as shown, after one Touch ID."),
+                        deadline: deadline, warnBelow: 60)
+            HStack(alignment: .firstTextBaseline) {
+                Text(summary).font(.system(size: 13)).foregroundStyle(Theme.text).lineLimit(2)
+                Spacer(minLength: 8)
                 Button(chosen.isEmpty ? String(localized: "Tick All") : String(localized: "Untick All")) {
                     chosen = chosen.isEmpty ? Set(request.items.map(\.id)) : []
                 }
-                .buttonStyle(.link)
-                .foregroundStyle(Theme.accent)
+                .buttonStyle(.proton(.ghost, size: .small))
+                .fixedSize()
+            }
+            if unannounced > 0 {
+                ProtonBanner(kind: .warning, symbol: "exclamationmark.triangle.fill",
+                             text: Text("\(unannounced) emails mention a file but carry none."))
+            }
+            if let schedule = request.schedule {
+                if schedule.finish.timeIntervalSinceNow > 86_400 {
+                    ProtonBanner(kind: .warning, symbol: "clock", text: Text(scheduleText(schedule)))
+                        .help("Postern waits for room when a limit is reached. Raise the limits in Postern's window to send faster.")
+                } else {
+                    Label(scheduleText(schedule), systemImage: "clock")
+                        .font(.system(size: 13))
+                        .foregroundStyle(Theme.textWeak)
+                        .fixedSize(horizontal: false, vertical: true)
+                        .help("Postern waits for room when a limit is reached. Raise the limits in Postern's window to send faster.")
+                }
             }
         }
     }
@@ -177,59 +172,59 @@ struct BatchApprovalView: View {
             get: { chosen.contains(item.id) },
             set: { isOn in if isOn { chosen.insert(item.id) } else { chosen.remove(item.id) } }
         )
+        let ticked = chosen.contains(item.id)
+        // Proton's unread and read rows: a ticked email on white and in bold, an unticked one greyed.
         return HStack(alignment: .top, spacing: 12) {
             Toggle("", isOn: included).toggleStyle(.checkbox).labelsHidden()
             VStack(alignment: .leading, spacing: 5) {
-                Text(item.subject.isEmpty ? String(localized: "(no subject)") : item.subject).fontWeight(.medium).lineLimit(1)
+                Text(item.subject.isEmpty ? String(localized: "(no subject)") : item.subject)
+                    .font(.system(size: 13, weight: ticked ? .semibold : .regular)).foregroundStyle(Theme.text).lineLimit(1)
                 HStack(spacing: 6) {
-                    Text("From").foregroundStyle(.secondary).frame(minWidth: 30, alignment: .leading)
-                    Text(item.from.email).lineLimit(1).truncationMode(.middle)
+                    Text("From").foregroundStyle(Theme.textWeak).frame(minWidth: 30, alignment: .leading)
+                    Text(item.from.email).foregroundStyle(Theme.text).lineLimit(1).truncationMode(.middle)
                 }
-                .font(.callout)
+                .font(.system(size: 12))
                 ForEach(Array(addresses(item).enumerated()), id: \.offset) { _, entry in
                     let (kind, address) = entry
                     HStack(spacing: 6) {
-                        Text(kind).foregroundStyle(.secondary).frame(minWidth: 30, alignment: .leading)
-                        Text(address.name.map { "\($0) <\(address.email)>" } ?? address.email).lineLimit(1).truncationMode(.middle)
+                        Text(kind).foregroundStyle(Theme.textWeak).frame(minWidth: 30, alignment: .leading)
+                        Text(address.name.map { "\($0) <\(address.email)>" } ?? address.email).foregroundStyle(Theme.text)
+                            .lineLimit(1).truncationMode(.middle)
                         ForEach(item.badges[address.email.lowercased()] ?? [], id: \.self) { BadgeView(badge: $0) }
                     }
-                    .font(.callout)
+                    .font(.system(size: 12))
                 }
-                Text(preview(item.text)).font(.callout).foregroundStyle(.secondary).lineLimit(3)
+                Text(preview(item.text)).font(.system(size: 12)).foregroundStyle(Theme.textWeak).lineLimit(3)
                 if !item.files.isEmpty {
                     Label(item.files.map { "\($0.filename) (\(Self.size($0.size)))" }.joined(separator: " · "),
                           systemImage: "paperclip")
-                        .font(.caption).foregroundStyle(.secondary).lineLimit(2)
+                        .font(.system(size: 12)).foregroundStyle(Theme.textWeak).lineLimit(2)
                 }
                 if let words = item.missingAttachment {
                     Label("Says “\(words)” but carries no file.", systemImage: "exclamationmark.triangle.fill")
-                        .font(.caption).foregroundStyle(Theme.warning)
+                        .font(.system(size: 12)).foregroundStyle(Theme.dynamic(light: 0xB24E05, dark: 0xFFC164))
                 }
             }
+            .opacity(ticked ? 1 : 0.5)
         }
-        .opacity(chosen.contains(item.id) ? 1 : 0.45)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .padding(.vertical, 10)
-        .padding(.horizontal, 14)
+        .padding(.vertical, 12)
+        .padding(.horizontal, 16)
+        .background(ticked ? Theme.canvas : Theme.lowered)
     }
 
     private var actions: some View {
-        HStack(spacing: 10) {
-            TextField("Why, for the app (optional)", text: $reason)
-                .textFieldStyle(.roundedBorder).frame(minWidth: 110, maxWidth: 210)
-            Spacer(minLength: 0)
-            Button("Send None") { reject(reason.isEmpty ? nil : reason) }.fixedSize()
+        GlassActionBar(reason: $reason) {
+            Button("Send None") { reject(reason.isEmpty ? nil : reason) }.buttonStyle(.proton(.secondary, size: .large)).fixedSize()
             Button {
                 send(chosen)
             } label: {
                 Label("Send \(chosen.count) with Touch ID", systemImage: "touchid")
             }
-            .buttonStyle(.borderedProminent)
-            .tint(Theme.interaction)
+            .buttonStyle(.proton(.primary, size: .large))
             .disabled(chosen.isEmpty)
             .fixedSize()
         }
-        .controlSize(.large)
     }
 
     private func addresses(_ item: BatchItem) -> [(String, Address)] {

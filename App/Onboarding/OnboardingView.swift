@@ -31,7 +31,7 @@ struct OnboardingView: View {
             StepHeader(symbol: nil, title: "Postern guards your mailbox",
                        text: "Postern lets apps like Claude Code work with your Proton Mail, through Proton Mail Bridge on this Mac. You decide what they may do; nothing leaves without you.")
             Text("First, Postern looks for Bridge. Make sure it is open and signed in.")
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textWeak)
                 .padding(.top, 20)
         case .trust:
             StepHeader(symbol: "lock.shield", title: "Trust Bridge's certificate",
@@ -41,7 +41,7 @@ struct OnboardingView: View {
             }
             Text("To double-check, compare it with the certificate Bridge exports in Settings, Advanced settings.")
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textWeak)
                 .padding(.top, 14)
         case .signIn:
             StepHeader(symbol: "key", title: "Sign in to Bridge",
@@ -58,7 +58,7 @@ struct OnboardingView: View {
             .padding(.top, 20)
             Text("The password goes straight into your Mac's Keychain, where only Postern can read it.")
                 .font(.callout)
-                .foregroundStyle(.secondary)
+                .foregroundStyle(Theme.textWeak)
                 .padding(.top, 12)
         case .allow:
             StepHeader(symbol: "touchid", title: "Let your apps read your mail",
@@ -87,7 +87,7 @@ struct OnboardingView: View {
             Spacer()
             if model.working { ProgressView().controlSize(.small).padding(.trailing, 8) }
             if let cancel, model.step != .done {
-                Button("Cancel", action: cancel).controlSize(.large).keyboardShortcut(.cancelAction)
+                Button("Cancel", action: cancel).buttonStyle(.proton(.secondary, size: .large)).keyboardShortcut(.cancelAction)
             }
             primaryButton
         }
@@ -102,8 +102,7 @@ struct OnboardingView: View {
         case .done: ("Done", { model.close() })
         }
         Button(button.0, action: button.1)
-            .buttonStyle(.borderedProminent)
-            .controlSize(.large)
+            .buttonStyle(.proton(.primary, size: .large))
             .keyboardShortcut(.defaultAction)
             .disabled(model.working)
     }
@@ -119,17 +118,14 @@ private struct StepHeader: View {
         VStack(alignment: .leading, spacing: 12) {
             Group {
                 if let symbol {
-                    Image(systemName: symbol)
-                        .font(.system(size: 34, weight: .regular))
-                        .foregroundStyle(.tint)
-                        .symbolRenderingMode(.hierarchical)
+                    SymbolTile(symbol: symbol, size: 44)
                 } else {
                     PosternMark().fill(.primary).frame(width: 40, height: 40)
                 }
             }
             .padding(.bottom, 4)
-            Text(title).font(.title2.weight(.semibold))
-            Text(text).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+            Text(title).font(.system(size: 20, weight: .bold)).foregroundStyle(Theme.text)
+            Text(text).font(.system(size: 13)).foregroundStyle(Theme.textWeak).fixedSize(horizontal: false, vertical: true)
         }
     }
 }
@@ -154,7 +150,7 @@ private struct Fingerprint: View {
         let groups = pin.display.split(separator: ":").map(String.init)
         let rows = stride(from: 0, to: groups.count, by: 8).map { Array(groups[$0..<min($0 + 8, groups.count)]) }
         VStack(alignment: .leading, spacing: 4) {
-            Text("SHA-256").font(.caption).foregroundStyle(.secondary)
+            Text("SHA-256").font(.caption).foregroundStyle(Theme.textWeak)
             ForEach(rows.indices, id: \.self) { index in
                 Text(rows[index].joined(separator: " "))
                     .font(.system(.body, design: .monospaced))
@@ -163,6 +159,7 @@ private struct Fingerprint: View {
         }
         .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.5), in: RoundedRectangle(cornerRadius: 10))
+        .background(Theme.weak, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border))
     }
 }

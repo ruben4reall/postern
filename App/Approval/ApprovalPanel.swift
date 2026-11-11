@@ -57,6 +57,7 @@ final class ApprovalPanelController {
             styleMask: [.titled, .closable, .fullSizeContentView], backing: .buffered, defer: false
         )
         panel.title = title
+        panel.backgroundColor = NSColor(Theme.canvas)
         panel.titlebarAppearsTransparent = true
         panel.level = .floating
         panel.isReleasedWhenClosed = false
@@ -104,50 +105,44 @@ struct ApprovalView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            header
-            fields
+            PanelHeader(symbol: "paperplane", signal: .accent,
+                        title: Text("\(request.client) wants to send this email"),
+                        detail: Text(request.context.map(KitText.localize) ?? String(localized: "A new email. Read all of it: this is exactly what leaves.")),
+                        deadline: deadline)
             if !cameFromEmail.isEmpty { warning }
             if let words = message.missingAttachment {
-                Label("The text says “\(words)”, but no file is attached. The app said none is meant.",
-                      systemImage: "paperclip.badge.ellipsis")
-                    .font(.callout)
-                    .foregroundStyle(Theme.warning)
-                    .padding(10)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                    .background(Theme.warning.opacity(0.1), in: RoundedRectangle(cornerRadius: Theme.radius))
+                ProtonBanner(kind: .warning, symbol: "paperclip.badge.ellipsis",
+                             text: Text("The text says “\(words)”, but no file is attached. The app said none is meant."))
             }
-            bodyText
+            messageContainer
             if !message.attachments.isEmpty { attachmentList }
-            actions
         }
         .padding(.horizontal, 24)
         .padding(.top, 36)
-        .padding(.bottom, 20)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .safeAreaInset(edge: .bottom, spacing: 0) { actions }
         .frame(width: 620, height: message.attachments.isEmpty ? 680 : 760)
+        .background(Theme.canvas)
         .tint(Theme.accent)
     }
 
-    private var header: some View {
-        HStack(alignment: .top, spacing: 14) {
-            Image(systemName: "paperplane.circle.fill")
-                .font(.system(size: 34))
-                .foregroundStyle(.tint)
-                .symbolRenderingMode(.hierarchical)
-            VStack(alignment: .leading, spacing: 3) {
-                Text("\(request.client) wants to send this email").font(.title3.weight(.semibold))
-                Text(request.context.map(KitText.localize) ?? String(localized: "A new email. Read all of it: this is exactly what leaves."))
-                    .foregroundStyle(.secondary)
-                    .lineLimit(2)
+    /// The email as Proton shows an opened message: its header band, a hairline, the text on white.
+    private var messageContainer: some View {
+        VStack(spacing: 0) {
+            fields
+                .padding(16)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .background(Theme.lowered)
+            Rectangle().fill(Theme.border).frame(height: 1)
+            ScrollView {
+                bodyText.padding(16)
             }
-            Spacer()
-            TimelineView(.periodic(from: .now, by: 1)) { context in
-                let remaining = max(0, Int(deadline.timeIntervalSince(context.date)))
-                Text(String(format: "%d:%02d", remaining / 60, remaining % 60))
-                    .font(.callout.monospacedDigit())
-                    .foregroundStyle(remaining < 20 ? Theme.warning : Theme.textWeak)
-                    .help("The request is rejected when this reaches zero.")
-            }
+            .scrollEdgeEffectStyle(.soft, for: .bottom)
+            .frame(maxHeight: .infinity)
+            .background(Theme.canvas)
         }
+        .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border))
     }
 
     private var fields: some View {
@@ -156,28 +151,26 @@ struct ApprovalView: View {
             row("To") { recipients(message.to) }
             if !message.cc.isEmpty { row("Cc") { recipients(message.cc) } }
             if !message.bcc.isEmpty { row("Bcc") { recipients(message.bcc) } }
-            row("Subject") { Text(message.subject.isEmpty ? String(localized: "(no subject)") : message.subject).fontWeight(.medium) }
+            row("Subject") { Text(message.subject.isEmpty ? String(localized: "(no subject)") : message.subject).fontWeight(.semibold) }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
+        .font(.system(size: 13))
     }
 
     private func row(_ title: LocalizedStringKey, @ViewBuilder _ content: () -> some View) -> some View {
         GridRow {
-            Text(title).foregroundStyle(.secondary).gridColumnAlignment(.trailing)
-            content().textSelection(.enabled)
+            Text(title).foregroundStyle(Theme.textWeak).gridColumnAlignment(.trailing)
+            content().foregroundStyle(Theme.text).textSelection(.enabled)
         }
     }
 
     private func recipients(_ list: [Address]) -> some View {
-        VStack(alignment: .leading, spacing: 4) {
+        VStack(alignment: .leading, spacing: 6) {
             ForEach(list, id: \.email) { address in
-                VStack(alignment: .leading, spacing: 3) {
+                VStack(alignment: .leading, spacing: 4) {
                     Text(Self.describe(address)).fixedSize(horizontal: false, vertical: true)
                     let badges = request.badges[address.email.lowercased()] ?? []
                     if !badges.isEmpty {
-                        HStack(spacing: 6) {
+                        HStack(spacing: 4) {
                             ForEach(badges, id: \.self) { BadgeView(badge: $0) }
                         }
                     }
@@ -187,45 +180,38 @@ struct ApprovalView: View {
     }
 
     private var warning: some View {
-        Label {
-            Text(cameFromEmail.count == 1
-                 ? String(localized: "\(cameFromEmail[0]) appeared inside an email the app read. Make sure you really want to write to this address.")
-                 : String(localized: "\(cameFromEmail.joined(separator: ", ")) appeared inside an email the app read. Make sure you really want to write to these addresses."))
-                .fixedSize(horizontal: false, vertical: true)
-        } icon: {
-            Image(systemName: "exclamationmark.triangle.fill")
-        }
-        .foregroundStyle(Theme.danger)
-        .padding(10)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(Theme.danger.opacity(0.08), in: RoundedRectangle(cornerRadius: 8))
+        ProtonBanner(kind: .danger, symbol: "exclamationmark.triangle.fill", text: Text(cameFromEmail.count == 1
+            ? String(localized: "\(cameFromEmail[0]) appeared inside an email the app read. Make sure you really want to write to this address.")
+            : String(localized: "\(cameFromEmail.joined(separator: ", ")) appeared inside an email the app read. Make sure you really want to write to these addresses.")))
     }
 
     private var bodyText: some View {
-        ScrollView {
-            VStack(alignment: .leading, spacing: 12) {
-                Text(message.body.isEmpty ? String(localized: "(no text)") : message.body)
-                    .frame(maxWidth: .infinity, alignment: .leading)
-                if let quoted = message.quoted, !quoted.isEmpty {
-                    Divider()
-                    Text("Also sent, below your text:").font(.caption).foregroundStyle(.secondary)
-                    Text(quoted).foregroundStyle(.secondary).frame(maxWidth: .infinity, alignment: .leading)
+        VStack(alignment: .leading, spacing: 12) {
+            Text(message.body.isEmpty ? String(localized: "(no text)") : message.body)
+                .font(.system(size: 13))
+                .lineSpacing(3)
+                .foregroundStyle(Theme.text)
+                .frame(maxWidth: .infinity, alignment: .leading)
+            if let quoted = message.quoted, !quoted.isEmpty {
+                Text("Also sent, below your text:").font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.textWeak)
+                    .padding(.top, 4)
+                HStack(spacing: 0) {
+                    Rectangle().fill(Theme.quoteBar).frame(width: 3)
+                    Text(quoted).font(.system(size: 13)).foregroundStyle(Theme.textWeak).padding(.leading, 14)
+                        .frame(maxWidth: .infinity, alignment: .leading)
                 }
+                .fixedSize(horizontal: false, vertical: true)
             }
-            .textSelection(.enabled)
-            .padding(14)
         }
-        .frame(maxHeight: .infinity)
-        .background(.background, in: RoundedRectangle(cornerRadius: 10))
-        .overlay(RoundedRectangle(cornerRadius: 10).strokeBorder(.quaternary))
+        .textSelection(.enabled)
     }
 
     private var attachmentList: some View {
-        VStack(alignment: .leading, spacing: 6) {
-            Text("\(message.attachments.count) attachments leave with it")
-                .font(.caption).foregroundStyle(.secondary)
+        VStack(alignment: .leading, spacing: 8) {
+            Label("\(message.attachments.count) attachments leave with it", systemImage: "paperclip")
+                .font(.system(size: 12, weight: .semibold)).foregroundStyle(Theme.textWeak)
             ScrollView(.horizontal) {
-                HStack(spacing: 10) {
+                HStack(spacing: 8) {
                     ForEach(message.attachments, id: \.sha256) { AttachmentCard(attachment: $0) }
                 }
             }
@@ -233,23 +219,19 @@ struct ApprovalView: View {
     }
 
     private var actions: some View {
-        HStack(spacing: 10) {
-            // Longer button titles in other languages take room from the reason field, never from the buttons.
-            TextField("Why, for the app (optional)", text: $reason)
-                .textFieldStyle(.roundedBorder)
-                .frame(minWidth: 110, maxWidth: 210)
-            Spacer(minLength: 0)
-            Button("Reject") { decide(.reject(reason: reason.isEmpty ? nil : reason)) }.fixedSize()
-            Button("Keep as Draft") { decide(.saveAsDraft) }.fixedSize()
+        GlassActionBar(reason: $reason) {
+            Button("Reject") { decide(.reject(reason: reason.isEmpty ? nil : reason)) }
+                .buttonStyle(.proton(.secondary, size: .large)).fixedSize()
+            Button("Keep as Draft") { decide(.saveAsDraft) }
+                .buttonStyle(.proton(.secondary, size: .large)).fixedSize()
             Button {
                 decide(.send)
             } label: {
                 Label("Send with Touch ID", systemImage: "touchid")
             }
-            .buttonStyle(.borderedProminent)
+            .buttonStyle(.proton(.primary, size: .large))
             .fixedSize()
         }
-        .controlSize(.large)
     }
 
     static func describe(_ address: Address) -> String {
@@ -257,11 +239,53 @@ struct ApprovalView: View {
     }
 }
 
+/// The top of every approval panel: a flat tinted symbol, who asks for what, and the time left to answer.
+struct PanelHeader: View {
+    let symbol: String
+    let signal: Theme.Signal
+    let title: Text
+    let detail: Text
+    let deadline: Date
+    var warnBelow = 20
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 12) {
+            SymbolTile(symbol: symbol, signal: signal, size: 40)
+            VStack(alignment: .leading, spacing: 2) {
+                title.font(.system(size: 18, weight: .bold)).foregroundStyle(Theme.text)
+                detail.font(.system(size: 13)).foregroundStyle(Theme.textWeak).lineLimit(2)
+            }
+            Spacer(minLength: 8)
+            Countdown(deadline: deadline, warnBelow: warnBelow)
+        }
+    }
+}
+
+/// The time left before the request is rejected, as a Proton badge that turns orange near the end.
+struct Countdown: View {
+    let deadline: Date
+    var warnBelow = 20
+
+    var body: some View {
+        TimelineView(.periodic(from: .now, by: 1)) { context in
+            let remaining = max(0, Int(deadline.timeIntervalSince(context.date)))
+            let urgent = remaining < warnBelow
+            Text(String(format: "%d:%02d", remaining / 60, remaining % 60))
+                .font(.system(size: 12).monospacedDigit())
+                .foregroundStyle(urgent ? Color.black : Theme.textWeak)
+                .padding(.horizontal, 8)
+                .frame(height: 22)
+                .background(urgent ? Theme.warning : Theme.weak, in: Capsule())
+                .help("The request is rejected when this reaches zero.")
+        }
+    }
+}
+
 struct BadgeView: View {
     let badge: ApprovalBadge
 
     var body: some View {
-        Pill(text: title, color: color)
+        Pill(text: title, color: color, onColor: badge == .firstContact || badge == .replyToDiffers ? .black : .white)
     }
 
     private var title: String {
@@ -277,11 +301,10 @@ struct BadgeView: View {
         switch badge {
         case .firstContact, .replyToDiffers: Theme.warning
         case .cameFromEmail: Theme.danger
-        case .trusted: Theme.success
+        case .trusted: Theme.successStrong
         }
     }
 }
-
 
 /// One attachment on the panel: what it is, how big, a fingerprint, and a preview for images and PDFs.
 private struct AttachmentCard: View {
@@ -289,16 +312,18 @@ private struct AttachmentCard: View {
 
     var body: some View {
         HStack(spacing: 10) {
-            preview.frame(width: 44, height: 44).clipShape(RoundedRectangle(cornerRadius: 6))
+            preview.frame(width: 44, height: 44).clipShape(RoundedRectangle(cornerRadius: Theme.radiusSmall))
             VStack(alignment: .leading, spacing: 2) {
-                Text(attachment.filename).lineLimit(1).truncationMode(.middle).frame(maxWidth: 200, alignment: .leading)
+                Text(attachment.filename).font(.system(size: 13)).foregroundStyle(Theme.text)
+                    .lineLimit(1).truncationMode(.middle).frame(maxWidth: 200, alignment: .leading)
                 Text("\(ByteCountFormatter.string(fromByteCount: Int64(attachment.data.count), countStyle: .file)) · \(attachment.mimeType)")
-                    .font(.caption).foregroundStyle(.secondary)
-                Text("SHA-256 \(attachment.sha256.prefix(12))…").font(.caption2.monospaced()).foregroundStyle(.tertiary)
+                    .font(.system(size: 12)).foregroundStyle(Theme.textWeak)
+                Text("SHA-256 \(attachment.sha256.prefix(12))…").font(.system(size: 11).monospaced()).foregroundStyle(Theme.hint)
             }
         }
         .padding(8)
-        .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 8))
+        .background(Theme.canvas, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border))
         .help(attachment.sha256)
     }
 
@@ -308,8 +333,8 @@ private struct AttachmentCard: View {
         } else if attachment.mimeType == "application/pdf", let page = PDFDocument(data: attachment.data)?.page(at: 0) {
             Image(nsImage: page.thumbnail(of: NSSize(width: 88, height: 88), for: .mediaBox)).resizable().scaledToFit().background(.white)
         } else {
-            Image(systemName: "doc").font(.system(size: 22)).foregroundStyle(.secondary)
-                .frame(maxWidth: .infinity, maxHeight: .infinity).background(.quaternary.opacity(0.4))
+            Image(systemName: "doc").font(.system(size: 20)).foregroundStyle(Theme.hint)
+                .frame(maxWidth: .infinity, maxHeight: .infinity).background(Theme.weak)
         }
     }
 }
@@ -323,38 +348,29 @@ struct DeletionView: View {
 
     var body: some View {
         VStack(alignment: .leading, spacing: 16) {
-            HStack(alignment: .top, spacing: 14) {
-                Image(systemName: request.permanent ? "trash.slash.circle.fill" : "trash.circle.fill")
-                    .font(.system(size: 34))
-                    .foregroundStyle(request.permanent ? Theme.danger : Theme.warning)
-                    .symbolRenderingMode(.hierarchical)
-                VStack(alignment: .leading, spacing: 3) {
-                    Text(title).font(.title3.weight(.semibold))
-                    Text(request.permanent
-                         ? String(localized: "Erased messages cannot be recovered, not even from Proton.")
-                         : String(localized: "They stay in Trash, where you can move them back, until Trash is emptied."))
-                        .foregroundStyle(.secondary)
-                }
-                Spacer()
-                TimelineView(.periodic(from: .now, by: 1)) { context in
-                    let remaining = max(0, Int(deadline.timeIntervalSince(context.date)))
-                    Text(String(format: "%d:%02d", remaining / 60, remaining % 60))
-                        .font(.callout.monospacedDigit()).foregroundStyle(remaining < 20 ? Theme.warning : Theme.textWeak)
-                }
-            }
+            PanelHeader(symbol: request.permanent ? "trash.slash" : "trash", signal: request.permanent ? .danger : .warning,
+                        title: Text(title),
+                        detail: Text(request.permanent
+                                     ? String(localized: "Erased messages cannot be recovered, not even from Proton.")
+                                     : String(localized: "They stay in Trash, where you can move them back, until Trash is emptied.")),
+                        deadline: deadline)
             ScrollView {
                 VStack(alignment: .leading, spacing: 0) {
                     ForEach(Array(request.items.enumerated()), id: \.element.id) { index, item in
-                        if index > 0 { Divider() }
+                        if index > 0 { Rectangle().fill(Theme.border).frame(height: 1) }
                         VStack(alignment: .leading, spacing: 2) {
-                            Text(item.subject.isEmpty ? String(localized: "(no subject)") : item.subject).fontWeight(.medium).lineLimit(1)
+                            Text(item.subject.isEmpty ? String(localized: "(no subject)") : item.subject)
+                                .font(.system(size: 13, weight: .semibold)).foregroundStyle(Theme.text).lineLimit(1)
                             HStack(spacing: 6) {
                                 Text(item.from).lineLimit(1).truncationMode(.middle)
-                                Text("·")
+                                Text("·").foregroundStyle(Theme.hint)
                                 Text(KitText.mailbox(item.mailbox))
-                                if let date = item.date { Text("·"); Text(date.formatted(date: .abbreviated, time: .shortened)) }
+                                if let date = item.date {
+                                    Text("·").foregroundStyle(Theme.hint)
+                                    Text(date.formatted(date: .abbreviated, time: .shortened))
+                                }
                             }
-                            .font(.callout).foregroundStyle(.secondary)
+                            .font(.system(size: 12)).foregroundStyle(Theme.textWeak)
                         }
                         .frame(maxWidth: .infinity, alignment: .leading)
                         .padding(.vertical, 9)
@@ -362,32 +378,34 @@ struct DeletionView: View {
                     }
                 }
             }
-            .background(.quaternary.opacity(0.45), in: RoundedRectangle(cornerRadius: 10))
-            HStack(spacing: 10) {
-                TextField("Why, for the app (optional)", text: $reason)
-                    .textFieldStyle(.roundedBorder).frame(minWidth: 110, maxWidth: 210)
-                Spacer(minLength: 0)
-                Button("Keep Them") { decide(.reject(reason: reason.isEmpty ? nil : reason)) }.fixedSize()
+            .background(Theme.canvas)
+            .clipShape(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+            .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous).strokeBorder(Theme.border))
+        }
+        .padding(.horizontal, 24)
+        .padding(.top, 36)
+        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .top)
+        .safeAreaInset(edge: .bottom, spacing: 0) {
+            GlassActionBar(reason: $reason) {
+                Button("Keep Them") { decide(.reject(reason: reason.isEmpty ? nil : reason)) }
+                    .buttonStyle(.proton(.secondary, size: .large)).fixedSize()
+                // Black on Proton's orange, never white: the warning color keeps its contrast.
                 Button {
                     decide(.send)
                 } label: {
                     Label(request.permanent ? String(localized: "Erase with Touch ID") : String(localized: "Move to Trash with Touch ID"), systemImage: "touchid")
                 }
-                .buttonStyle(.borderedProminent)
-                .tint(request.permanent ? Theme.danger : Theme.warning)
+                .buttonStyle(.proton(request.permanent ? .danger : .warning, size: .large))
                 .fixedSize()
             }
-            .controlSize(.large)
         }
-        .padding(.horizontal, 24)
-        .padding(.top, 36)
-        .padding(.bottom, 20)
         .frame(width: 620, height: Self.height(for: request))
+        .background(Theme.canvas)
     }
 
     /// Tall enough for six messages; longer lists scroll.
     static func height(for request: DeletionRequest) -> CGFloat {
-        CGFloat(160 + 52 * min(request.items.count, 6))
+        CGFloat(196 + 52 * min(request.items.count, 6))
     }
 
     private var title: String {
