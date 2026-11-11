@@ -25,6 +25,8 @@ let package = Package(
         .package(url: "https://github.com/apple/swift-nio-imap.git", exact: "0.4.0"),
         .package(url: "https://github.com/scinfu/SwiftSoup.git", exact: "2.14.3"),
         .package(url: "https://github.com/apple/swift-log.git", exact: "1.16.1"),
+        // CryptoKit's API on Linux and Windows; on Apple platforms the code keeps importing CryptoKit itself.
+        .package(url: "https://github.com/apple/swift-crypto.git", exact: "5.1.1"),
     ],
     targets: [
         // Plain value types shared by every process. No I/O.
@@ -46,6 +48,7 @@ let package = Package(
                 .product(name: "NIOSSL", package: "swift-nio-ssl"),
                 .product(name: "NIOTLS", package: "swift-nio"),
                 .product(name: "NIOIMAP", package: "swift-nio-imap"),
+                .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux, .windows])),
             ]
         ),
         // Secrets and policy in the data protection Keychain.
@@ -59,16 +62,17 @@ let package = Package(
                 "PosternModel", "PosternText", "PosternPolicy", "PosternCompose", "PosternApproval",
                 .product(name: "MCP", package: "swift-sdk"),
                 .product(name: "Logging", package: "swift-log"),
+                .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux, .windows])),
             ]
         ),
         // The activity log: metadata only, each line chained to the previous one.
-        .target(name: "PosternAudit"),
+        .target(name: "PosternAudit", dependencies: [.product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux, .windows]))]),
         // Adds Postern to the configuration files of MCP clients. No I/O: callers read and write the files.
         .target(name: "PosternClients"),
         // Outgoing mail: validation, rendering, and the digest an approval binds to.
-        .target(name: "PosternCompose", dependencies: ["PosternModel", "PosternText"]),
+        .target(name: "PosternCompose", dependencies: ["PosternModel", "PosternText", .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux, .windows]))]),
         // The only producer of an ApprovedMessage: the user saw everything and proved it was them.
-        .target(name: "PosternApproval", dependencies: ["PosternCompose", "PosternModel"]),
+        .target(name: "PosternApproval", dependencies: ["PosternCompose", "PosternModel", .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux, .windows]))]),
         .testTarget(name: "PosternComposeTests", dependencies: ["PosternCompose"]),
         .testTarget(name: "PosternApprovalTests", dependencies: ["PosternApproval", "PosternCompose", "PosternModel"]),
         .testTarget(name: "PosternAuditTests", dependencies: ["PosternAudit"]),
@@ -88,7 +92,7 @@ let package = Package(
             ]
         ),
         .testTarget(name: "PosternPolicyTests", dependencies: ["PosternPolicy", "PosternVault"]),
-        .testTarget(name: "PosternServerTests", dependencies: ["PosternServer", "PosternApproval", "PosternCompose", .product(name: "MCP", package: "swift-sdk")]),
+        .testTarget(name: "PosternServerTests", dependencies: ["PosternServer", "PosternApproval", "PosternCompose", .product(name: "MCP", package: "swift-sdk"), .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux, .windows]))]),
     ],
     swiftLanguageModes: [.v6]
 )

@@ -1,9 +1,11 @@
+import Foundation
+import Testing
+#if canImport(PDFKit) && canImport(Vision)
 import CoreGraphics
 import CoreText
-import Foundation
 import ImageIO
-import Testing
 import UniformTypeIdentifiers
+#endif
 import PosternModel
 @testable import PosternMail
 
@@ -22,6 +24,7 @@ import PosternModel
     %%EOF
     """.utf8)
 
+    #if canImport(PDFKit) && canImport(Vision)
     /// Black text drawn on white, as a scanner or a phone would see it.
     static func picture(_ text: String) -> CGImage {
         let width = 1400, height = 300
@@ -72,6 +75,8 @@ import PosternModel
         let photo = try AttachmentReader.read(Self.png(image), filename: "IMG_1.png", mimeType: "image/png", maxChars: 20_000)
         #expect(photo.kind == .image && photo.text.lowercased().contains("reads"))
     }
+
+    #endif
 
     @Test func readsTextFilesAndHTMLAsAPersonWouldSeeThem() throws {
         let csv = try AttachmentReader.read(Data("name;total\nAna;42\n".utf8), filename: "list.csv", mimeType: "text/csv", maxChars: 20_000)
