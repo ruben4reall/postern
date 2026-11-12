@@ -27,6 +27,47 @@ jobs:
         working-directory: Packages/PosternKit
         run: swift test
 
+  # The core on Linux, where the Linux app will run: every test, as on the Mac.
+  linux:
+    name: PosternKit on Linux
+    runs-on: ubuntu-24.04
+    container: swift:6.2-noble
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+      - name: Show the toolchain
+        run: swift --version
+      - name: Run the tests
+        working-directory: Packages/PosternKit
+        run: swift test
+
+  # The core on Windows: the parts without network only, so allowed to fail while the port is under way.
+  windows:
+    name: PosternKit on Windows
+    # Swift 6.2 builds against Visual Studio 2022; the 2025 image ships a newer STL that needs a newer Clang.
+    # swift-crypto 5 needs 6.2.4 or later (it marks its enums @nonexhaustive), the version the Linux job runs too.
+    runs-on: windows-2022
+    timeout-minutes: 45
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: compnerd/gha-setup-swift@v0.5.1
+        with:
+          branch: swift-6.2.4-release
+          tag: 6.2.4-RELEASE
+      - name: Show the toolchain
+        run: swift --version
+      # The parts with no network. The Bridge and server targets wait for swift-nio-ssl's Windows support
+      # (apple/swift-nio-ssl#567) and the MCP SDK's (modelcontextprotocol/swift-sdk#261).
+      - name: Build the parts that run on Windows today
+        working-directory: Packages/PosternKit
+        shell: pwsh
+        run: |
+          foreach ($target in "PosternModel", "PosternText", "PosternMail", "PosternVault", "PosternPolicy", "PosternAudit", "PosternClients", "PosternCompose", "PosternApproval") {
+            swift build --target $target
+            if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          }
+
   scripts:
     name: Release script tests
     runs-on: macos-26

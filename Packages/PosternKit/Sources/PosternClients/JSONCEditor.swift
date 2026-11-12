@@ -40,6 +40,52 @@ enum JSONCEditor {
     }
 
     /// The keys of the object under `servers`, the last one when the file names it twice, as apps read it.
+    /// The same document as strict JSON: comments removed, and the comma before a closing bracket dropped.
+    static func strictJSON(_ text: String) -> String {
+        let characters = Array(text.unicodeScalars)
+        var out = String.UnicodeScalarView()
+        var index = 0
+        var inString = false
+        var pendingComma: String.UnicodeScalarView?
+        func flushComma() { if let comma = pendingComma { out.append(contentsOf: comma); pendingComma = nil } }
+        while index < characters.count {
+            let c = characters[index]
+            if inString {
+                out.append(c)
+                if c == "\\", index + 1 < characters.count { out.append(characters[index + 1]); index += 2; continue }
+                if c == "\"" { inString = false }
+                index += 1
+                continue
+            }
+            if c == "/", index + 1 < characters.count, characters[index + 1] == "/" {
+                while index < characters.count, characters[index] != "\n" { index += 1 }
+                continue
+            }
+            if c == "/", index + 1 < characters.count, characters[index + 1] == "*" {
+                index += 2
+                while index + 1 < characters.count, !(characters[index] == "*" && characters[index + 1] == "/") { index += 1 }
+                index += 2
+                continue
+            }
+            if c == "," { flushComma(); pendingComma = String.UnicodeScalarView([c]); index += 1; continue }
+            if c == " " || c == "\t" || c == "\n" || c == "\r" {
+                if pendingComma != nil { pendingComma!.append(c) } else { out.append(c) }
+                index += 1
+                continue
+            }
+            if c == "}" || c == "]" {
+                if let comma = pendingComma { out.append(contentsOf: comma.dropFirst()); pendingComma = nil }
+            } else {
+                flushComma()
+            }
+            if c == "\"" { inString = true }
+            out.append(c)
+            index += 1
+        }
+        flushComma()
+        return String(out)
+    }
+
     static func serverKeys(in text: String, servers: String) -> [String]? {
         let scanner = Scanner(Array(text.utf8))
         guard let root = scanner.object(at: scanner.skipTrivia(from: 0)),

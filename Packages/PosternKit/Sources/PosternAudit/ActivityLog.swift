@@ -1,4 +1,9 @@
+#if canImport(CryptoKit)
 import CryptoKit
+#else
+// Apple's own implementation of the same API, for Linux and Windows.
+import Crypto
+#endif
 import Foundation
 
 /// One tool call, as the user sees it in the activity view. Metadata only: never a subject, an address or content.

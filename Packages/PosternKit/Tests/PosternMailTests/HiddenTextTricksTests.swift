@@ -267,15 +267,30 @@ import Testing
         _ = sanitizer.render(html)
     }
 
+    /// Nine custom properties, each made of eight copies of the one before: 8^9 copies once expanded. Built in a loop,
+    /// as one long concatenation takes some compilers too long to type-check.
+    static let chainedVariables: String = {
+        var style = "--v0:x"
+        for level in 1...9 {
+            style += ";--v\(level):" + String(repeating: "var(--v\(level - 1))", count: 8)
+        }
+        return "<div style=\"\(style);color:var(--v9)\">x</div>"
+    }()
+
+    /// The pages that stalled the reader, one expression each: one array of them takes some compilers too long to type-check.
+    static let stallingPages: [String] = {
+        var pages: [String] = []
+        pages.append("<style>span div div div div{color:red}</style>" + String(repeating: "<div>", count: 120) + "x" + String(repeating: "</div>", count: 120))
+        pages.append("<style>div:has(:has(:has(i))){color:red}</style>" + String(repeating: "<div>", count: 300) + "<i>x</i>" + String(repeating: "</div>", count: 300))
+        pages.append(chainedVariables)
+        pages.append("<style>" + String(repeating: "*{color:red}", count: 1_000) + "</style>" + String(repeating: "<p>x</p>", count: 8_000))
+        pages.append("<p>" + (0..<50).map { (n: Int) -> String in "<b class=b\(n)>" }.joined() + "x" + String(repeating: "<p>x", count: 2_000))
+        pages.append("<p>" + (0..<10).map { (n: Int) -> String in "<b class=b\(n)>" }.joined() + "x" + String(repeating: "<p>x", count: 5_000))
+        return pages
+    }()
+
     /// What the second review found that stalled the reader for seconds or minutes, or ran out of memory.
-    @Test(arguments: [
-        "<style>span div div div div{color:red}</style>" + String(repeating: "<div>", count: 120) + "x" + String(repeating: "</div>", count: 120),
-        "<style>div:has(:has(:has(i))){color:red}</style>" + String(repeating: "<div>", count: 300) + "<i>x</i>" + String(repeating: "</div>", count: 300),
-        "<div style=\"--v0:x;--v1:" + String(repeating: "var(--v0)", count: 8) + ";--v2:" + String(repeating: "var(--v1)", count: 8) + ";--v3:" + String(repeating: "var(--v2)", count: 8) + ";--v4:" + String(repeating: "var(--v3)", count: 8) + ";--v5:" + String(repeating: "var(--v4)", count: 8) + ";--v6:" + String(repeating: "var(--v5)", count: 8) + ";--v7:" + String(repeating: "var(--v6)", count: 8) + ";--v8:" + String(repeating: "var(--v7)", count: 8) + ";--v9:" + String(repeating: "var(--v8)", count: 8) + ";color:var(--v9)\">x</div>",
-        "<style>" + String(repeating: "*{color:red}", count: 1_000) + "</style>" + String(repeating: "<p>x</p>", count: 8_000),
-        "<p>" + (0..<50).map { "<b class=b\($0)>" }.joined() + "x" + String(repeating: "<p>x", count: 2_000),
-        "<p>" + (0..<10).map { "<b class=b\($0)>" }.joined() + "x" + String(repeating: "<p>x", count: 5_000),
-    ])
+    @Test(arguments: HiddenTextTricksTests.stallingPages)
     func staysFastAfterTheSecondReview(_ html: String) async {
         let start = Date()
         _ = await Task.detached { HTMLSanitizer().render(html) }.value
