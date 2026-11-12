@@ -6,6 +6,29 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     <channel>
         <title>Postern</title>
         <item>
+            <title>0.3.0</title>
+            <pubDate>Thu, 12 Nov 2026 05:14:56 +0100</pubDate>
+            <link>https://getpostern.vercel.app</link>
+            <sparkle:fullReleaseNotesLink>https://github.com/ruben4reall/postern/releases</sparkle:fullReleaseNotesLink>
+            <sparkle:version>4</sparkle:version>
+            <sparkle:shortVersionString>0.3.0</sparkle:shortVersionString>
+            <sparkle:minimumSystemVersion>26.0</sparkle:minimumSystemVersion>
+            <description sparkle:format="markdown"><![CDATA[- **The look of Proton Mail.** Proton's purple frame in light and its Carbon theme in dark, a sidebar that lists
+  the panes with counters as Proton's navigation does, warm grey cards, radius 8 buttons, Proton's switch, solid
+  badges and banners. The approval panels show the email the way Proton shows an opened message, and their action bar
+  is Liquid Glass, with a Send button that stays solid purple. Text on Proton's orange is black, as in Proton.
+- **Postern speaks your language.** The window, the menus, the approval panels and the Touch ID prompts are in
+  English, French, German, Spanish, Italian, Portuguese, Dutch, Polish, Japanese, Chinese and Korean, and follow the
+  language of your Mac. Counts take their plural forms, and Proton's folders keep the names Proton gives them in your
+  language. Apps still receive Postern's answers in English, the language every model reads best.
+- **Forgotten files caught in eleven languages.** `w załączniku`, `添付`, `附件` and `첨부` join the words that announce
+  a file, and the confidentiality footers that mention attachments are recognized in more languages.
+- **The README and the website in the same eleven languages**, with a language menu and links search engines follow.
+  Postern is made in Switzerland, in the canton of Valais.
+]]></description>
+            <enclosure url="https://github.com/ruben4reall/postern/releases/download/v0.3.0/Postern-0.3.0.dmg" length="15813486" type="application/octet-stream" sparkle:edSignature="i2vDAWtC/OA6H6MKFkcuh+iuGlxz8HRovckJM1Rnp04rLNkod64+ABo0qkGAUHVlrNYe9lFhW4kBD6vYSRxyAw=="/>
+        </item>
+        <item>
             <title>0.2.0</title>
             <pubDate>Wed, 11 Nov 2026 17:08:23 +0100</pubDate>
             <link>https://getpostern.vercel.app</link>
@@ -148,6 +171,6 @@ IMPORTANT: This file was signed by Sparkle. Any modifications to this file requi
     </channel>
 </rss>
 <!-- sparkle-signatures:
-edSignature: dI8+rwrIl0L4I0wakP87Q3jA3nN97kpTXNGZHZq/LOTf4b3sS06PFhsfM6usbmibQTsz9xuHgCM/TjMZtrsTAQ==
-length: 13671
+edSignature: cqLZMIVnaxaSYzHs3jEWX7+xrmYXnQmYdUIAVl+VSvOf3en/n2dpXLBHbzFwbBW3y6yjVwAgnFey0Dm4HIAkCQ==
+length: 15833
 -->
