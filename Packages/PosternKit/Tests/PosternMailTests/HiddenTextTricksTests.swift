@@ -277,15 +277,20 @@ import Testing
         return "<div style=\"\(style);color:var(--v9)\">x</div>"
     }()
 
+    /// The pages that stalled the reader, one expression each: one array of them takes some compilers too long to type-check.
+    static let stallingPages: [String] = {
+        var pages: [String] = []
+        pages.append("<style>span div div div div{color:red}</style>" + String(repeating: "<div>", count: 120) + "x" + String(repeating: "</div>", count: 120))
+        pages.append("<style>div:has(:has(:has(i))){color:red}</style>" + String(repeating: "<div>", count: 300) + "<i>x</i>" + String(repeating: "</div>", count: 300))
+        pages.append(chainedVariables)
+        pages.append("<style>" + String(repeating: "*{color:red}", count: 1_000) + "</style>" + String(repeating: "<p>x</p>", count: 8_000))
+        pages.append("<p>" + (0..<50).map { (n: Int) -> String in "<b class=b\(n)>" }.joined() + "x" + String(repeating: "<p>x", count: 2_000))
+        pages.append("<p>" + (0..<10).map { (n: Int) -> String in "<b class=b\(n)>" }.joined() + "x" + String(repeating: "<p>x", count: 5_000))
+        return pages
+    }()
+
     /// What the second review found that stalled the reader for seconds or minutes, or ran out of memory.
-    @Test(arguments: [
-        "<style>span div div div div{color:red}</style>" + String(repeating: "<div>", count: 120) + "x" + String(repeating: "</div>", count: 120),
-        "<style>div:has(:has(:has(i))){color:red}</style>" + String(repeating: "<div>", count: 300) + "<i>x</i>" + String(repeating: "</div>", count: 300),
-        HiddenTextTricksTests.chainedVariables,
-        "<style>" + String(repeating: "*{color:red}", count: 1_000) + "</style>" + String(repeating: "<p>x</p>", count: 8_000),
-        "<p>" + (0..<50).map { "<b class=b\($0)>" }.joined() + "x" + String(repeating: "<p>x", count: 2_000),
-        "<p>" + (0..<10).map { "<b class=b\($0)>" }.joined() + "x" + String(repeating: "<p>x", count: 5_000),
-    ])
+    @Test(arguments: HiddenTextTricksTests.stallingPages)
     func staysFastAfterTheSecondReview(_ html: String) async {
         let start = Date()
         _ = await Task.detached { HTMLSanitizer().render(html) }.value
