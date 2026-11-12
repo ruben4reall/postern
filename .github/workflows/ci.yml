@@ -27,13 +27,12 @@ jobs:
         working-directory: Packages/PosternKit
         run: swift test
 
-  # The core on the systems the Windows and Linux apps will run on. Allowed to fail while the port is under way.
+  # The core on Linux, where the Linux app will run: every test, as on the Mac.
   linux:
     name: PosternKit on Linux
     runs-on: ubuntu-24.04
     container: swift:6.2-noble
     timeout-minutes: 30
-    continue-on-error: true
     steps:
       - uses: actions/checkout@v4
       - name: Show the toolchain
@@ -42,6 +41,7 @@ jobs:
         working-directory: Packages/PosternKit
         run: swift test
 
+  # The core on Windows: the parts without network only, so allowed to fail while the port is under way.
   windows:
     name: PosternKit on Windows
     # Swift 6.2 builds against Visual Studio 2022; the 2025 image ships a newer STL that needs a newer Clang.
