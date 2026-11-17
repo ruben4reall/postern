@@ -61,13 +61,16 @@ struct SeededGenerator: RandomNumberGenerator {
         #expect(NestingGuard.exceeds("<style></styles><!--</style>" + String(repeating: "<div>", count: 1_001), depth: 1_000))
     }
 
-    /// Pages built to make the reader slow: each is read or refused within seconds.
-    @Test(arguments: [
+    /// Pages built to make the reader slow: each is read or refused within seconds. Typed as strings first, which
+    /// Swift 6.4 needs to type-check them inside the macro's arguments.
+    static let stallingPages: [String] = [
         "<style>p:nth-child(2){display:none}</style><div>" + String(repeating: "<p>a</p>", count: 20_000) + "</div>",
         String(repeating: "<b hidden></b>", count: 20_000) + "<p>end</p>",
         "<style>" + String(repeating: "/* ", count: 20_000) + "</style><p>end</p>",
         "<style>" + String(repeating: ".a{color:red}", count: 6_000) + "</style><p>end</p>",
-    ])
+    ]
+
+    @Test(arguments: stallingPages)
     func staysFastOnPagesBuiltToStallIt(_ html: String) async {
         let start = Date()
         _ = await Task.detached { HTMLSanitizer().render(html) }.value
