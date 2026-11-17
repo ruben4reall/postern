@@ -14,6 +14,8 @@ final class FakeSMTPServer: @unchecked Sendable {
     let certificate: TestCertificate
     let mode: TLSMode
     let refuseAuth: Bool
+    /// What it answers once the message is in: Bridge's reply when Proton refuses an email, or nil to take it.
+    let dataRefusal: String?
     private let lock = NSLock()
     private var _lines: [Line] = []
     private var _data = ""
@@ -23,10 +25,11 @@ final class FakeSMTPServer: @unchecked Sendable {
     var data: String { lock.withLock { _data } }
     var port: Int { channel?.localAddress?.port ?? 0 }
 
-    init(mode: TLSMode, refuseAuth: Bool = false) throws {
+    init(mode: TLSMode, refuseAuth: Bool = false, dataRefusal: String? = nil) throws {
         certificate = try TestCertificate.make()
         self.mode = mode
         self.refuseAuth = refuseAuth
+        self.dataRefusal = dataRefusal
     }
 
     func start() async throws {
@@ -80,7 +83,7 @@ final class FakeSMTPServer: @unchecked Sendable {
                     if line == "." {
                         inData = false
                         server.recordData(collected.joined(separator: "\r\n"))
-                        send(context, "250 Queued")
+                        send(context, server.dataRefusal ?? "250 Queued")
                     } else {
                         collected.append(line)
                     }

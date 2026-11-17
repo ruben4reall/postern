@@ -258,24 +258,30 @@ import Testing
         #expect(sanitizer.render(html).text.contains("Shown"), "\(html)")
     }
 
-    @Test(arguments: [
+    /// Typed as strings first, which Swift 6.4 needs to type-check them inside the macro's arguments.
+    static let crashingPages: [String] = [
         "<p style=\"font-size:calc(" + String(repeating: "(", count: 2_000) + "1px" + String(repeating: ")", count: 2_000) + ")\">x</p>",
         "<p style=\"color:" + String(repeating: "light-dark(", count: 1_000) + "red" + String(repeating: ",red)", count: 1_000) + "\">x</p>",
         "<p style=\"color:" + String(repeating: "color-mix(in srgb, ", count: 500) + "red" + String(repeating: ", red)", count: 500) + "\">x</p>",
-    ])
+    ]
+
+    @Test(arguments: crashingPages)
     func survivesWhatCrashedItAfterTheSecondReview(_ html: String) {
         _ = sanitizer.render(html)
     }
 
     /// What the second review found that stalled the reader for seconds or minutes, or ran out of memory.
-    @Test(arguments: [
+    static let stallingPages: [String] = [
         "<style>span div div div div{color:red}</style>" + String(repeating: "<div>", count: 120) + "x" + String(repeating: "</div>", count: 120),
         "<style>div:has(:has(:has(i))){color:red}</style>" + String(repeating: "<div>", count: 300) + "<i>x</i>" + String(repeating: "</div>", count: 300),
-        "<div style=\"--v0:x;--v1:" + String(repeating: "var(--v0)", count: 8) + ";--v2:" + String(repeating: "var(--v1)", count: 8) + ";--v3:" + String(repeating: "var(--v2)", count: 8) + ";--v4:" + String(repeating: "var(--v3)", count: 8) + ";--v5:" + String(repeating: "var(--v4)", count: 8) + ";--v6:" + String(repeating: "var(--v5)", count: 8) + ";--v7:" + String(repeating: "var(--v6)", count: 8) + ";--v8:" + String(repeating: "var(--v7)", count: 8) + ";--v9:" + String(repeating: "var(--v8)", count: 8) + ";color:var(--v9)\">x</div>",
+        // A chain of custom properties, each made of eight of the one before.
+        "<div style=\"--v0:x;" + (1...9).map { "--v\($0):" + String(repeating: "var(--v\($0 - 1))", count: 8) + ";" }.joined() + "color:var(--v9)\">x</div>",
         "<style>" + String(repeating: "*{color:red}", count: 1_000) + "</style>" + String(repeating: "<p>x</p>", count: 8_000),
         "<p>" + (0..<50).map { "<b class=b\($0)>" }.joined() + "x" + String(repeating: "<p>x", count: 2_000),
         "<p>" + (0..<10).map { "<b class=b\($0)>" }.joined() + "x" + String(repeating: "<p>x", count: 5_000),
-    ])
+    ]
+
+    @Test(arguments: stallingPages)
     func staysFastAfterTheSecondReview(_ html: String) async {
         let start = Date()
         _ = await Task.detached { HTMLSanitizer().render(html) }.value

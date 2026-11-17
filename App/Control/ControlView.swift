@@ -1135,22 +1135,8 @@ private struct SendingSection: View {
     @State private var newSender = ""
 
     var body: some View {
-        ProtonSection("Sending", footer: Text("Raising a limit asks for Touch ID. A batch waits for room when a limit is reached. Proton sets its own limits by plan and account reputation (150 a day on the free plan) and may stop an account that looks like bulk mail: raise these only as far as your use needs.")) {
-            ProtonRow {
-                Stepper(value: Binding(get: { model.policy.sendsPerHour },
-                                       set: { value in Task { await model.setLimits(perHour: value, perDay: model.policy.sendsPerDay) } }),
-                        in: 1...300) {
-                    LabeledContent("At most per hour", value: String(localized: "\(model.policy.sendsPerHour) emails"))
-                }
-            }
-            ProtonRow {
-                Stepper(value: Binding(get: { model.policy.sendsPerDay },
-                                       set: { value in Task { await model.setLimits(perHour: model.policy.sendsPerHour, perDay: value) } }),
-                        in: 1...1000) {
-                    LabeledContent("At most per day", value: String(localized: "\(model.policy.sendsPerDay) emails"))
-                }
-            }
-        }
+        SendingLimitsSection(model: model)
+        ProtonPlansSection(paid: model.configured)
         ProtonSection("Trusted recipients", footer: Text("Emails whose every recipient is trusted leave without the panel, such as notes to yourself. Adding someone asks for Touch ID.")) {
             AddressList(addresses: model.policy.trustedRecipients.sorted(), empty: "Nobody. Every email shows the approval panel.") { email in
                 Task { await model.untrust(email) }
@@ -1202,6 +1188,181 @@ private struct SendingSection: View {
         let email = newAllowed
         newAllowed = ""
         Task { await model.allow(email) }
+    }
+}
+
+/// The two sending limits, typed in or changed with the arrows, then saved together: one Touch ID when either rises,
+/// none when they only fall. Nothing changes until they are saved.
+private struct SendingLimitsSection: View {
+    @Bindable var model: ControlModel
+    @State private var hourText: String
+    @State private var dayText: String
+    @State private var saving = false
+
+    private struct Limits: Equatable {
+        let hour: Int
+        let day: Int
+    }
+
+    init(model: ControlModel) {
+        self.model = model
+        _hourText = State(initialValue: String(model.policy.sendsPerHour))
+        _dayText = State(initialValue: String(model.policy.sendsPerDay))
+    }
+
+    var body: some View {
+        ProtonSection("Sending limits", footer: Text("Type a number or use the arrows, then save: raising a limit asks for Touch ID once, lowering it never does. Postern allows up to 300 emails an hour and 1,000 a day. A batch waits for room when your limit is reached, and an hour when Proton's own limit is.")) {
+            LimitField(label: "At most per hour", text: $hourText, range: 1...Policy.maxSendsPerHour, step: 10, onSubmit: saveTyped)
+            LimitField(label: "At most per day", text: $dayText, range: 1...Policy.maxSendsPerDay, step: 50, onSubmit: saveTyped)
+            ProtonRow {
+                HStack(spacing: 8) {
+                    Button("Set to Maximum") { save(Policy.maxSendsPerHour, Policy.maxSendsPerDay) }
+                        .buttonStyle(.proton(.secondary))
+                        .fixedSize()
+                        .disabled(saving || saved == Limits(hour: Policy.maxSendsPerHour, day: Policy.maxSendsPerDay))
+                    Spacer(minLength: 8)
+                    if changed {
+                        Button("Cancel", action: reset).buttonStyle(.proton(.ghost)).fixedSize().disabled(saving)
+                        Button(raises ? "Save…" : "Save", action: saveTyped)
+                            .buttonStyle(.proton(.primary))
+                            .fixedSize()
+                            .disabled(saving || typed == nil)
+                    }
+                }
+            }
+        }
+        .onChange(of: saved) { old, _ in
+            // Saved elsewhere: follow, unless the user is typing other numbers.
+            if hourText == String(old.hour) && dayText == String(old.day) { reset() }
+        }
+    }
+
+    private var saved: Limits { Limits(hour: model.policy.sendsPerHour, day: model.policy.sendsPerDay) }
+
+    /// The typed limits as they would be saved; nil while a field is empty.
+    private var typed: Limits? {
+        guard let hour = Int(hourText), let day = Int(dayText) else { return nil }
+        let limits = Policy.clampedLimits(perHour: hour, perDay: day)
+        return Limits(hour: limits.perHour, day: limits.perDay)
+    }
+
+    private var changed: Bool { hourText != String(saved.hour) || dayText != String(saved.day) }
+
+    private var raises: Bool {
+        guard let typed else { return false }
+        return typed.hour > saved.hour || typed.day > saved.day
+    }
+
+    private func reset() {
+        hourText = String(saved.hour)
+        dayText = String(saved.day)
+    }
+
+    private func saveTyped() {
+        guard changed, let typed else { return }
+        save(typed.hour, typed.day)
+    }
+
+    private func save(_ hour: Int, _ day: Int) {
+        guard !saving else { return }
+        saving = true
+        Task {
+            await model.setLimits(perHour: hour, perDay: day)
+            saving = false
+            let limits = Policy.clampedLimits(perHour: hour, perDay: day)
+            // Saved: show what was kept. Cancelled at Touch ID: keep what the user typed, to try again.
+            if saved == Limits(hour: limits.perHour, day: limits.perDay) { reset() }
+        }
+    }
+}
+
+/// One limit: its name, the number to type, arrows that change it by a step, and the unit.
+private struct LimitField: View {
+    let label: LocalizedStringKey
+    @Binding var text: String
+    let range: ClosedRange<Int>
+    let step: Int
+    let onSubmit: () -> Void
+    @FocusState private var focused: Bool
+
+    var body: some View {
+        ProtonRow {
+            HStack(spacing: 8) {
+                Text(label)
+                Spacer(minLength: 12)
+                TextField(text: $text, prompt: Text(verbatim: "")) { Text(label) }
+                    .labelsHidden()
+                    .textFieldStyle(.plain)
+                    .multilineTextAlignment(.trailing)
+                    .font(.system(size: 13).monospacedDigit())
+                    .focused($focused)
+                    .onSubmit(onSubmit)
+                    .onChange(of: text) { _, new in
+                        // Digits only, full-width ones included, as an input method may type them.
+                        let digits = String((new.applyingTransform(.fullwidthToHalfwidth, reverse: false) ?? new)
+                            .filter { $0.isASCII && $0.isNumber }.prefix(5))
+                        if digits != new { text = digits }
+                    }
+                    .padding(.horizontal, 10)
+                    .frame(width: 84, height: 28)
+                    .background(Theme.canvas, in: RoundedRectangle(cornerRadius: Theme.radius, style: .continuous))
+                    .overlay(RoundedRectangle(cornerRadius: Theme.radius, style: .continuous)
+                        .strokeBorder(focused ? Theme.interaction : Theme.field, lineWidth: 1))
+                    .background(RoundedRectangle(cornerRadius: Theme.radius + 3, style: .continuous)
+                        .stroke(Theme.interaction.opacity(focused ? 0.2 : 0), lineWidth: 3).padding(-2))
+                Stepper(label, value: Binding(
+                    get: { min(max(Int(text) ?? range.lowerBound, range.lowerBound), range.upperBound) },
+                    set: { text = String($0) }
+                ), in: range, step: step)
+                .labelsHidden()
+                Text("emails").foregroundStyle(Theme.textWeak)
+            }
+        }
+    }
+}
+
+/// What Proton itself allows on each plan, from its support page on sending limits. Bridge signs in paid plans only,
+/// so once Postern reaches Bridge, the account is on one of them.
+private struct ProtonPlansSection: View {
+    let paid: Bool
+
+    var body: some View {
+        ProtonSection("Proton's limits by plan", footer: Text("From Proton's support page on sending limits. Proton may stop an account that looks like bulk mail: write to each person, keep a steady pace and avoid addresses that bounce.")) {
+            PlanRow(name: "Proton Free", limit: "50 an hour, 150 a day",
+                    detail: "Bridge, and so Postern, needs a paid plan.")
+            PlanRow(name: "Paid plans", limit: "No fixed number",
+                    detail: "Mail Plus, Unlimited, Duo, Family, Visionary and the business plans: the limit follows your account's reputation and grows as you send.",
+                    current: paid)
+            PlanRow(name: "On every plan", limit: "100 recipients per email",
+                    detail: "Each recipient counts as one email.")
+        }
+    }
+}
+
+private struct PlanRow: View {
+    let name: LocalizedStringKey
+    let limit: LocalizedStringKey
+    let detail: LocalizedStringKey
+    var current = false
+
+    var body: some View {
+        ProtonRow {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                VStack(alignment: .leading, spacing: 3) {
+                    HStack(spacing: 8) {
+                        Text(name)
+                        if current { Pill(text: String(localized: "Your plan"), color: Theme.interaction) }
+                    }
+                    Text(detail).font(.system(size: 12)).foregroundStyle(Theme.textWeak)
+                }
+                .fixedSize(horizontal: false, vertical: true)
+                Spacer(minLength: 12)
+                Text(limit)
+                    .foregroundStyle(current ? Theme.text : Theme.textWeak)
+                    .multilineTextAlignment(.trailing)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+        }
     }
 }
 

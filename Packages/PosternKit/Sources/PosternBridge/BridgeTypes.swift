@@ -72,3 +72,15 @@ public enum BridgeError: Error, Equatable, Sendable {
     /// The connection broke after the message was handed to Bridge, before Bridge said it took it: it may have left.
     case sendInterrupted
 }
+
+extension BridgeError {
+    /// Bridge passes Proton's refusal on in its SMTP reply, as in "554 5.0.0 Error: transaction failed, blame it on
+    /// the weather: Hourly external limit reached": the account reached Proton's own sending limit, hourly or daily.
+    /// The email did not leave, and Proton asks to wait an hour before sending again.
+    public var isProtonSendingLimit: Bool {
+        guard case .commandFailed(let reply) = self, reply.hasPrefix("SMTP 4") || reply.hasPrefix("SMTP 5") else { return false }
+        // Proton's words name a sending limit; a size limit says nothing about the account and must not hold a batch.
+        let text = reply.lowercased()
+        return text.contains("limit reached") || text.contains("sending limit")
+    }
+}

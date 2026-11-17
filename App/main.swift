@@ -21,12 +21,15 @@ if let index = CommandLine.arguments.firstIndex(of: "--hold-control-window"), in
     }
     exit(0)
 }
-// `--render-control-window <pane> <light|dark>` and `--render-approval-panel <light|dark> <kind>` print the image
-// instead of holding the window, for machines where screencapture may not record.
+// `--render-control-window <pane> <light|dark> [height]` and `--render-approval-panel <light|dark> <kind>` print the
+// image instead of holding the window, for machines where screencapture may not record. A taller height shows the
+// whole of a long pane.
 if let index = CommandLine.arguments.firstIndex(of: "--render-control-window"), index + 2 < CommandLine.arguments.count {
     let arguments = CommandLine.arguments
+    let height = index + 3 < arguments.count ? Double(arguments[index + 3]) ?? 640 : 640
     MainActor.assumeIsolated {
-        SetupSnapshots.holdControlWindow(pane: arguments[index + 1], dark: arguments[index + 2] == "dark", seconds: -1)
+        SetupSnapshots.holdControlWindow(pane: arguments[index + 1], dark: arguments[index + 2] == "dark", seconds: -1,
+                                         height: min(max(height, 400), 4000))
     }
     exit(0)
 }

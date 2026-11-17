@@ -434,6 +434,8 @@ final class BridgeBackend: MailBackend, Sendable {
             PosternError(.notFound, "No mailbox or message matches \(name).")
         case .tooLarge:
             PosternError(.tooLarge, "This message is larger than 25 MB.")
+        case .commandFailed(let reply) where error.isProtonSendingLimit:
+            PosternError(.protonLimit, "Proton refused this email: the account reached Proton's own sending limit (\(reply.prefix(200))). It was not sent; Proton asks to wait an hour before sending again.")
         case .commandFailed(let reply) where reply.hasPrefix("SMTP 5"):
             PosternError(.sendRefused, "Proton refused this email (\(reply.prefix(200))). It was not sent.")
         case .commandFailed(let reply) where reply.hasPrefix("SMTP 4"):

@@ -118,6 +118,8 @@ Touch ID, and it speeds up. `start_at` delays the first email, up to thirty days
 Postern is paused or `send_drafts` is off, the batch holds. When Bridge does not take an email (not running, signed
 out, or Proton asking to wait), the batch holds too and tries again after 30 seconds, 2 minutes, then every 10
 minutes, instead of failing every email in turn; an email Proton refuses is marked `failed` and the others go on.
+When the account reaches Proton's own sending limit, which Proton sets by plan and reputation, the batch waits an
+hour, as Proton asks, then sends the same email again.
 An email whose connection broke while Bridge was taking it is marked `uncertain`: it counts towards your limits, its
 draft stays, and no batch sends that draft again; look in Sent.
 
@@ -170,6 +172,7 @@ When Postern refuses, the client gets a code and a sentence it can repeat to you
 | `sender_not_allowed` | The address to send from is not your account's or an alias you added. |
 | `quota_exceeded` | The hourly or daily sending limit is reached. |
 | `send_refused` | Proton refused the email; it was not sent. |
+| `proton_limit` | The account reached Proton's own sending limit; the email was not sent. Try again in an hour. |
 | `send_uncertain` | The connection to Bridge broke while the email was handed over; check Sent before sending it again. |
 | `attachment_missing` | The text announces a file and none is attached; attach it, or pass `no_attachment: true`. |
 | `attachments_lost` | Bridge saved a draft without all its files; the draft was removed and nothing was saved. |

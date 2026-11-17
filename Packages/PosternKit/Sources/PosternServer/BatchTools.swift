@@ -15,7 +15,9 @@ extension SendTools {
     /// How long a batch waits before trying an email Bridge did not take again: then every ten minutes.
     static let retryDelays: [TimeInterval] = [30, 120, 600]
     /// Failures that say nothing about the email itself: the batch holds instead of failing every email in turn.
-    static let holdingCodes: Set<PosternErrorCode> = [.bridgeUnreachable, .authenticationFailed, .certificateMismatch, .notConfigured]
+    static let holdingCodes: Set<PosternErrorCode> = [.bridgeUnreachable, .authenticationFailed, .certificateMismatch, .notConfigured, .protonLimit]
+    /// Once the account reaches Proton's own sending limit, Proton asks to wait an hour before sending again.
+    static let protonLimitDelay: TimeInterval = 3600
 
     // MARK: Drafts from a template
 
@@ -566,6 +568,13 @@ extension SendTools {
                 if let last, spacing > 0 { try await sleep(until: last.addingTimeInterval(spacing)) }
                 var attempt = 0
                 func hold(_ error: PosternError) async throws {
+                    if error.code == .protonLimit {
+                        // Proton's own limit, not this email: the same email goes again in an hour.
+                        let until = Date().addingTimeInterval(protonLimitDelay)
+                        await board.set(id, phase: .waiting(until: until, reason: "Proton's own sending limit for this account is reached; Postern tries again in an hour."))
+                        try await sleep(until: until)
+                        return
+                    }
                     // Bridge, the sign-in or the setup is at fault, not this email: wait, then every ten minutes.
                     let delay = retryDelays[min(attempt, retryDelays.count - 1)]
                     attempt += 1
