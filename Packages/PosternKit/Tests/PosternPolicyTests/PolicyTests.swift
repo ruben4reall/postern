@@ -33,6 +33,32 @@ import PosternVault
     }
 }
 
+@Suite struct SendingLimitTests {
+    @Test func keepsLimitsWithinPosternsCeilings() {
+        #expect(Policy.clampedLimits(perHour: 50, perDay: 500) == (50, 500))
+        #expect(Policy.clampedLimits(perHour: 5000, perDay: 99_999) == (Policy.maxSendsPerHour, Policy.maxSendsPerDay))
+        #expect(Policy.clampedLimits(perHour: 0, perDay: 0) == (1, 1))
+        // A day never holds fewer emails than an hour.
+        #expect(Policy.clampedLimits(perHour: 200, perDay: 100) == (200, 200))
+    }
+
+    @Test func raisingEitherLimitNeedsTheUserAndLoweringNeverDoes() {
+        let current = Policy(enabledTools: [.sendMessage], sendsPerHour: 10, sendsPerDay: 30)
+        var both = current
+        both.sendsPerHour = Policy.maxSendsPerHour
+        both.sendsPerDay = Policy.maxSendsPerDay
+        #expect(both.addsPower(over: current))
+        var mixed = current
+        mixed.sendsPerHour = 5
+        mixed.sendsPerDay = 500
+        #expect(mixed.addsPower(over: current))
+        var lower = current
+        lower.sendsPerHour = 5
+        lower.sendsPerDay = 20
+        #expect(!lower.addsPower(over: current))
+    }
+}
+
 @Suite struct PolicyPowerTests {
     let base = Policy(enabledTools: [.listMailboxes], hiddenMailboxes: ["Folders/Private"], pauseWhenLocked: true)
 

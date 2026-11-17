@@ -1817,226 +1817,6 @@
         }
       }
     },
-    "%lld emails" : {
-      "localizations" : {
-        "de" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld E-Mail"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld E-Mails"
-                }
-              }
-            }
-          }
-        },
-        "en" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld email"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld emails"
-                }
-              }
-            }
-          }
-        },
-        "es" : {
-          "variations" : {
-            "plural" : {
-              "many" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld correos"
-                }
-              },
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld correo"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld correos"
-                }
-              }
-            }
-          }
-        },
-        "fr" : {
-          "variations" : {
-            "plural" : {
-              "many" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld e-mails"
-                }
-              },
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld e-mail"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld e-mails"
-                }
-              }
-            }
-          }
-        },
-        "it" : {
-          "variations" : {
-            "plural" : {
-              "many" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld email"
-                }
-              },
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld email"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld email"
-                }
-              }
-            }
-          }
-        },
-        "ja" : {
-          "variations" : {
-            "plural" : {
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld 通"
-                }
-              }
-            }
-          }
-        },
-        "ko" : {
-          "variations" : {
-            "plural" : {
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "메일 %lld통"
-                }
-              }
-            }
-          }
-        },
-        "nl" : {
-          "variations" : {
-            "plural" : {
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld e-mail"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld e-mails"
-                }
-              }
-            }
-          }
-        },
-        "pl" : {
-          "variations" : {
-            "plural" : {
-              "few" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld e-maile"
-                }
-              },
-              "many" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld e-maili"
-                }
-              },
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld e-mail"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld e-maila"
-                }
-              }
-            }
-          }
-        },
-        "pt-BR" : {
-          "variations" : {
-            "plural" : {
-              "many" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld e-mails"
-                }
-              },
-              "one" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld e-mail"
-                }
-              },
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld e-mails"
-                }
-              }
-            }
-          }
-        },
-        "zh-Hans" : {
-          "variations" : {
-            "plural" : {
-              "other" : {
-                "stringUnit" : {
-                  "state" : "translated",
-                  "value" : "%lld 封"
-                }
-              }
-            }
-          }
-        }
-      }
-    },
     "%lld emails mention a file but carry none." : {
       "localizations" : {
         "de" : {
@@ -4812,6 +4592,134 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "（无正文）"
+          }
+        }
+      }
+    },
+    "100 recipients per email" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "100 Empfänger pro E-Mail"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "100 destinatarios por correo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "100 destinataires par e-mail"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "100 destinatari per email"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 通あたり宛先 100 件"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "메일당 수신자 100명"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "100 ontvangers per e-mail"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "100 odbiorców na e-mail"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "100 destinatários por e-mail"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每封邮件 100 位收件人"
+          }
+        }
+      }
+    },
+    "50 an hour, 150 a day" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "50 pro Stunde, 150 pro Tag"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "50 por hora, 150 al día"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "50 par heure, 150 par jour"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "50 all'ora, 150 al giorno"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "1 時間 50 通、1 日 150 通"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "시간당 50통, 하루 150통"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "50 per uur, 150 per dag"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "50 na godzinę, 150 dziennie"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "50 por hora, 150 por dia"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每小时 50 封，每天 150 封"
           }
         }
       }
@@ -8622,6 +8530,70 @@
         }
       }
     },
+    "Bridge, and so Postern, needs a paid plan." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bridge und damit Postern braucht einen kostenpflichtigen Tarif."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bridge, y por tanto Postern, necesita un plan de pago."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bridge, et donc Postern, demande un forfait payant."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bridge, e quindi Postern, richiede un piano a pagamento."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bridge、つまり Postern を使うには有料プランが必要です。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bridge, 따라서 Postern을 쓰려면 유료 요금제가 필요합니다."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bridge, en dus Postern, vraagt een betaald abonnement."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bridge, a więc i Postern, wymaga płatnego planu."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O Bridge, e portanto o Postern, exige um plano pago."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bridge（因此 Postern）需要付费套餐。"
+          }
+        }
+      }
+    },
     "Bring All to Front" : {
       "localizations" : {
         "de" : {
@@ -10670,6 +10642,70 @@
         }
       }
     },
+    "Each recipient counts as one email." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Jeder Empfänger zählt als eine E-Mail."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cada destinatario cuenta como un correo."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Chaque destinataire compte comme un e-mail."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ogni destinatario conta come un'email."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "宛先 1 件ごとに 1 通と数えます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "수신자 한 명이 메일 한 통으로 계산됩니다."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Elke ontvanger telt als één e-mail."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Każdy odbiorca liczy się jako jeden e-mail."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cada destinatário conta como um e-mail."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "每位收件人计为一封邮件。"
+          }
+        }
+      }
+    },
     "Each tool is one thing an app may do with your mail. Turning one on asks for Touch ID; turning it off is immediate, and connected apps see the change at once." : {
       "localizations" : {
         "de" : {
@@ -12663,6 +12699,70 @@
         }
       }
     },
+    "From Proton's support page on sending limits. Proton may stop an account that looks like bulk mail: write to each person, keep a steady pace and avoid addresses that bounce." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Laut Protons Hilfeseite zu Versandlimits. Proton kann ein Konto sperren, das nach Massenversand aussieht: Schreib jeder Person einzeln, halte ein gleichmäßiges Tempo und meide Adressen, die nicht zustellbar sind."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Según la página de ayuda de Proton sobre límites de envío. Proton puede bloquear una cuenta que parezca enviar correo masivo: escribe a cada persona, mantén un ritmo constante y evita las direcciones que rebotan."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "D’après la page d’assistance de Proton sur les limites d’envoi. Proton peut bloquer un compte qui ressemble à de l’envoi en masse : écrivez à chaque personne, gardez un rythme régulier et évitez les adresses invalides."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dalla pagina di assistenza di Proton sui limiti di invio. Proton può bloccare un account che sembra inviare posta di massa: scrivi a ogni persona, mantieni un ritmo costante ed evita gli indirizzi che rimbalzano."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proton の送信上限に関するサポートページによる情報です。Proton は大量送信のように見えるアカウントを停止することがあります。一人ひとりに宛てて書き、一定のペースを保ち、届かないアドレスは避けてください。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proton의 발송 한도 지원 페이지에 따른 내용입니다. Proton은 대량 메일처럼 보이는 계정을 정지할 수 있습니다. 한 사람씩 쓰고, 일정한 속도를 유지하고, 반송되는 주소는 피하세요."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Volgens de supportpagina van Proton over verzendlimieten. Proton kan een account stopzetten dat op bulkmail lijkt: schrijf iedereen persoonlijk, houd een rustig tempo aan en vermijd adressen die onbestelbaar zijn."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Według strony pomocy Protona o limitach wysyłki. Proton może zablokować konto, które wygląda na wysyłające masową pocztę: pisz do każdej osoby z osobna, zachowaj stałe tempo i unikaj nieprawidłowych adresów."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Segundo a página de suporte do Proton sobre limites de envio. O Proton pode suspender uma conta que pareça enviar e-mails em massa: escreva para cada pessoa, mantenha um ritmo constante e evite endereços inválidos."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "依据 Proton 关于发送限额的支持页面。Proton 可能会停用看起来在群发邮件的账户：请逐一写给每个人，保持稳定的节奏，并避免会退信的地址。"
+          }
+        }
+      }
+    },
     "Help" : {
       "localizations" : {
         "de" : {
@@ -14356,6 +14456,70 @@
         }
       }
     },
+    "Mail Plus, Unlimited, Duo, Family, Visionary and the business plans: the limit follows your account's reputation and grows as you send." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail Plus, Unlimited, Duo, Family, Visionary und die Business-Tarife: Das Limit folgt dem Ruf deines Kontos und wächst, je mehr du sendest."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail Plus, Unlimited, Duo, Family, Visionary y los planes para empresas: el límite depende de la reputación de tu cuenta y crece a medida que envías."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail Plus, Unlimited, Duo, Family, Visionary et les forfaits professionnels : la limite suit la réputation de votre compte et augmente à mesure que vous envoyez."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail Plus, Unlimited, Duo, Family, Visionary e i piani business: il limite segue la reputazione del tuo account e cresce man mano che invii."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail Plus、Unlimited、Duo、Family、Visionary とビジネス向けプラン：上限はアカウントの評価に応じて決まり、送信を重ねるほど上がります。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail Plus, Unlimited, Duo, Family, Visionary 및 비즈니스 요금제: 한도는 계정 평판에 따라 정해지며 보낼수록 늘어납니다."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail Plus, Unlimited, Duo, Family, Visionary en de zakelijke abonnementen: de limiet volgt de reputatie van je account en groeit naarmate je verstuurt."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail Plus, Unlimited, Duo, Family, Visionary i plany firmowe: limit zależy od reputacji konta i rośnie w miarę wysyłania."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail Plus, Unlimited, Duo, Family, Visionary e os planos empresariais: o limite acompanha a reputação da sua conta e cresce à medida que você envia."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Mail Plus、Unlimited、Duo、Family、Visionary 及企业套餐：限额取决于你的账户信誉，并会随着发送逐渐提高。"
+          }
+        }
+      }
+    },
     "Mailboxes" : {
       "localizations" : {
         "de" : {
@@ -15380,6 +15544,70 @@
         }
       }
     },
+    "No fixed number" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Keine feste Zahl"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sin número fijo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Pas de nombre fixe"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Nessun numero fisso"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "固定の上限なし"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "고정된 수 없음"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Geen vast aantal"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Brak stałej liczby"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sem número fixo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "没有固定数量"
+          }
+        }
+      }
+    },
     "Nobody. Every email shows the approval panel." : {
       "localizations" : {
         "de" : {
@@ -16147,6 +16375,70 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "开启"
+          }
+        }
+      }
+    },
+    "On every plan" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In jedem Tarif"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "En todos los planes"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sur tous les forfaits"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "In tutti i piani"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "すべてのプラン"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "모든 요금제"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bij elk abonnement"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "W każdym planie"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Em todos os planos"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "所有套餐"
           }
         }
       }
@@ -17141,6 +17433,70 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "概览"
+          }
+        }
+      }
+    },
+    "Paid plans" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Kostenpflichtige Tarife"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Planes de pago"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Forfaits payants"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Piani a pagamento"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "有料プラン"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "유료 요금제"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Betaalde abonnementen"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Plany płatne"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Planos pagos"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "付费套餐"
           }
         }
       }
@@ -19362,6 +19718,70 @@
         }
       }
     },
+    "Proton Free" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proton Free"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proton Free"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proton Free"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proton Free"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proton Free"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proton Free"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proton Free"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proton Free"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proton Free"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proton Free"
+          }
+        }
+      }
+    },
     "Proton Mail Bridge" : {
       "localizations" : {
         "de" : {
@@ -19490,6 +19910,134 @@
         }
       }
     },
+    "Proton's limits by plan" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Protons Limits je Tarif"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Límites de Proton por plan"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limites de Proton par forfait"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limiti di Proton per piano"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "プラン別の Proton の上限"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "요금제별 Proton 한도"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limieten van Proton per abonnement"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limity Protona według planu"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Limites do Proton por plano"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Proton 各套餐的限额"
+          }
+        }
+      }
+    },
+    "Proton's own sending limit for your account is reached; Postern tries again in an hour." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Protons eigenes Versandlimit für dein Konto ist erreicht; Postern versucht es in einer Stunde erneut."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Se alcanzó el límite de envío propio de Proton para tu cuenta; Postern lo intentará de nuevo en una hora."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "La limite d’envoi propre à Proton est atteinte pour votre compte ; Postern réessaie dans une heure."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "È stato raggiunto il limite di invio di Proton per il tuo account; Postern riprova tra un'ora."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アカウントが Proton 独自の送信上限に達しました。Postern は 1 時間後にもう一度試します。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "계정이 Proton 자체 발송 한도에 도달했습니다. Postern이 1시간 후에 다시 시도합니다."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "De eigen verzendlimiet van Proton voor je account is bereikt; Postern probeert het over een uur opnieuw."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Osiągnięto własny limit wysyłki Protona dla Twojego konta; Postern spróbuje ponownie za godzinę."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O limite de envio do próprio Proton para a sua conta foi atingido; o Postern tenta de novo em uma hora."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的账户已达到 Proton 自身的发送限额；Postern 会在一小时后重试。"
+          }
+        }
+      }
+    },
     "Quit Postern" : {
       "localizations" : {
         "de" : {
@@ -19550,70 +20098,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "退出 Postern"
-          }
-        }
-      }
-    },
-    "Raising a limit asks for Touch ID. A batch waits for room when a limit is reached. Proton sets its own limits by plan and account reputation (150 a day on the free plan) and may stop an account that looks like bulk mail: raise these only as far as your use needs." : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Ein Limit zu erhöhen verlangt Touch ID. Ein Stapel wartet auf freies Kontingent, wenn ein Limit erreicht ist. Proton setzt je nach Tarif und Ruf des Kontos eigene Limits (150 pro Tag im kostenlosen Tarif) und kann ein Konto sperren, das nach Massenversand aussieht: Erhöhe deine nur so weit, wie du es wirklich brauchst."
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Subir un límite pide Touch ID. Cuando se alcanza un límite, un lote espera a que haya margen. Proton fija sus propios límites según el plan y la reputación de la cuenta (150 al día en el plan gratuito) y puede bloquear una cuenta que parezca enviar correo masivo: súbelos solo hasta donde lo necesites."
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Augmenter une limite demande Touch ID. Un lot attend qu’une place se libère quand une limite est atteinte. Proton fixe ses propres limites selon le forfait et la réputation du compte (150 par jour avec le forfait gratuit) et peut bloquer un compte qui ressemble à de l’envoi en masse : n’augmentez celles-ci que dans la mesure où votre usage l’exige."
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Alzare un limite richiede Touch ID. Quando si raggiunge un limite, un lotto aspetta che si liberi spazio. Proton applica i propri limiti in base al piano e alla reputazione dell'account (150 al giorno con il piano gratuito) e può bloccare un account che sembra inviare posta di massa: alzali solo quanto serve al tuo uso."
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "上限を引き上げるには Touch ID が必要です。上限に達すると、一括送信は枠が空くのを待ちます。Proton もプランやアカウントの評価に応じて独自の上限を設けており（無料プランでは 1 日 150 通）、大量送信のように見えるアカウントを停止することがあります。上限は、必要な分だけ引き上げてください。"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "한도를 올리려면 Touch ID가 필요합니다. 한도에 도달하면 일괄 발송은 여유가 생길 때까지 기다립니다. Proton도 요금제와 계정 평판에 따라 자체 한도를 두며(무료 요금제는 하루 150통), 대량 메일처럼 보이는 계정을 정지할 수 있습니다. 한도는 실제로 필요한 만큼만 올리세요."
-          }
-        },
-        "nl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Een limiet verhogen vraagt om Touch ID. Een batch wacht op ruimte als een limiet is bereikt. Proton hanteert eigen limieten per abonnement en reputatie van het account (150 per dag bij het gratis abonnement) en kan een account stopzetten dat op bulkmail lijkt: verhoog deze limieten alleen zover als je gebruik vraagt."
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Podniesienie limitu wymaga Touch ID. Gdy limit zostanie osiągnięty, seria czeka na wolne miejsce. Proton ma własne limity zależne od planu i reputacji konta (150 dziennie w planie darmowym) i może zablokować konto, które wygląda na wysyłające masową pocztę: podnoś te limity tylko na tyle, na ile tego potrzebujesz."
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Aumentar um limite pede Touch ID. Um lote espera por uma vaga quando um limite é atingido. O Proton define os próprios limites conforme o plano e a reputação da conta (150 por dia no plano gratuito) e pode suspender uma conta que pareça enviar e-mails em massa: aumente os seus só até onde o seu uso exigir."
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "提高限额需要 Touch ID。达到限额时，批量发送会等待名额。Proton 会根据套餐和账户信誉设定自己的限额（免费套餐每天 150 封），并可能停用看起来在群发邮件的账户：请只按实际需要提高这些限额。"
           }
         }
       }
@@ -21226,6 +21710,70 @@
         }
       }
     },
+    "Save" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sichern"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salva"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bewaar"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zachowaj"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salvar"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "存储"
+          }
+        }
+      }
+    },
     "Save an attachment to Downloads › Postern, marked as downloaded." : {
       "localizations" : {
         "de" : {
@@ -21478,6 +22026,70 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "根据发件文件夹中的一个模板或一张表格，一次保存最多 5,000 份草稿，例如每家公司一份、各附求职信的申请。"
+          }
+        }
+      }
+    },
+    "Save…" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Sichern …"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Guardar…"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enregistrer…"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salva…"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "保存…"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "저장…"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Bewaar…"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Zachowaj…"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Salvar…"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "存储…"
           }
         }
       }
@@ -22918,70 +23530,6 @@
         }
       }
     },
-    "Sending" : {
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Senden"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Envío"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Envoi"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Invio"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "送信"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "발송"
-          }
-        },
-        "nl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Versturen"
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Wysyłanie"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "Envio"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "发送"
-          }
-        }
-      }
-    },
     "Sending %lld emails for %@" : {
       "localizations" : {
         "de" : {
@@ -23390,6 +23938,70 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "设置 Postern…"
+          }
+        }
+      }
+    },
+    "Set to Maximum" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Auf Maximum setzen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Poner al máximo"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Régler au maximum"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Imposta al massimo"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "最大に設定"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "최대로 설정"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Op maximum zetten"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ustaw maksimum"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Definir no máximo"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "设为最大值"
           }
         }
       }
@@ -26398,6 +27010,70 @@
         }
       }
     },
+    "Type a number or use the arrows, then save: raising a limit asks for Touch ID once, lowering it never does. Postern allows up to 300 emails an hour and 1,000 a day. A batch waits for room when your limit is reached, and an hour when Proton's own limit is." : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gib eine Zahl ein oder nutze die Pfeile und sichere dann: Ein Limit zu erhöhen verlangt einmal Touch ID, es zu senken nie. Postern erlaubt bis zu 300 E-Mails pro Stunde und 1.000 pro Tag. Ein Stapel wartet auf freies Kontingent, wenn dein Limit erreicht ist, und eine Stunde, wenn Protons eigenes Limit erreicht ist."
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Escribe un número o usa las flechas y guarda: subir un límite pide Touch ID una sola vez, bajarlo nunca. Postern permite hasta 300 correos por hora y 1000 al día. Un lote espera a que haya margen cuando se alcanza tu límite, y una hora cuando se alcanza el de Proton."
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tapez un nombre ou utilisez les flèches, puis enregistrez : augmenter une limite demande Touch ID une seule fois, la baisser jamais. Postern permet jusqu’à 300 e-mails par heure et 1 000 par jour. Un lot attend qu’une place se libère quand votre limite est atteinte, et une heure quand c’est celle de Proton."
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Digita un numero o usa le frecce, poi salva: alzare un limite richiede Touch ID una sola volta, abbassarlo mai. Postern consente fino a 300 email all'ora e 1.000 al giorno. Un lotto aspetta che si liberi spazio quando raggiungi il tuo limite, e un'ora quando si raggiunge quello di Proton."
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "数値を入力するか矢印で調整して保存します。上限を引き上げるときだけ Touch ID が 1 回必要で、引き下げるときは不要です。Postern では 1 時間に 300 通、1 日に 1,000 通まで設定できます。自分の上限に達すると一括送信は枠が空くのを待ち、Proton 独自の上限に達したときは 1 時間待ちます。"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "숫자를 입력하거나 화살표로 조정한 다음 저장하세요. 한도를 올릴 때만 Touch ID가 한 번 필요하고, 낮출 때는 필요 없습니다. Postern은 시간당 300통, 하루 1,000통까지 허용합니다. 내 한도에 도달하면 일괄 발송은 여유가 생길 때까지 기다리고, Proton 자체 한도에 도달하면 1시간 기다립니다."
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Typ een getal of gebruik de pijltjes en bewaar: een limiet verhogen vraagt één keer om Touch ID, verlagen nooit. Postern staat tot 300 e-mails per uur en 1.000 per dag toe. Een batch wacht op ruimte als je limiet is bereikt, en een uur als de eigen limiet van Proton is bereikt."
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wpisz liczbę lub użyj strzałek, a potem zapisz: podniesienie limitu wymaga Touch ID tylko raz, obniżenie nigdy. Postern pozwala na maksymalnie 300 e-maili na godzinę i 1000 dziennie. Seria czeka na wolne miejsce, gdy osiągniesz swój limit, a godzinę, gdy osiągnięty zostanie limit samego Protona."
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Digite um número ou use as setas e salve: aumentar um limite pede Touch ID uma única vez, diminuir nunca pede. O Postern permite até 300 e-mails por hora e 1.000 por dia. Um lote espera por uma vaga quando o seu limite é atingido, e uma hora quando é o limite do próprio Proton."
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "输入数字或使用箭头调整，然后存储：提高限额只需一次 Touch ID，降低则不需要。Postern 最多允许每小时 300 封、每天 1,000 封。达到你的限额时，批量发送会等待名额；达到 Proton 自己的限额时，会等待一小时。"
+          }
+        }
+      }
+    },
     "Undo" : {
       "localizations" : {
         "de" : {
@@ -28192,6 +28868,70 @@
         }
       }
     },
+    "Your plan" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Dein Tarif"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Tu plan"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Votre forfait"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Il tuo piano"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "現在のプラン"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "내 요금제"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Je abonnement"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Twój plan"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Seu plano"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "你的套餐"
+          }
+        }
+      }
+    },
     "Your sending limit is reached (%lld per hour, %lld per day)." : {
       "localizations" : {
         "de" : {
@@ -28776,6 +29516,70 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "删除邮件"
+          }
+        }
+      }
+    },
+    "emails" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "E-Mails"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "correos"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "e-mails"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "email"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "通"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "통"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "e-mails"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "e-maili"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "e-mails"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "封"
           }
         }
       }
@@ -30056,71 +30860,6 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "允许你的应用从 %@ 发送邮件"
-          }
-        }
-      }
-    },
-    "let your apps send more emails" : {
-      "comment" : "Touch ID: “Postern” is trying to …",
-      "localizations" : {
-        "de" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "deinen Apps erlauben, mehr E-Mails zu senden"
-          }
-        },
-        "es" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "permitir a tus apps enviar más correos"
-          }
-        },
-        "fr" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "autoriser vos apps à envoyer plus d’e-mails"
-          }
-        },
-        "it" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "consentire alle tue app di inviare più email"
-          }
-        },
-        "ja" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "アプリにより多くのメールの送信を許可"
-          }
-        },
-        "ko" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "앱에 더 많은 메일 보내기 허용"
-          }
-        },
-        "nl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "je apps toe te staan om meer e-mails te versturen"
-          }
-        },
-        "pl" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "pozwolić aplikacjom wysyłać więcej e-maili"
-          }
-        },
-        "pt-BR" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "permitir que seus apps enviem mais e-mails"
-          }
-        },
-        "zh-Hans" : {
-          "stringUnit" : {
-            "state" : "translated",
-            "value" : "允许你的应用发送更多邮件"
           }
         }
       }
@@ -31438,6 +32177,71 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "整理邮件"
+          }
+        }
+      }
+    },
+    "raise your sending limits to %lld an hour and %lld a day" : {
+      "comment" : "Touch ID: “Postern” is trying to …",
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "deine Versandlimits auf %lld pro Stunde und %lld pro Tag zu erhöhen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "subir tus límites de envío a %lld por hora y %lld al día"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "relever vos limites d’envoi à %lld par heure et %lld par jour"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "alzare i tuoi limiti di invio a %lld all'ora e %lld al giorno"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "送信上限を 1 時間 %lld 通、1 日 %lld 通に変更"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "발송 한도를 시간당 %lld통, 하루 %lld통으로 변경"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "je verzendlimieten te verhogen naar %lld per uur en %lld per dag"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "podnieść limity wysyłki do %lld na godzinę i %lld dziennie"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "aumentar seus limites de envio para %lld por hora e %lld por dia"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "将发送限额提高到每小时 %lld 封、每天 %lld 封"
           }
         }
       }

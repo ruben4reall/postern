@@ -16,6 +16,8 @@ public enum PosternErrorCode: String, Codable, Sendable {
     case senderNotAllowed = "sender_not_allowed"
     case quotaExceeded = "quota_exceeded"
     case sendRefused = "send_refused"
+    /// Proton refused the email because the account reached Proton's own sending limit; it did not leave.
+    case protonLimit = "proton_limit"
     case sendUncertain = "send_uncertain"
     /// The text announces a file, and none is attached.
     case attachmentMissing = "attachment_missing"
