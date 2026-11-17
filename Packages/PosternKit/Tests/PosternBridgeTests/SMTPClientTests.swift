@@ -57,6 +57,38 @@ import PosternModel
         #expect(!server.lines.contains { $0.text.hasPrefix("MAIL FROM") })
     }
 
+    @Test func recognizesProtonsOwnSendingLimit() async throws {
+        let reply = "554 5.0.0 Error: transaction failed, blame it on the weather: Hourly external limit reached"
+        let server = try FakeSMTPServer(mode: .implicit, dataRefusal: reply)
+        try await server.start()
+        defer { Task { await server.stop() } }
+        do {
+            try await client(server).send(try approved())
+            Issue.record("The refused email was reported as sent.")
+        } catch let error as BridgeError {
+            #expect(error == .commandFailed("SMTP 554 5.0.0 Error: transaction failed, blame it on the weather: Hourly external limit reached"))
+            #expect(error.isProtonSendingLimit)
+        }
+    }
+
+    @Test func tellsProtonsLimitsFromOtherRefusals() {
+        let limits = [
+            "SMTP 554 5.0.0 Error: transaction failed, blame it on the weather: Daily external limit reached",
+            "SMTP 554 5.0.0 Error: transaction failed, blame it on the weather: Hourly external BCC sending limit reached",
+            "SMTP 451 4.7.0 Sending limit exceeded, try again later",
+        ]
+        for reply in limits { #expect(BridgeError.commandFailed(reply).isProtonSendingLimit, "\(reply)") }
+        let others = [
+            "SMTP 554 5.0.0 Error: transaction failed, blame it on the weather: invalid email address: not owned by user",
+            "SMTP 554 5.0.0 Error: transaction failed, blame it on the weather: You are temporarily banned from sending",
+            "SMTP 552 5.3.4 Message size exceeds fixed limit",
+            "SMTP 552 5.3.4 Message size limit exceeded",
+            "a1 NO limit reached",
+        ]
+        for reply in others { #expect(!BridgeError.commandFailed(reply).isProtonSendingLimit, "\(reply)") }
+        #expect(!BridgeError.unreachable.isProtonSendingLimit)
+    }
+
     @Test func dotStuffingKeepsLinesThatStartWithADot() {
         let stuffed = String(decoding: SMTPClient.dotStuffed(Data("a\r\n.\r\n.b\r\nc".utf8)), as: UTF8.self)
         #expect(stuffed == "a\r\n..\r\n..b\r\nc\r\n.\r\n")

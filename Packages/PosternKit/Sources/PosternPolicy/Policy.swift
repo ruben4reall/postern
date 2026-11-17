@@ -22,6 +22,16 @@ public struct Policy: Codable, Sendable, Equatable {
 
     public static let defaultSendsPerHour = 10
     public static let defaultSendsPerDay = 30
+    /// The most the user can allow. Proton sets no fixed limit on paid plans, but an account that sends more than this
+    /// looks like bulk mail, which Proton may stop.
+    public static let maxSendsPerHour = 300
+    public static let maxSendsPerDay = 1000
+
+    /// Limits as Postern keeps them: one an hour at least, the ceilings at most, and a day never below an hour.
+    public static func clampedLimits(perHour: Int, perDay: Int) -> (perHour: Int, perDay: Int) {
+        let hour = max(1, min(perHour, maxSendsPerHour))
+        return (hour, max(hour, min(perDay, maxSendsPerDay)))
+    }
 
     public init(
         enabledTools: Set<ToolID>, hiddenMailboxes: Set<String> = [], paused: Bool = false,

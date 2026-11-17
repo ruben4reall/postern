@@ -36,14 +36,14 @@ enum SetupSnapshots {
 
     /// Puts the real control window outside every display, prints its window number, and keeps it there for the
     /// given time so `screencapture -l` can take it. Nothing appears on screen and focus is not taken.
-    static func holdControlWindow(pane: String, dark: Bool, seconds: Double) {
+    static func holdControlWindow(pane: String, dark: Bool, seconds: Double, height: CGFloat = 640) {
         _ = NSApplication.shared
         NSApp.setActivationPolicy(.accessory)
         let model = sampleModel(pane: ControlModel.Pane(rawValue: pane) ?? .overview)
         if pane == "welcome" { model.configured = false }
         if seconds < 0 {
-            let view = NSHostingView(rootView: ControlSnapshot(model: model).frame(width: 940, height: 640))
-            view.frame = NSRect(x: 0, y: 0, width: 940, height: 640)
+            let view = NSHostingView(rootView: ControlSnapshot(model: model).frame(width: 940, height: height))
+            view.frame = NSRect(x: 0, y: 0, width: 940, height: height)
             let flat = NSWindow(contentRect: view.frame, styleMask: [.borderless], backing: .buffered, defer: false)
             flat.appearance = NSAppearance(named: dark ? .darkAqua : .aqua)
             flat.contentView = view

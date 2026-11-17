@@ -107,6 +107,39 @@ import PosternCompose
         #expect(backend.lock.withLock { backend.deletedDrafts } == [ids[1], ids[2]])
     }
 
+    @Test func aBatchWaitsAnHourWhenProtonsOwnLimitIsReached() async throws {
+        let backend = FakeBackend()
+        _ = try base.applicationDraft(backend)
+        backend.lock.withLock { backend.sendFailures = [PosternError(.protonLimit, "Proton refused this email: the account reached Proton's own sending limit.")] }
+        let ledger = MemoryLedger()
+        let (client, _) = try await base.connect(policy: policy, backend: backend, ledger: ledger, inlineWait: .seconds(1))
+        let ids = base.drafts([5, 6]).map { Value.string($0.opaque) }
+        let started = Date()
+        let (_, structured, _) = try await base.call(client, "send_drafts", ["ids": .array(ids)])
+        // Neither email fails: the first waits to go again, and its place in the limits is given back.
+        #expect(base.statuses(structured) == ["waiting", "waiting"])
+        #expect(backend.lock.withLock { backend.sent }.isEmpty && ledger.recentSends().isEmpty)
+        guard case .object(let fields)? = structured, case .string(let id)? = fields["batch"] else {
+            Issue.record("No batch in \(String(describing: structured))")
+            return
+        }
+        let (_, status, _) = try await base.call(client, "batch_status", ["id": .string(id)])
+        guard case .object(let batch)? = status else { Issue.record("No status for \(id)"); return }
+        #expect(batch["phase"] == .string("waiting"))
+        if case .string(let reason)? = batch["reason"] {
+            #expect(reason == "Proton's own sending limit for this account is reached; Postern tries again in an hour.")
+        } else {
+            Issue.record("The batch does not say why it waits.")
+        }
+        if case .string(let until)? = batch["waiting_until"], let date = ISO8601DateFormatter().date(from: until) {
+            #expect(date.timeIntervalSince(started) > 3500)
+        } else {
+            Issue.record("The batch does not say until when it waits.")
+        }
+        _ = try await base.call(client, "cancel_batch", ["id": .string(id)])
+        #expect(backend.lock.withLock { backend.sent }.isEmpty && backend.lock.withLock { backend.deletedDrafts }.isEmpty)
+    }
+
     @Test func listsTheOutbox() async throws {
         let backend = FakeBackend()
         outbox(backend, ["Lettres/Acme.pdf": "%PDF-acme"])

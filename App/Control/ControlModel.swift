@@ -211,10 +211,12 @@ final class ControlModel {
         await update(String(localized: "stop pausing Postern when the screen locks", comment: "Touch ID: “Postern” is trying to …")) { $0.pauseWhenLocked = value }
     }
 
+    /// Saves both limits at once: one Touch ID when either rises, none when they only fall.
     func setLimits(perHour: Int, perDay: Int) async {
-        await update(String(localized: "let your apps send more emails", comment: "Touch ID: “Postern” is trying to …")) { policy in
-            policy.sendsPerHour = max(1, min(perHour, 300))
-            policy.sendsPerDay = max(policy.sendsPerHour, min(perDay, 1000))
+        let limits = Policy.clampedLimits(perHour: perHour, perDay: perDay)
+        await update(String(localized: "raise your sending limits to \(limits.perHour) an hour and \(limits.perDay) a day", comment: "Touch ID: “Postern” is trying to …")) { policy in
+            policy.sendsPerHour = limits.perHour
+            policy.sendsPerDay = limits.perDay
         }
     }
 

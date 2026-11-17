@@ -1,5 +1,16 @@
 # Changelog
 
+## Unreleased
+
+- **Sending limits you type.** Click a limit, type the number you want, and save: one Touch ID raises both, and
+  lowering them never asks. The arrows still nudge them, and Set to Maximum takes them to 300 an hour and 1,000 a
+  day in one step.
+- **Proton's limits, plan by plan.** The Security pane lists what Proton allows on each plan: 50 an hour and 150 a
+  day on Proton Free, no fixed number on paid plans, where the limit follows the account's reputation, and 100
+  recipients per email on every plan. Bridge only signs in paid plans, so your plan is marked as one of them.
+- **A batch that waits for Proton.** When the account reaches Proton's own sending limit, the email is not marked
+  failed: the batch waits an hour, as Proton asks, and sends it again. Apps get the new `proton_limit` code.
+
 ## 0.3.0 (2026-11-11)
 
 - **The look of Proton Mail.** Proton's purple frame in light and its Carbon theme in dark, a sidebar that lists

@@ -119,6 +119,10 @@ enum KitText {
             }
         },
         { text in
+            text == "Proton's own sending limit for this account is reached; Postern tries again in an hour."
+                ? String(localized: "Proton's own sending limit for your account is reached; Postern tries again in an hour.") : nil
+        },
+        { text in
             text == "Postern is paused; the batch goes on when the user resumes it."
                 ? String(localized: "Postern is paused; the batch goes on when you resume it.") : nil
         },
