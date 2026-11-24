@@ -62,13 +62,39 @@ Packages/PosternKit/ Everything that can be tested without the app:
   PosternServer      The MCP tools and sessions.
   PosternAudit       The chained activity log.
   PosternClients     The settings of the apps Postern connects in one click, edited in place.
+  PosternCore        The core every system hosts: the Bridge backend, the sessions, the policy in force, the
+                     limits, the folders. The Mac app, the Linux core and the Windows core give it a CorePlatform.
+Packages/PosternDesktop/  Postern for Linux and Windows:
+  PosternPlatform    Secret stores (libsecret, DPAPI), the local channel (Unix socket, named pipe), the jailed
+                     reader, polkit and Windows Hello proofs, the apps' settings paths, the control protocol.
+  postern-core       The per-user core. postern-mcp: the relay. postern-parser: the jailed reader.
+  postern            The command line. postern-app: the GTK 4 and libadwaita app (Linux).
+  CPosternSys        The reader's jail (seccomp, Landlock, limits) and the socket peer's credentials, in C.
+packaging/linux/     systemd units, polkit actions, desktop entry, AppStream, icons, nfpm and install scripts.
+Windows/hello/       postern-hello, Windows Hello in C++/WinRT: creates the key and signs approvals.
 docs/                Threat model, architecture, tool reference, images.
-scripts/             Build, install and offscreen screenshots.
+scripts/             Build, install, offscreen screenshots (macOS and Linux), the Windows forks.
 ```
 
 [docs/architecture.md](docs/architecture.md) explains how the pieces talk to each other.
 
 ## Run the tests
+
+### Linux and Windows
+
+```bash
+cd Packages/PosternDesktop
+swift test                         # the platform layer, the core behind a real socket or pipe
+swift build -c release --static-swift-stdlib
+.build/release/postern-app --demo overview   # Linux: the app with sample data, no core needed
+```
+
+On Linux, install `libgtk-4-dev`, `libadwaita-1-dev` and `libsecret-1-dev` first. On Windows, run
+`scripts/windows-forks.sh` (in Git Bash) before building: it points the build at the two pinned forks the Windows
+build needs until upstream merges their fixes. CI builds, tests and pictures the Linux app on every pull request
+(`scripts/linux-screenshots.sh`), and builds and tests the Windows programs.
+
+### macOS
 
 You need Xcode 26 (Swift 6.2 or later) on macOS 26.
 

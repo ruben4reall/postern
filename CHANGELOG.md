@@ -1,15 +1,45 @@
 # Changelog
 
-## Unreleased
+## 2.0.0 (unreleased)
 
+Postern 2: one core for macOS, Linux and Windows, new tools and prompts, and a new overview.
+
+- **Postern for Linux.** A per-user core that systemd starts on demand, the relay MCP apps launch, a GTK 4 and
+  libadwaita app in Proton's colors, and a full command line (`postern setup`, `postern tools`, `postern apps connect`,
+  `postern approvals` for servers without a desktop). Every email and deletion is approved in Postern's window, then
+  proved by polkit: your password, or your fingerprint where fprintd is set up. Secrets live in the desktop's keyring
+  (Secret Service), and every message is read by a fresh process locked in with seccomp, Landlock and limits.
+  Packages for Ubuntu, Debian and Fedora, and an archive with an install script for the others.
+- **Postern for Windows, in preview.** The same core, the relay and the command line, with approvals signed by
+  Windows Hello (face, fingerprint or PIN) and checked by the core, secrets sealed with DPAPI, and the message reader
+  in an AppContainer. Approvals open in a console until the Windows app comes.
+- **Quick start.** Read only, Assistant or Full: a set of tools in one step, with one approval, the same three on
+  every system.
+- **Replies and forwards as drafts.** `draft_reply` and `draft_forward` save them in Drafts. Proton drops a draft's
+  In-Reply-To and References, so Postern remembers them and puts them back when the draft is sent: the answer stays
+  in its conversation.
+- **Read faster.** `get_messages` reads up to ten messages in one call, and `search_messages` searches every mailbox
+  you let apps see with `mailbox: "*"`.
+- **Who fills your inbox.** `top_senders` counts the newest thousand messages of a mailbox by sender, domain or
+  recipient: the newsletters to clean up, or the people you write to most.
+- **Prompts.** Six ready-made requests that apps show as slash commands: `triage_inbox`, `draft_replies`,
+  `follow_ups`, `find_invoices`, `clean_up_newsletters` and `weekly_digest`, each listed only when the tools it needs
+  are on.
+- **When Proton blocks sending.** A send refused because Proton banned the account for a while is `proton_blocked`,
+  and a batch stops and tries again six hours later instead of failing every email after it. Postern remembers each
+  time Proton itself said stop, and how many emails had left in the day before: the closest anyone gets to a paid
+  account's real limit, shown in Security.
+- **A new overview on the Mac.** Quick start cards, today's sends against your limits, two weeks of activity in a
+  chart, each app with its own icon, and Proton's refusals under its limits by plan.
 - **Sending limits you type.** Click a limit, type the number you want, and save: one Touch ID raises both, and
-  lowering them never asks. The arrows still nudge them, and Set to Maximum takes them to 300 an hour and 1,000 a
-  day in one step.
+  lowering them never asks. Set to Maximum takes them to 300 an hour and 1,000 a day in one step.
 - **Proton's limits, plan by plan.** The Security pane lists what Proton allows on each plan: 50 an hour and 150 a
   day on Proton Free, no fixed number on paid plans, where the limit follows the account's reputation, and 100
-  recipients per email on every plan. Bridge only signs in paid plans, so your plan is marked as one of them.
-- **A batch that waits for Proton.** When the account reaches Proton's own sending limit, the email is not marked
-  failed: the batch waits an hour, as Proton asks, and sends it again. Apps get the new `proton_limit` code.
+  recipients per email on every plan.
+- **A batch that waits for Proton.** When the account reaches Proton's own sending limit, the batch waits an hour, as
+  Proton asks, and sends the same email again. Apps get the new `proton_limit` code.
+- **Words for every system.** What apps read no longer names Touch ID or the Mac: approvals come from Windows Hello
+  and polkit too.
 
 ## 0.3.0 (2026-11-11)
 

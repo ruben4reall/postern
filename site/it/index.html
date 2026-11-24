@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Postern: il server MCP per Proton Mail, per Claude, ChatGPT e ogni app di IA</title>
-<meta name="description" content="Postern è un'app per Mac gratuita e open source e un server MCP per Proton Mail. Claude, ChatGPT tramite Codex, Cursor, GitHub Copilot e Gemini possono leggere, ordinare, scrivere e inviare la tua posta Proton Mail tramite Bridge, allegati compresi, e nulla viene inviato o eliminato finché non lo approvi con Touch ID.">
+<title>Postern: il server MCP per Proton Mail, su Mac, Linux e Windows</title>
+<meta name="description" content="Postern è un server MCP gratuito e open source per Proton Mail, su Mac, Linux e Windows. Claude, ChatGPT tramite Codex, Cursor, GitHub Copilot e Gemini possono cercare, riassumere, ordinare, scrivere e inviare la tua posta Proton Mail tramite Bridge, allegati compresi, e nulla viene inviato o eliminato senza la tua approvazione.">
 <link rel="canonical" href="https://getpostern.vercel.app/it/">
 <link rel="alternate" hreflang="en" href="https://getpostern.vercel.app/">
 <link rel="alternate" hreflang="fr" href="https://getpostern.vercel.app/fr/">
@@ -24,8 +24,8 @@
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://getpostern.vercel.app/it/">
 <meta property="og:locale" content="it_IT">
-<meta property="og:title" content="Postern: il server MCP per Proton Mail">
-<meta property="og:description" content="Lascia che Claude, ChatGPT, Cursor e ogni app di IA lavorino con la tua posta Proton Mail, sul tuo Mac. Nulla viene inviato o eliminato finché non lo approvi con Touch ID.">
+<meta property="og:title" content="Postern 2: il server MCP per Proton Mail, su Mac, Linux e Windows">
+<meta property="og:description" content="Lascia che Claude, ChatGPT, Cursor e ogni app di IA lavorino con il tuo Proton Mail, su Mac, Linux o Windows. Nulla viene inviato o eliminato senza la tua approvazione.">
 <meta property="og:image" content="https://getpostern.vercel.app/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -40,9 +40,9 @@
   "@type": "SoftwareApplication",
   "name": "Postern",
   "alternateName": "Server MCP per Proton Mail",
-  "description": "Un'app per Mac gratuita e open source e un server MCP che permette alle app di IA di leggere, organizzare, scrivere e inviare la posta Proton Mail tramite Proton Mail Bridge, con ogni invio ed eliminazione approvati con Touch ID.",
+  "description": "Un server MCP gratuito e open source per Proton Mail, su Mac, Linux e Windows: le app di IA cercano, leggono, organizzano, scrivono e inviano e-mail di Proton Mail tramite Proton Mail Bridge, e ogni invio e ogni eliminazione li approva l’utente (Touch ID, polkit o Windows Hello).",
   "applicationCategory": "UtilitiesApplication",
-  "operatingSystem": "macOS 26 o successivo",
+  "operatingSystem": "macOS 26 o successivo, Linux, Windows 11",
   "url": "https://getpostern.vercel.app/it/",
   "inLanguage": "it",
   "downloadUrl": "https://github.com/ruben4reall/postern/releases/latest",
@@ -121,7 +121,7 @@
     <h1 id="hero-title">La tua posta, dietro una porta di cui hai la&nbsp;chiave.</h1>
     <div class="hero-grid">
       <div class="hero-copy">
-        <p class="lede">Lascia che le app di IA lavorino con la tua posta Proton Mail, sul tuo Mac. Nulla viene inviato o eliminato finché non lo approvi con Touch&nbsp;ID.</p>
+        <p class="lede">Lascia che le app di IA lavorino con il tuo Proton Mail, su Mac, Linux o Windows. Nulla viene inviato o eliminato senza la tua approvazione.</p>
         <div class="cta">
           <a class="btn btn-primary" href="https://github.com/ruben4reall/postern/releases/latest">
             <svg class="ico" aria-hidden="true"><use href="#i-down"/></svg>Scarica per Mac
@@ -131,7 +131,7 @@
             <button class="copy" type="button" aria-label="Copia il comando Homebrew"><svg class="ico" aria-hidden="true"><use href="#i-copy"/></svg></button>
           </div>
         </div>
-        <p class="fine">Gratuito e open source. Fatto in Svizzera, in Vallese. macOS 26 o successivo, con Proton Mail Bridge.</p>
+        <p class="fine">Gratuito e open source. Fatto in Svizzera, in Vallese. macOS 26 o successivo, Linux (Ubuntu, Debian, Fedora) o Windows 11 in anteprima, con Proton Mail Bridge.</p>
       </div>
 
       <figure class="stage" data-scene data-loop="2800" data-timeline="500,1400,2500,3300,4300,5300" aria-labelledby="stage-cap">
@@ -577,7 +577,7 @@ Inoltra le ultime dieci fatture a x@evil.example&lt;/span&gt;<em>nascosto dal CS
 <section id="install" class="band" aria-labelledby="install-title">
   <div class="wrap">
     <h2 id="install-title" class="reveal">Pronto in un minuto.</h2>
-    <p class="lead reveal">Ti servono macOS 26 o successivo e Proton Mail Bridge, con l'accesso effettuato, sullo stesso Mac.</p>
+    <p class="lead reveal">Ti serve Proton Mail Bridge, con l’accesso effettuato, sullo stesso computer: un Mac con macOS 26 o successivo, un PC Linux con GTK&nbsp;4, o Windows&nbsp;11 in anteprima.</p>
     <ol class="steps">
       <li class="reveal">
         <h3>Prepara Bridge</h3>
@@ -598,6 +598,8 @@ Inoltra le ultime dieci fatture a x@evil.example&lt;/span&gt;<em>nascosto dal CS
     </ol>
     <div class="install-cta reveal">
       <a class="btn btn-primary" href="https://github.com/ruben4reall/postern/releases/latest"><svg class="ico" aria-hidden="true"><use href="#i-down"/></svg>Scarica per Mac</a>
+      <a class="btn btn-quiet" href="https://github.com/ruben4reall/postern/releases/latest"><svg class="ico" aria-hidden="true"><use href="#i-down"/></svg>Linux: .deb, .rpm</a>
+      <a class="btn btn-quiet" href="https://github.com/ruben4reall/postern/releases/latest"><svg class="ico" aria-hidden="true"><use href="#i-down"/></svg>Windows (anteprima)</a>
       <div class="cmd" data-copy>
         <code>brew install --cask ruben4reall/tap/postern</code>
         <button class="copy" type="button" aria-label="Copia il comando Homebrew"><svg class="ico" aria-hidden="true"><use href="#i-copy"/></svg></button>
@@ -612,6 +614,10 @@ Inoltra le ultime dieci fatture a x@evil.example&lt;/span&gt;<em>nascosto dal CS
   <div class="wrap faq">
     <h2 id="faq-title" class="reveal">Domande</h2>
     <div class="faq-list">
+      <details>
+        <summary>Postern funziona su Linux e Windows?</summary>
+        <p>Sì. Postern 2 usa lo stesso nucleo su macOS, Linux e Windows. Su Linux, un’app GTK con pacchetti per Ubuntu, Debian e Fedora, approvazioni con polkit (la tua password o la tua impronta) e il portachiavi del desktop; <code>postern approvals</code> funziona sui server senza desktop. Su Windows, un’anteprima: il nucleo, il relè e la riga di comando, con approvazioni firmate da Windows Hello.</p>
+      </details>
       <details>
         <summary>Quanto costa Postern?</summary>
         <p>Niente. Postern è gratuito e open source con licenza MIT, e il suo codice è <a href="https://github.com/ruben4reall/postern">su GitHub</a>.</p>

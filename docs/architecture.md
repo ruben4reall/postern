@@ -1,6 +1,9 @@
 # Architecture
 
-Postern is three processes, each with as little power as its job needs.
+Postern is three processes, each with as little power as its job needs: the relay MCP apps launch, the core that
+holds the secrets and the policy, and the reader that decodes hostile mail. The core is one library, `PosternCore`,
+which the Mac app, the Linux core and the Windows core host alike; [Linux and Windows](#linux-and-windows) shows what
+changes around it. Below, the Mac.
 
 ```mermaid
 flowchart TB
@@ -104,3 +107,34 @@ decodes mail itself.
 The app targets live at the root (`App`, `ParserService`, `Relay`, `Shared`). Everything testable lives in the Swift
 package `Packages/PosternKit`, split by responsibility; see [CONTRIBUTING.md](../CONTRIBUTING.md#project-layout).
 The Xcode project is generated from `project.yml` by XcodeGen.
+
+## Linux and Windows
+
+The same three processes, with what each system offers in place of XPC, the Keychain and Touch ID. The code lives in
+`Packages/PosternDesktop`; the core logic is `PosternCore`, shared with the Mac.
+
+```mermaid
+flowchart TB
+    app["MCP app"] -- "stdio" --> relay["postern-mcp"]
+    relay -- "Unix socket (Linux) or named pipe (Windows),<br>this user only" --> core["postern-core<br>PosternCore · policy · desk<br>activity log"]
+    ui["postern-app (GTK) or postern (command line)"] -- "same channel,<br>control messages" --> core
+    core -- "one process per message,<br>request on stdin, answer on stdout" --> parser["postern-parser<br>seccomp + Landlock (Linux)<br>AppContainer + job (Windows)"]
+    core -- "pkcheck (Linux)<br>postern-hello, Windows Hello (Windows)" --> proof["The system's proof<br>that you approved"]
+    core -- "IMAP and SMTP over TLS,<br>pinned certificate" --> bridge["Proton Mail Bridge"]
+```
+
+- **`postern-core`** starts per user: systemd's `postern.socket` starts it on the first connection on Linux, and the
+  first relay or the command line starts it otherwise. It hosts `PosternCore` with the system's secret store (Secret
+  Service through libsecret on Linux, DPAPI files on Windows), and refuses connections from any other user
+  (`SO_PEERCRED`, the pipe's access list).
+- **`postern-mcp`** is the same relay as on the Mac: lines between stdio and the core. Its first line tells the core it
+  is a relay and which app launched it (`/proc/<parent>/comm` on Linux, the parent process on Windows).
+- **The interfaces** speak the control protocol (`ControlWire`): newline-delimited JSON requests, answers, and events
+  such as `changed` and `approval`. They show and ask; the core decides. A change that gives apps more, and every
+  email or deletion a user approves, is proved by the system itself: `pkcheck` against polkit's
+  `ch.rubencatalao.postern.approve` and `.change-policy` actions (both `auth_self`), or a Windows Hello signature made
+  by `postern-hello` over a fresh challenge and checked against the public key pinned at setup.
+- **`postern-parser`** reads one message per process. On Linux it loads what it needs, then locks itself in before
+  reading a byte (`PR_SET_NO_NEW_PRIVS`, Landlock with no file or TCP rights, a seccomp allowlist without `open`,
+  `socket` or `execve`, limits on memory and CPU time). On Windows the core starts it in an AppContainer with no
+  capability, inside a job.

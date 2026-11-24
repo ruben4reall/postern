@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Postern：Proton Mail 的 MCP 服务器，适用于 Claude、ChatGPT 及所有 AI 应用</title>
-<meta name="description" content="Postern 是一款免费、开源的 Mac 应用，也是 Proton Mail 的 MCP 服务器。Claude、通过 Codex 使用的 ChatGPT、Cursor、GitHub Copilot 和 Gemini 可以借助 Bridge 读取、整理、起草和发送你的 Proton Mail 邮件，包括附件。在你用 Touch ID 批准之前，任何邮件都不会被发送或删除。">
+<title>Postern：适用于 Mac、Linux 和 Windows 的 Proton Mail MCP 服务器</title>
+<meta name="description" content="Postern 是免费开源的 Proton Mail MCP 服务器，支持 Mac、Linux 和 Windows。Claude、通过 Codex 的 ChatGPT、Cursor、GitHub Copilot 和 Gemini 可以通过 Bridge 搜索、总结、整理、撰写和发送你的 Proton Mail 邮件，附件也不例外；未经你的批准，任何邮件都不会被发送或删除。">
 <link rel="canonical" href="https://getpostern.vercel.app/zh/">
 <link rel="alternate" hreflang="en" href="https://getpostern.vercel.app/">
 <link rel="alternate" hreflang="fr" href="https://getpostern.vercel.app/fr/">
@@ -24,8 +24,8 @@
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://getpostern.vercel.app/zh/">
 <meta property="og:locale" content="zh_CN">
-<meta property="og:title" content="Postern：Proton Mail 的 MCP 服务器">
-<meta property="og:description" content="让 Claude、ChatGPT、Cursor 及所有 AI 应用在你的 Mac 上处理 Proton Mail 邮件。在你用 Touch ID 批准之前，任何邮件都不会被发送或删除。">
+<meta property="og:title" content="Postern 2：适用于 Mac、Linux 和 Windows 的 Proton Mail MCP 服务器">
+<meta property="og:description" content="让 Claude、ChatGPT、Cursor 等所有 AI 应用在 Mac、Linux 或 Windows 上处理你的 Proton Mail。未经你的批准，任何邮件都不会被发送或删除。">
 <meta property="og:image" content="https://getpostern.vercel.app/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -40,9 +40,9 @@
   "@type": "SoftwareApplication",
   "name": "Postern",
   "alternateName": "Proton Mail MCP 服务器",
-  "description": "一款免费、开源的 Mac 应用和 MCP 服务器，让 AI 应用通过 Proton Mail Bridge 读取、整理、起草和发送 Proton Mail 邮件，每次发送和删除都需用 Touch ID 批准。",
+  "description": "免费开源的 Proton Mail MCP 服务器，支持 Mac、Linux 和 Windows：AI 应用通过 Proton Mail Bridge 搜索、阅读、整理、撰写和发送 Proton Mail 邮件，每一次发送和删除都由用户批准（Touch ID、polkit 或 Windows Hello）。",
   "applicationCategory": "UtilitiesApplication",
-  "operatingSystem": "macOS 26 或更高版本",
+  "operatingSystem": "macOS 26 或更高版本、Linux、Windows 11",
   "url": "https://getpostern.vercel.app/zh/",
   "inLanguage": "zh-Hans",
   "downloadUrl": "https://github.com/ruben4reall/postern/releases/latest",
@@ -121,7 +121,7 @@
     <h1 id="hero-title">邮箱的门，握在你手里。</h1>
     <div class="hero-grid">
       <div class="hero-copy">
-        <p class="lede">让 AI 应用在你的 Mac 上处理 Proton Mail 邮件。在你用 Touch&nbsp;ID 批准之前，任何邮件都不会被发送或删除。</p>
+        <p class="lede">让 AI 应用在 Mac、Linux 或 Windows 上处理你的 Proton Mail。未经你的批准，任何邮件都不会被发送或删除。</p>
         <div class="cta">
           <a class="btn btn-primary" href="https://github.com/ruben4reall/postern/releases/latest">
             <svg class="ico" aria-hidden="true"><use href="#i-down"/></svg>下载 Mac 版
@@ -131,7 +131,7 @@
             <button class="copy" type="button" aria-label="拷贝 Homebrew 命令"><svg class="ico" aria-hidden="true"><use href="#i-copy"/></svg></button>
           </div>
         </div>
-        <p class="fine">免费且开源。在瑞士瓦莱州开发。需要 macOS 26 或更高版本，以及 Proton Mail Bridge。</p>
+        <p class="fine">免费开源。在瑞士瓦莱州开发。需要 macOS 26 或更高版本、Linux（Ubuntu、Debian、Fedora）或 Windows 11 预览版，以及 Proton Mail Bridge。</p>
       </div>
 
       <figure class="stage" data-scene data-loop="2800" data-timeline="500,1400,2500,3300,4300,5300" aria-labelledby="stage-cap">
@@ -577,7 +577,7 @@
 <section id="install" class="band" aria-labelledby="install-title">
   <div class="wrap">
     <h2 id="install-title" class="reveal">一分钟完成设置。</h2>
-    <p class="lead reveal">你需要 macOS 26 或更高版本，以及在同一台 Mac 上已登录的 Proton Mail Bridge。</p>
+    <p class="lead reveal">同一台电脑上需要已登录的 Proton Mail Bridge：macOS 26 或更高版本的 Mac、带 GTK&nbsp;4 的 Linux 电脑，或 Windows&nbsp;11 预览版。</p>
     <ol class="steps">
       <li class="reveal">
         <h3>准备好 Bridge</h3>
@@ -598,6 +598,8 @@
     </ol>
     <div class="install-cta reveal">
       <a class="btn btn-primary" href="https://github.com/ruben4reall/postern/releases/latest"><svg class="ico" aria-hidden="true"><use href="#i-down"/></svg>下载 Mac 版</a>
+      <a class="btn btn-quiet" href="https://github.com/ruben4reall/postern/releases/latest"><svg class="ico" aria-hidden="true"><use href="#i-down"/></svg>Linux：.deb、.rpm</a>
+      <a class="btn btn-quiet" href="https://github.com/ruben4reall/postern/releases/latest"><svg class="ico" aria-hidden="true"><use href="#i-down"/></svg>Windows（预览版）</a>
       <div class="cmd" data-copy>
         <code>brew install --cask ruben4reall/tap/postern</code>
         <button class="copy" type="button" aria-label="拷贝 Homebrew 命令"><svg class="ico" aria-hidden="true"><use href="#i-copy"/></svg></button>
@@ -612,6 +614,10 @@
   <div class="wrap faq">
     <h2 id="faq-title" class="reveal">常见问题</h2>
     <div class="faq-list">
+      <details>
+        <summary>Postern 能在 Linux 和 Windows 上使用吗？</summary>
+        <p>可以。Postern 2 在 macOS、Linux 和 Windows 上运行同一个核心。在 Linux 上，它是一个 GTK 应用，提供 Ubuntu、Debian 和 Fedora 的软件包，通过 polkit 批准（你的密码或指纹），机密保存在桌面的密钥环中；在没有桌面的服务器上可以使用 <code>postern approvals</code>。在 Windows 上是预览版：核心、中继和命令行均可使用，批准由 Windows Hello 签名。</p>
+      </details>
       <details>
         <summary>Postern 收费吗？</summary>
         <p>免费。Postern 是基于 MIT 许可证的免费开源软件，代码<a href="https://github.com/ruben4reall/postern">托管在 GitHub 上</a>。</p>

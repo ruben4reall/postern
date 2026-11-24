@@ -3,8 +3,8 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Postern: Claude, ChatGPT 등 모든 AI 앱을 위한 Proton Mail MCP 서버</title>
-<meta name="description" content="Postern은 무료 오픈 소스 Mac 앱이자 Proton Mail MCP 서버입니다. Claude, Codex를 통한 ChatGPT, Cursor, GitHub Copilot, Gemini가 Bridge를 거쳐 Proton Mail을 읽고, 정리하고, 초안을 쓰고, 첨부 파일까지 포함해 보낼 수 있으며, Touch ID로 승인하기 전에는 아무것도 전송되거나 삭제되지 않습니다.">
+<title>Postern: Mac, Linux, Windows용 Proton Mail MCP 서버</title>
+<meta name="description" content="Postern은 Mac, Linux, Windows에서 쓸 수 있는 무료 오픈 소스 Proton Mail용 MCP 서버입니다. Claude, Codex를 통한 ChatGPT, Cursor, GitHub Copilot, Gemini가 Bridge를 통해 Proton Mail 메일을 검색하고 요약하고 정리하고 작성하고 보낼 수 있으며, 첨부 파일도 다룹니다. 승인 없이는 아무것도 전송되거나 삭제되지 않습니다.">
 <link rel="canonical" href="https://getpostern.vercel.app/ko/">
 <link rel="alternate" hreflang="en" href="https://getpostern.vercel.app/">
 <link rel="alternate" hreflang="fr" href="https://getpostern.vercel.app/fr/">
@@ -24,8 +24,8 @@
 <meta property="og:type" content="website">
 <meta property="og:url" content="https://getpostern.vercel.app/ko/">
 <meta property="og:locale" content="ko_KR">
-<meta property="og:title" content="Postern: Proton Mail MCP 서버">
-<meta property="og:description" content="Mac에서 Claude, ChatGPT, Cursor 등 모든 AI 앱이 Proton Mail을 다루게 하세요. Touch ID로 승인하기 전에는 아무것도 전송되거나 삭제되지 않습니다.">
+<meta property="og:title" content="Postern 2: Mac, Linux, Windows용 Proton Mail MCP 서버">
+<meta property="og:description" content="Claude, ChatGPT, Cursor 등 모든 AI 앱이 Mac, Linux, Windows에서 Proton Mail을 다루게 하세요. 승인 없이는 아무것도 전송되거나 삭제되지 않습니다.">
 <meta property="og:image" content="https://getpostern.vercel.app/og.png">
 <meta property="og:image:width" content="1200">
 <meta property="og:image:height" content="630">
@@ -40,9 +40,9 @@
   "@type": "SoftwareApplication",
   "name": "Postern",
   "alternateName": "Proton Mail MCP 서버",
-  "description": "AI 앱이 Proton Mail Bridge를 통해 Proton Mail을 읽고, 정리하고, 초안을 쓰고, 보낼 수 있게 해 주는 무료 오픈 소스 Mac 앱이자 MCP 서버로, 모든 전송과 삭제는 Touch ID로 승인합니다.",
+  "description": "Mac, Linux, Windows용 무료 오픈 소스 Proton Mail MCP 서버. AI 앱이 Proton Mail Bridge를 통해 Proton Mail 메일을 검색, 읽기, 정리, 작성, 전송하며, 모든 전송과 삭제는 사용자가 승인합니다(Touch ID, polkit, Windows Hello).",
   "applicationCategory": "UtilitiesApplication",
-  "operatingSystem": "macOS 26 이상",
+  "operatingSystem": "macOS 26 이상, Linux, Windows 11",
   "url": "https://getpostern.vercel.app/ko/",
   "inLanguage": "ko",
   "downloadUrl": "https://github.com/ruben4reall/postern/releases/latest",
@@ -121,7 +121,7 @@
     <h1 id="hero-title">메일함의 문, 열쇠는 당신이 쥡니다.</h1>
     <div class="hero-grid">
       <div class="hero-copy">
-        <p class="lede">Mac에서 AI 앱이 Proton Mail을 다루게 하세요. Touch&nbsp;ID로 승인하기 전에는 아무것도 전송되거나 삭제되지 않습니다.</p>
+        <p class="lede">AI 앱이 Mac, Linux, Windows에서 Proton Mail을 다루게 하세요. 승인 없이는 아무것도 전송되거나 삭제되지 않습니다.</p>
         <div class="cta">
           <a class="btn btn-primary" href="https://github.com/ruben4reall/postern/releases/latest">
             <svg class="ico" aria-hidden="true"><use href="#i-down"/></svg>Mac용 다운로드
@@ -131,7 +131,7 @@
             <button class="copy" type="button" aria-label="Homebrew 명령어 복사"><svg class="ico" aria-hidden="true"><use href="#i-copy"/></svg></button>
           </div>
         </div>
-        <p class="fine">무료 오픈 소스. 스위스 발레주에서 만들었습니다. macOS 26 이상과 Proton Mail Bridge가 필요합니다.</p>
+        <p class="fine">무료 오픈 소스. 스위스 발레주에서 만들었습니다. macOS 26 이상, Linux(Ubuntu, Debian, Fedora) 또는 Windows 11 미리 보기와 Proton Mail Bridge가 필요합니다.</p>
       </div>
 
       <figure class="stage" data-scene data-loop="2800" data-timeline="500,1400,2500,3300,4300,5300" aria-labelledby="stage-cap">
@@ -577,7 +577,7 @@
 <section id="install" class="band" aria-labelledby="install-title">
   <div class="wrap">
     <h2 id="install-title" class="reveal">1분이면 설정 끝.</h2>
-    <p class="lead reveal">macOS 26 이상과, 같은 Mac에서 로그인된 Proton Mail Bridge가 필요합니다.</p>
+    <p class="lead reveal">같은 컴퓨터에 로그인된 Proton Mail Bridge가 필요합니다. macOS 26 이상의 Mac, GTK&nbsp;4가 있는 Linux PC, 또는 미리 보기 버전의 Windows&nbsp;11을 지원합니다.</p>
     <ol class="steps">
       <li class="reveal">
         <h3>Bridge 준비</h3>
@@ -598,6 +598,8 @@
     </ol>
     <div class="install-cta reveal">
       <a class="btn btn-primary" href="https://github.com/ruben4reall/postern/releases/latest"><svg class="ico" aria-hidden="true"><use href="#i-down"/></svg>Mac용 다운로드</a>
+      <a class="btn btn-quiet" href="https://github.com/ruben4reall/postern/releases/latest"><svg class="ico" aria-hidden="true"><use href="#i-down"/></svg>Linux: .deb, .rpm</a>
+      <a class="btn btn-quiet" href="https://github.com/ruben4reall/postern/releases/latest"><svg class="ico" aria-hidden="true"><use href="#i-down"/></svg>Windows(미리 보기)</a>
       <div class="cmd" data-copy>
         <code>brew install --cask ruben4reall/tap/postern</code>
         <button class="copy" type="button" aria-label="Homebrew 명령어 복사"><svg class="ico" aria-hidden="true"><use href="#i-copy"/></svg></button>
@@ -612,6 +614,10 @@
   <div class="wrap faq">
     <h2 id="faq-title" class="reveal">자주 묻는 질문</h2>
     <div class="faq-list">
+      <details>
+        <summary>Postern은 Linux와 Windows에서도 작동하나요?</summary>
+        <p>네. Postern 2는 macOS, Linux, Windows에서 같은 코어를 사용합니다. Linux에서는 Ubuntu, Debian, Fedora용 패키지가 있는 GTK 앱으로, polkit(비밀번호 또는 지문)으로 승인하고 데스크톱 키링에 비밀 정보를 보관합니다. 데스크톱이 없는 서버에서는 <code>postern approvals</code>를 사용할 수 있습니다. Windows는 미리 보기 버전으로, 코어, 릴레이, 명령줄이 작동하며 승인은 Windows Hello가 서명합니다.</p>
+      </details>
       <details>
         <summary>Postern은 유료인가요?</summary>
         <p>무료입니다. Postern은 MIT 라이선스의 무료 오픈 소스 소프트웨어이며, 코드는 <a href="https://github.com/ruben4reall/postern">GitHub에 공개</a>되어 있습니다.</p>
