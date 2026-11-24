@@ -377,6 +377,11 @@ public final class ProtonLimitLog: @unchecked Sendable {
     public struct Hit: Codable, Sendable, Equatable {
         public let date: Date
         public let sentInLastDay: Int
+
+        public init(date: Date, sentInLastDay: Int) {
+            self.date = date
+            self.sentInLastDay = sentInLastDay
+        }
     }
 
     private let vault: any SecretStore

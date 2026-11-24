@@ -64,6 +64,10 @@ final class ControlModel {
     var activity: [ActivityRecord] = []
     /// Batches of drafts and sends since the app started, newest first.
     var batches: [BatchBoard.Batch] = []
+    /// When the last emails left through Postern, for today's counts.
+    var recentSends: [Date] = []
+    /// When Proton itself refused for its sending limit.
+    var protonLimitHits: [ProtonLimitLog.Hit] = []
     var integrity: Integrity?
     var pin: CertificatePin?
     var endpoint: BridgeEndpoint?
@@ -107,6 +111,9 @@ final class ControlModel {
 
     func enabledCount(_ tier: Tier) -> Int { policy.enabledTools.filter { $0.tier == tier }.count }
 
+    var sendsLastHour: Int { recentSends.filter { Date().timeIntervalSince($0) < 3600 }.count }
+    var sendsLastDay: Int { recentSends.count }
+
     // MARK: Loading
 
     func refresh() {
@@ -115,7 +122,9 @@ final class ControlModel {
         policy = state.policy
         configured = state.backend != nil
         connectedApps = state.connectedApps
-        activity = (try? state.activity.records(limit: 200)) ?? []
+        activity = (try? state.activity.records(limit: 2000)) ?? []
+        recentSends = state.ledger.recentSends()
+        protonLimitHits = state.protonLimits.hits
         integrity = try? state.activity.verify()
         pin = try? state.vault.read(.certificatePin, as: CertificatePin.self)
         endpoint = try? state.vault.read(.bridgeEndpoint, as: BridgeEndpoint.self)
@@ -181,6 +190,13 @@ final class ControlModel {
         }
         CoreState.shared.reloadPolicy()
         refresh()
+    }
+
+    /// Sets the tools of a preset in one step: one Touch ID when it gives apps more, none when it gives less.
+    func applyPreset(_ preset: ToolPreset) async {
+        await update(String(localized: "let your apps \(PresetCopy.for(preset).verb)", comment: "Touch ID: “Postern” is trying to …")) { policy in
+            policy.enabledTools = preset.tools
+        }
     }
 
     /// Turns a whole tier on or off at once: one Touch ID for all of it.
@@ -461,6 +477,31 @@ struct ToolCopy {
             ToolCopy(title: String(localized: "Erase for good"), verb: String(localized: "erase mail for good", comment: "Completes the Touch ID sentence “Postern” is trying to let your apps …"),
                      allows: String(localized: "Erase messages already in Trash or Spam. Each time, with Touch ID."),
                      risk: String(localized: "Erased messages cannot be recovered."))
+        }
+    }
+}
+
+/// The words of each preset in the window.
+struct PresetCopy {
+    let title: String
+    let summary: String
+    let verb: String
+    let symbol: String
+
+    static func `for`(_ preset: ToolPreset) -> PresetCopy {
+        switch preset {
+        case .read:
+            PresetCopy(title: String(localized: "Read only"), summary: String(localized: "Search, read and summarize your mail. Nothing changes in your mailbox."),
+                       verb: String(localized: "search and read your mail", comment: "Completes the Touch ID sentence “Postern” is trying to let your apps …"),
+                       symbol: "eyeglasses")
+        case .assistant:
+            PresetCopy(title: String(localized: "Assistant"), summary: String(localized: "Also sort and file your mail, and write drafts for you to send."),
+                       verb: String(localized: "sort your mail and write drafts", comment: "Completes the Touch ID sentence “Postern” is trying to let your apps …"),
+                       symbol: "tray.full")
+        case .full:
+            PresetCopy(title: String(localized: "Full"), summary: String(localized: "Also send, each email after you approve it with Touch ID."),
+                       verb: String(localized: "send emails after your approval", comment: "Completes the Touch ID sentence “Postern” is trying to let your apps …"),
+                       symbol: "paperplane")
         }
     }
 }

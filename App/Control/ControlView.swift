@@ -1,7 +1,9 @@
 import AppKit
+import Charts
 import PosternAudit
 import PosternBridge
 import PosternClients
+import PosternCore
 import PosternModel
 import PosternPolicy
 import PosternServer
@@ -427,6 +429,16 @@ private struct OverviewPane: View {
             .padding(20)
             .background(Theme.weak, in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
             .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous).strokeBorder(Theme.border))
+            ProtonSection("Quick start", footer: Text("A set of tools in one step. Giving apps more asks for Touch ID; giving them less never does. Every tool stays one switch away in Tools.")) {
+                HStack(alignment: .top, spacing: 10) {
+                    ForEach(ToolPreset.allCases, id: \.self) { preset in
+                        PresetCard(preset: preset, current: ToolPreset.matching(model.policy.enabledTools) == preset) {
+                            Task { await model.applyPreset(preset) }
+                        }
+                    }
+                }
+                .padding(12)
+            }
             if !model.batches.isEmpty {
                 ProtonSection("Batches", footer: Text("Approved emails leave one by one within your sending limits, as long as Postern runs. Stopping a batch keeps the drafts of the emails not sent yet.")) {
                     ForEach(model.batches.prefix(5)) { batch in
@@ -439,6 +451,20 @@ private struct OverviewPane: View {
                     TierSummaryRow(tier: tier, on: model.enabledCount(tier),
                                    total: ToolID.switchable.filter { $0.tier == tier }.count) {
                         model.pane = .tools
+                    }
+                }
+            }
+            ProtonSection("Today") {
+                SendGauge(label: "Sent in the last hour", sent: model.sendsLastHour, limit: model.policy.sendsPerHour)
+                SendGauge(label: "Sent in the last 24 hours", sent: model.sendsLastDay, limit: model.policy.sendsPerDay)
+                ProtonValueRow(label: "Calls from apps today", value: "\(model.activity.filter { Calendar.current.isDateInToday($0.date) }.count)")
+                if let hit = model.protonLimitHits.last {
+                    ProtonRow {
+                        HStack(alignment: .top, spacing: 10) {
+                            Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning)
+                            Text("Proton's own limit stopped sending on \(hit.date.formatted(date: .abbreviated, time: .shortened)), after \(hit.sentInLastDay) emails in 24 hours.")
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
                     }
                 }
             }
@@ -470,6 +496,65 @@ private struct OverviewPane: View {
         Dictionary(grouping: model.connectedApps, by: { $0 })
             .map { $0.value.count > 1 ? "\($0.key) (\($0.value.count))" : $0.key }
             .sorted().joined(separator: ", ")
+    }
+}
+
+/// One preset: what it lets apps do, and the button that sets it.
+private struct PresetCard: View {
+    let preset: ToolPreset
+    let current: Bool
+    let apply: () -> Void
+    @State private var hovering = false
+
+    var body: some View {
+        let copy = PresetCopy.for(preset)
+        VStack(alignment: .leading, spacing: 8) {
+            HStack {
+                SymbolTile(symbol: copy.symbol, signal: preset == .full ? .warning : .accent, size: 30)
+                Spacer()
+                if current {
+                    Label("Current", systemImage: "checkmark.circle.fill").font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(Theme.successStrong)
+                }
+            }
+            Text(copy.title).font(.system(size: 14, weight: .semibold)).foregroundStyle(Theme.text)
+            Text(copy.summary).font(.system(size: 12)).foregroundStyle(Theme.textWeak)
+                .fixedSize(horizontal: false, vertical: true)
+            Spacer(minLength: 0)
+            Button(current ? String(localized: "In use") : String(localized: "Use")) { apply() }
+                .buttonStyle(.proton(current ? .ghost : .secondary, size: .small))
+                .disabled(current)
+        }
+        .padding(12)
+        .frame(maxWidth: .infinity, minHeight: 150, alignment: .topLeading)
+        .background(Theme.canvas, in: RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous))
+        .overlay(RoundedRectangle(cornerRadius: Theme.cardRadius, style: .continuous)
+            .strokeBorder(current ? Theme.interaction : (hovering ? Theme.borderStrong : Theme.border), lineWidth: current ? 1.5 : 1))
+        .onHover { hovering = $0 }
+    }
+}
+
+/// How much of a sending limit is used: a bar, and the numbers.
+private struct SendGauge: View {
+    let label: LocalizedStringKey
+    let sent: Int
+    let limit: Int
+
+    private var fraction: Double { min(1, Double(sent) / Double(max(limit, 1))) }
+    private var color: Color { fraction >= 1 ? Theme.danger : (fraction >= 0.8 ? Theme.warning : Theme.interaction) }
+
+    var body: some View {
+        ProtonRow {
+            HStack(spacing: 12) {
+                Text(label)
+                Spacer(minLength: 12)
+                ZStack(alignment: .leading) {
+                    Capsule().fill(Theme.strong).frame(width: 120, height: 6)
+                    Capsule().fill(color).frame(width: max(sent == 0 ? 0 : 6, 120 * fraction), height: 6)
+                }
+                Text("\(sent) of \(limit)").foregroundStyle(Theme.textWeak).monospacedDigit().frame(minWidth: 70, alignment: .trailing)
+            }
+        }
     }
 }
 
@@ -779,7 +864,9 @@ private struct ClientsPane: View {
             ProtonSection("Your apps", footer: Text("Connecting writes one entry in the app's settings: the path of Postern's helper, never a password. Tools still stay off until you turn them on.")) {
                 ForEach(model.clients.filter(\.installed) + model.clients.filter { !$0.installed }) { row in
                     ProtonRow {
-                        HStack(alignment: .center) {
+                        HStack(alignment: .center, spacing: 12) {
+                            AppIcon(kind: row.target.kind)
+                                .opacity(row.installed ? 1 : 0.45)
                             VStack(alignment: .leading, spacing: 2) {
                                 Text(row.target.title)
                                 Text(caption(row)).font(.system(size: 12)).foregroundStyle(Theme.textWeak)
@@ -819,6 +906,85 @@ private struct ClientsPane: View {
     private func caption(_ row: ClientRow) -> String {
         if case .connectedElsewhere = row.status { return String(localized: "Points to an older copy of Postern") }
         return "~/" + row.target.fileURL.path.replacingOccurrences(of: ClientConnector.realHome.path + "/", with: "")
+    }
+}
+
+/// Calls per day over the last fourteen days, the refused ones in orange.
+private struct ActivityChart: View {
+    let records: [ActivityRecord]
+
+    struct Bar: Identifiable {
+        let day: Date
+        let kind: String
+        let count: Int
+        var id: String { "\(day.timeIntervalSince1970)-\(kind)" }
+    }
+
+    var bars: [Bar] {
+        let calendar = Calendar.current
+        let today = calendar.startOfDay(for: Date())
+        let days = (0..<14).compactMap { calendar.date(byAdding: .day, value: -$0, to: today) }.reversed()
+        let grouped = Dictionary(grouping: records) { calendar.startOfDay(for: $0.date) }
+        return days.flatMap { day -> [Bar] in
+            let calls = grouped[day] ?? []
+            let refused = calls.filter { $0.outcome != "ok" }.count
+            return [Bar(day: day, kind: String(localized: "Done"), count: calls.count - refused),
+                    Bar(day: day, kind: String(localized: "Refused"), count: refused)]
+        }
+    }
+
+    var body: some View {
+        Chart(bars) { bar in
+            BarMark(x: .value("Day", bar.day, unit: .day), y: .value("Calls", bar.count))
+                .foregroundStyle(by: .value("Outcome", bar.kind))
+                .cornerRadius(3)
+        }
+        .chartForegroundStyleScale([String(localized: "Done"): Theme.interaction, String(localized: "Refused"): Theme.warning])
+        .chartXAxis { AxisMarks(values: .stride(by: .day, count: 2)) { _ in AxisValueLabel(format: .dateTime.day().month(.abbreviated)) } }
+        .chartLegend(position: .top, alignment: .trailing)
+        .frame(height: 150)
+    }
+}
+
+/// The app's own icon when it is on this Mac, else a symbol: terminal apps have no icon of their own.
+private struct AppIcon: View {
+    let kind: ClientKind
+
+    var body: some View {
+        if let image = Self.icon(for: kind) {
+            Image(nsImage: image).resizable().interpolation(.high).frame(width: 30, height: 30)
+        } else {
+            SymbolTile(symbol: kind == .claudeCode || kind == .codex || kind == .geminiCLI ? "terminal" : "app.connected.to.app.below.fill", size: 30)
+        }
+    }
+
+    /// Where each app lives, by bundle identifier. Claude Code uses Claude's icon; Cline lives in VS Code.
+    static let bundles: [ClientKind: [String]] = [
+        .claudeDesktop: ["com.anthropic.claudefordesktop"],
+        .claudeCode: ["com.anthropic.claudefordesktop"],
+        .cursor: ["com.todesktop.230313mzl4w4u92"],
+        .vscode: ["com.microsoft.VSCode", "com.microsoft.VSCodeInsiders"],
+        .cline: ["com.microsoft.VSCode", "com.microsoft.VSCodeInsiders"],
+        .windsurf: ["com.exafunction.windsurf"],
+        .kiro: ["dev.kiro.desktop"],
+        .codex: ["com.openai.codex", "com.openai.chat"],
+    ]
+
+    @MainActor private static var cache: [ClientKind: NSImage] = [:]
+    @MainActor private static var missing: Set<ClientKind> = []
+
+    @MainActor static func icon(for kind: ClientKind) -> NSImage? {
+        if let cached = cache[kind] { return cached }
+        guard !missing.contains(kind) else { return nil }
+        for identifier in bundles[kind] ?? [] {
+            if let url = NSWorkspace.shared.urlForApplication(withBundleIdentifier: identifier) {
+                let image = NSWorkspace.shared.icon(forFile: url.path)
+                cache[kind] = image
+                return image
+            }
+        }
+        missing.insert(kind)
+        return nil
     }
 }
 
@@ -875,6 +1041,9 @@ private struct ActivityPane: View {
                     ProtonRow { Text("Every tool an app uses through Postern will appear here.").foregroundStyle(Theme.textWeak) }
                 }
             } else {
+                ProtonSection("The last two weeks") {
+                    ActivityChart(records: model.activity).padding(16)
+                }
                 HStack(spacing: 12) {
                     ProtonField(placeholder: "Filter by app or tool", text: $search, symbol: "magnifyingglass")
                     // Proton's glass filter chips.
@@ -1136,7 +1305,7 @@ private struct SendingSection: View {
 
     var body: some View {
         SendingLimitsSection(model: model)
-        ProtonPlansSection(paid: model.configured)
+        ProtonPlansSection(paid: model.configured, hits: model.protonLimitHits)
         ProtonSection("Trusted recipients", footer: Text("Emails whose every recipient is trusted leave without the panel, such as notes to yourself. Adding someone asks for Touch ID.")) {
             AddressList(addresses: model.policy.trustedRecipients.sorted(), empty: "Nobody. Every email shows the approval panel.") { email in
                 Task { await model.untrust(email) }
@@ -1325,9 +1494,23 @@ private struct LimitField: View {
 /// so once Postern reaches Bridge, the account is on one of them.
 private struct ProtonPlansSection: View {
     let paid: Bool
+    var hits: [ProtonLimitLog.Hit] = []
 
     var body: some View {
         ProtonSection("Proton's limits by plan", footer: Text("From Proton's support page on sending limits. Proton may stop an account that looks like bulk mail: write to each person, keep a steady pace and avoid addresses that bounce.")) {
+            ForEach(Array(hits.reversed().enumerated()), id: \.offset) { _, hit in
+                ProtonRow {
+                    HStack(alignment: .top, spacing: 10) {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(Theme.warning)
+                        VStack(alignment: .leading, spacing: 2) {
+                            Text("Proton said stop on \(hit.date.formatted(date: .abbreviated, time: .shortened))")
+                            Text("After \(hit.sentInLastDay) emails in 24 hours through Postern: your account's real limit is about there.")
+                                .font(.system(size: 12)).foregroundStyle(Theme.textWeak)
+                        }
+                        .fixedSize(horizontal: false, vertical: true)
+                    }
+                }
+            }
             PlanRow(name: "Proton Free", limit: "50 an hour, 150 a day",
                     detail: "Bridge, and so Postern, needs a paid plan.")
             PlanRow(name: "Paid plans", limit: "No fixed number",

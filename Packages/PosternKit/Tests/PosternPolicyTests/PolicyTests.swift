@@ -130,3 +130,22 @@ import PosternVault
         #expect(open.mayReceive("anyone@example.com"))
     }
 }
+
+@Suite struct ToolPresetTests {
+    @Test func eachPresetGivesMoreThanTheOneBefore() {
+        #expect(ToolPreset.read.tools.isStrictSubset(of: ToolPreset.assistant.tools))
+        #expect(ToolPreset.assistant.tools.isStrictSubset(of: ToolPreset.full.tools))
+        #expect(ToolPreset.read.tools.allSatisfy { $0.tier == .read })
+        #expect(ToolPreset.full.tools.allSatisfy { $0.tier != .delete && $0.companionOf == nil })
+        #expect(!ToolPreset.full.tools.contains(.sendDrafts) && !ToolPreset.full.tools.contains(.saveAttachment))
+        #expect(ToolPreset.matching(ToolPreset.assistant.tools) == .assistant)
+        #expect(ToolPreset.matching([.listMailboxes]) == nil)
+    }
+
+    @Test func goingDownAPresetNeverAsksForProof() {
+        let full = Policy(enabledTools: ToolPreset.full.tools)
+        let read = Policy(enabledTools: ToolPreset.read.tools)
+        #expect(!read.addsPower(over: full))
+        #expect(full.addsPower(over: read))
+    }
+}

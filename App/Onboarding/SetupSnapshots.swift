@@ -4,6 +4,7 @@ import PosternApproval
 import PosternAudit
 import PosternCompose
 import PosternBridge
+import PosternCore
 import PosternClients
 import PosternModel
 import PosternPolicy
@@ -185,9 +186,9 @@ enum SetupSnapshots {
                 let model = ControlModel(live: false)
                 model.pane = pane
                 model.configured = true
-                model.policy = Policy(enabledTools: [.listMailboxes, .searchMessages, .getMessage, .markRead, .archiveMessages, .createDraft, .sendMessage, .replyToMessage],
+                model.policy = Policy(enabledTools: ToolPreset.assistant.tools,
                                       hiddenMailboxes: ["Folders/Health"], pauseWhenLocked: true,
-                                      trustedRecipients: ["ruben@example.ch"])
+                                      trustedRecipients: ["ruben@example.ch"], sendsPerHour: 20, sendsPerDay: 100)
                 model.connectedApps = ["Claude Code", "Claude Code", "Codex"]
                 model.pin = pin
                 model.endpoint = BridgeEndpoint(imap: BridgePort(port: 1143, mode: .startTLS), smtp: BridgePort(port: 1025, mode: .implicit))
@@ -208,6 +209,9 @@ enum SetupSnapshots {
                     ClientRow(target: ClientTarget(id: "a", title: "Claude Code", kind: .claudeCode, fileURL: home.appendingPathComponent(".claude.json"), bookmark: nil), installed: true, status: .connected),
                     ClientRow(target: ClientTarget(id: "b", title: "Claude Desktop", kind: .claudeDesktop, fileURL: home.appendingPathComponent(ClientKind.claudeDesktop.relativePath), bookmark: nil), installed: true, status: .notConnected),
                     ClientRow(target: ClientTarget(id: "c", title: "Codex", kind: .codex, fileURL: home.appendingPathComponent(".codex/config.toml"), bookmark: nil), installed: true, status: .connected),
+                    ClientRow(target: ClientTarget(id: "d", title: "Cursor", kind: .cursor, fileURL: home.appendingPathComponent(".cursor/mcp.json"), bookmark: nil), installed: true, status: .notConnected),
+                    ClientRow(target: ClientTarget(id: "e", title: "VS Code (Copilot)", kind: .vscode, fileURL: home.appendingPathComponent(ClientKind.vscode.relativePath), bookmark: nil), installed: true, status: .notConnected),
+                    ClientRow(target: ClientTarget(id: "f", title: "Gemini CLI", kind: .geminiCLI, fileURL: home.appendingPathComponent(".gemini/settings.json"), bookmark: nil), installed: false, status: .notConnected),
                 ]
                 let now = Date()
                 model.activity = [
@@ -217,6 +221,16 @@ enum SetupSnapshots {
                     ActivityRecord(date: now.addingTimeInterval(-900), client: "Claude Code", tool: "search_messages", outcome: "scope_hidden", items: nil, previous: ""),
                     ActivityRecord(date: now.addingTimeInterval(-3600), client: "Claude Code", tool: "list_mailboxes", outcome: "ok", items: 30, previous: ""),
                 ]
+                // Two weeks of calls for the chart, a few refused.
+                for day in 1..<14 {
+                    for call in 0..<((day * 7) % 11 + 3) {
+                        model.activity.append(ActivityRecord(date: now.addingTimeInterval(-Double(day) * 86_400 - Double(call) * 600), client: "Claude Code",
+                                                             tool: call % 4 == 0 ? "get_messages" : "search_messages", outcome: call % 9 == 5 ? "policy_disabled" : "ok",
+                                                             items: 5, previous: ""))
+                    }
+                }
+                model.recentSends = (0..<14).map { now.addingTimeInterval(-Double($0) * 4000) }
+                model.protonLimitHits = pane == .security ? [ProtonLimitLog.Hit(date: now.addingTimeInterval(-86_400 * 3), sentInLastDay: 212)] : []
                 model.integrity = .intact(count: 128)
                 return model
             }
