@@ -24,10 +24,12 @@ final class SetupFlow {
         gtk_window_set_modal(cast(window), 1)
         gtk_window_set_transient_for(cast(window), cast(parent))
         gtk_window_set_default_size(cast(window), 560, 560)
-        stack = raw(gtk_stack_new())
+        let stack = raw(gtk_stack_new())
         gtk_stack_set_transition_type(cast(stack), GTK_STACK_TRANSITION_TYPE_SLIDE_LEFT)
-        overlay = raw(adw_toast_overlay_new())
+        let overlay = raw(adw_toast_overlay_new())
         adw_toast_overlay_set_child(opaque(overlay), cast(stack))
+        self.stack = stack
+        self.overlay = overlay
         let toolbar = raw(adw_toolbar_view_new())
         adw_toolbar_view_add_top_bar(opaque(toolbar), cast(raw(adw_header_bar_new())))
         adw_toolbar_view_set_content(opaque(toolbar), cast(overlay))
