@@ -1,0 +1,55 @@
+name: Windows
+
+# Postern for Windows: the whole core with two pinned forks (scripts/windows-forks.sh), the relay, the reader in its
+# AppContainer, the command line and postern-hello. A preview. Its own workflow: a long first build is never
+# cancelled by a newer push, and its cache is saved even when a step fails, so the next run starts where it stopped.
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: windows-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  windows:
+    name: Postern for Windows
+    runs-on: windows-2022
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@v4
+      - uses: compnerd/gha-setup-swift@v0.5.1
+        with:
+          branch: swift-6.2.4-release
+          tag: 6.2.4-RELEASE
+      - name: Use the Windows forks
+        shell: bash
+        run: scripts/windows-forks.sh
+      - name: Restore the build cache
+        uses: actions/cache/restore@v4
+        with:
+          path: Packages/PosternDesktop/.build
+          key: windows-build-${{ hashFiles('Packages/PosternKit/Package.swift', 'Packages/PosternDesktop/Package.swift', 'scripts/windows-forks.sh') }}-${{ github.sha }}
+          restore-keys: windows-build-
+      - name: Build
+        id: build
+        working-directory: Packages/PosternDesktop
+        run: swift build --build-tests
+      - name: Save the build cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: Packages/PosternDesktop/.build
+          key: windows-build-${{ hashFiles('Packages/PosternKit/Package.swift', 'Packages/PosternDesktop/Package.swift', 'scripts/windows-forks.sh') }}-${{ github.sha }}
+      - name: Test
+        working-directory: Packages/PosternDesktop
+        run: swift test --skip-build
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Build postern-hello
+        working-directory: Windows/hello
+        shell: cmd
+        run: cl /nologo /std:c++20 /EHsc /O2 /W4 /DNOMINMAX postern-hello.cpp /link windowsapp.lib /out:postern-hello.exe

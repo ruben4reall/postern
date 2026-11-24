@@ -82,9 +82,24 @@ jobs:
           apt-get update -qq
           DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libgtk-4-dev libadwaita-1-dev libsecret-1-dev \
             xvfb imagemagick dbus dbus-x11 fonts-cantarell fonts-dejavu-core adwaita-icon-theme >/dev/null
+      - name: Restore the build cache
+        uses: actions/cache/restore@v4
+        with:
+          path: Packages/PosternDesktop/.build
+          key: linux-build-${{ hashFiles('Packages/PosternKit/Package.swift', 'Packages/PosternDesktop/Package.swift') }}-${{ github.sha }}
+          restore-keys: linux-build-
+      - name: Build the tests
+        working-directory: Packages/PosternDesktop
+        run: swift build --build-tests
+      - name: Save the build cache
+        if: always()
+        uses: actions/cache/save@v4
+        with:
+          path: Packages/PosternDesktop/.build
+          key: linux-build-${{ hashFiles('Packages/PosternKit/Package.swift', 'Packages/PosternDesktop/Package.swift') }}-${{ github.sha }}
       - name: Test
         working-directory: Packages/PosternDesktop
-        run: swift test
+        run: swift test --skip-build
       - name: Build the release
         working-directory: Packages/PosternDesktop
         run: swift build -c release --static-swift-stdlib
@@ -128,38 +143,6 @@ jobs:
           name: linux-screenshots
           path: Packages/PosternDesktop/screenshots
           retention-days: 7
-
-  # Postern for Windows: the whole core with two pinned forks (scripts/windows-forks.sh), the relay, the reader in
-  # its AppContainer and the command line. A preview while the Windows app comes together.
-  desktop-windows:
-    name: Postern for Windows
-    runs-on: windows-2022
-    timeout-minutes: 150
-    continue-on-error: true
-    steps:
-      - uses: actions/checkout@v4
-      - uses: compnerd/gha-setup-swift@v0.5.1
-        with:
-          branch: swift-6.2.4-release
-          tag: 6.2.4-RELEASE
-      - name: Use the Windows forks
-        shell: bash
-        run: scripts/windows-forks.sh
-      # Two BoringSSL copies, SwiftNIO, the IMAP parser and the MCP SDK take most of an hour the first time.
-      - uses: actions/cache@v4
-        with:
-          path: Packages/PosternDesktop/.build
-          key: windows-build-${{ hashFiles('Packages/PosternKit/Package.swift', 'Packages/PosternDesktop/Package.swift', 'scripts/windows-forks.sh') }}
-          restore-keys: windows-build-
-      - name: Build and test
-        working-directory: Packages/PosternDesktop
-        run: swift test
-      # Windows Hello: a few lines of C++/WinRT that create the key and sign approvals, nothing else.
-      - uses: ilammy/msvc-dev-cmd@v1
-      - name: Build postern-hello
-        working-directory: Windows/hello
-        shell: cmd
-        run: cl /nologo /std:c++20 /EHsc /O2 /W4 /DNOMINMAX postern-hello.cpp /link windowsapp.lib /out:postern-hello.exe
 
   scripts:
     name: Release script tests
