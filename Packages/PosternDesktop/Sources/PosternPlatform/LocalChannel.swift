@@ -80,37 +80,70 @@ public final class LocalConnection: @unchecked Sendable {
 // MARK: - Endpoints
 
 #if os(Windows)
+/// One end of a named pipe, opened for overlapped I/O. A pipe handle opened for synchronous I/O serializes every
+/// operation on it: a read waiting for the other side would hold back this side's writes from another thread, and the
+/// relay and the core would wait for each other forever. Each read and each write here has its own OVERLAPPED and
+/// event, so reading and writing go on at the same time.
 final class Endpoint: @unchecked Sendable {
     let handle: HANDLE
     let server: Bool
+    private let readEvent: HANDLE
+    private let writeEvent: HANDLE
 
     init(handle: HANDLE, server: Bool) {
         self.handle = handle
         self.server = server
+        // Manual-reset events, one per direction. Creating an event only fails when Windows is out of handles.
+        readEvent = CreateEventW(nil, true, false, nil)!
+        writeEvent = CreateEventW(nil, true, false, nil)!
+    }
+
+    deinit {
+        CloseHandle(readEvent)
+        CloseHandle(writeEvent)
+    }
+
+    /// Waits for an overlapped operation; the count it moved, or nil when it failed.
+    private func complete(_ started: Bool, _ overlapped: inout OVERLAPPED) -> DWORD? {
+        var count: DWORD = 0
+        if started {
+            return GetOverlappedResult(handle, &overlapped, &count, false) ? count : nil
+        }
+        guard GetLastError() == DWORD(ERROR_IO_PENDING) else { return nil }
+        return GetOverlappedResult(handle, &overlapped, &count, true) ? count : nil
     }
 
     func read() -> Data? {
         var data = Data(count: 65_536)
-        var count: DWORD = 0
-        let ok = data.withUnsafeMutableBytes { ReadFile(handle, $0.baseAddress, DWORD($0.count), &count, nil) }
-        guard ok, count > 0 else { return nil }
+        var overlapped = OVERLAPPED()
+        overlapped.hEvent = readEvent
+        ResetEvent(readEvent)
+        let count = data.withUnsafeMutableBytes { bytes -> DWORD? in
+            let started = ReadFile(handle, bytes.baseAddress, DWORD(bytes.count), nil, &overlapped)
+            return complete(started, &overlapped)
+        }
+        guard let count, count > 0 else { return nil }
         return data.prefix(Int(count))
     }
 
     func write(_ data: Data) -> Bool {
         var offset = 0
         while offset < data.count {
-            var written: DWORD = 0
-            let ok = data.withUnsafeBytes { bytes in
-                WriteFile(handle, bytes.baseAddress! + offset, DWORD(data.count - offset), &written, nil)
+            var overlapped = OVERLAPPED()
+            overlapped.hEvent = writeEvent
+            ResetEvent(writeEvent)
+            let written = data.withUnsafeBytes { bytes -> DWORD? in
+                let started = WriteFile(handle, bytes.baseAddress! + offset, DWORD(data.count - offset), nil, &overlapped)
+                return complete(started, &overlapped)
             }
-            guard ok, written > 0 else { return false }
+            guard let written, written > 0 else { return false }
             offset += Int(written)
         }
         return true
     }
 
     func close() {
+        CancelIoEx(handle, nil)
         if server {
             FlushFileBuffers(handle)
             DisconnectNamedPipe(handle)
@@ -199,6 +232,24 @@ public final class LocalListener: @unchecked Sendable {
         #endif
     }
 
+    #if os(Windows)
+    /// Waits until a client opens this pipe instance.
+    private static func waitForClient(_ handle: HANDLE) -> Bool {
+        let event = CreateEventW(nil, true, false, nil)
+        defer { CloseHandle(event) }
+        var overlapped = OVERLAPPED()
+        overlapped.hEvent = event
+        if ConnectNamedPipe(handle, &overlapped) { return true }
+        switch GetLastError() {
+        case DWORD(ERROR_PIPE_CONNECTED): return true
+        case DWORD(ERROR_IO_PENDING):
+            var unused: DWORD = 0
+            return GetOverlappedResult(handle, &overlapped, &unused, true)
+        default: return false
+        }
+    }
+    #endif
+
     #if !os(Windows)
     /// systemd's socket when the core was started by `postern.socket`, else a socket it makes itself, in a folder
     /// only this user can open.
@@ -242,7 +293,7 @@ public final class LocalListener: @unchecked Sendable {
     public func accept() -> LocalConnection? {
         #if os(Windows)
         while true {
-            let mode = DWORD(PIPE_ACCESS_DUPLEX) | (first ? DWORD(FILE_FLAG_FIRST_PIPE_INSTANCE) : 0)
+            let mode = DWORD(PIPE_ACCESS_DUPLEX) | DWORD(FILE_FLAG_OVERLAPPED) | (first ? DWORD(FILE_FLAG_FIRST_PIPE_INSTANCE) : 0)
             var attributes = SECURITY_ATTRIBUTES(nLength: DWORD(MemoryLayout<SECURITY_ATTRIBUTES>.size), lpSecurityDescriptor: security, bInheritHandle: false)
             let handle = name.withCString(encodedAs: UTF16.self) {
                 CreateNamedPipeW($0, mode, DWORD(PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS),
@@ -255,8 +306,7 @@ public final class LocalListener: @unchecked Sendable {
                 continue
             }
             first = false
-            let connected = ConnectNamedPipe(handle, nil) || GetLastError() == DWORD(ERROR_PIPE_CONNECTED)
-            guard connected else {
+            guard Self.waitForClient(handle) else {
                 CloseHandle(handle)
                 continue
             }
@@ -307,7 +357,7 @@ public enum LocalChannel {
         let name = PosternPaths.pipeName
         for _ in 0..<10 {
             let handle = name.withCString(encodedAs: UTF16.self) {
-                CreateFileW($0, GENERIC_READ | DWORD(GENERIC_WRITE), 0, nil, DWORD(OPEN_EXISTING), 0, nil)
+                CreateFileW($0, GENERIC_READ | DWORD(GENERIC_WRITE), 0, nil, DWORD(OPEN_EXISTING), DWORD(FILE_FLAG_OVERLAPPED), nil)
             }
             if let handle, handle != INVALID_HANDLE_VALUE {
                 var pid: ULONG = 0
