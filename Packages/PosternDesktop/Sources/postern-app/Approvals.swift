@@ -107,6 +107,7 @@ final class ApprovalWindow {
         onClose(window) { [weak self] in
             guard let self, !self.closed else { return }
             self.closed = true
+            self.stopTicker()
             decide(.reject, nil, nil)
         }
         tick(approval.deadline)
@@ -122,8 +123,13 @@ final class ApprovalWindow {
     func close() {
         guard !closed else { return }
         closed = true
-        if ticker != 0 { g_source_remove(ticker) }
+        stopTicker()
         gtk_window_destroy(cast(window))
+    }
+
+    private func stopTicker() {
+        if ticker != 0 { g_source_remove(ticker) }
+        ticker = 0
     }
 
     /// Red when an address came from an email the app read, orange for a first contact or a different Reply-To.
