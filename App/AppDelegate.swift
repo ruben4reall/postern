@@ -107,6 +107,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
         showMain()
     }
 
+    @objc func applyPreset(_ sender: NSMenuItem) {
+        guard ToolPreset.allCases.indices.contains(sender.tag) else { return }
+        let preset = ToolPreset.allCases[sender.tag]
+        Task { await control.applyPreset(preset) }
+    }
+
     @objc func togglePause() {
         Task { await control.setPaused(!CoreState.shared.policy.paused) }
     }
@@ -206,6 +212,26 @@ extension AppDelegate: NSMenuDelegate {
         let connected = NSMenuItem(title: apps.isEmpty ? String(localized: "No app connected") : String(localized: "Connected: \(Set(apps).sorted().joined(separator: ", "))"), action: nil, keyEquivalent: "")
         connected.isEnabled = false
         menu.addItem(connected)
+        if state.backend != nil {
+            let sends = state.ledger.recentSends()
+            let hour = sends.filter { Date().timeIntervalSince($0) < 3600 }.count
+            let today = NSMenuItem(title: String(localized: "Sent: \(hour) of \(state.policy.sendsPerHour) this hour, \(sends.count) of \(state.policy.sendsPerDay) today"), action: nil, keyEquivalent: "")
+            today.isEnabled = false
+            menu.addItem(today)
+            // The three presets, one click and Touch ID away.
+            let modes = NSMenuItem(title: String(localized: "What Apps May Do"), action: nil, keyEquivalent: "")
+            let submenu = NSMenu()
+            let current = ToolPreset.matching(state.policy.enabledTools)
+            for (index, preset) in ToolPreset.allCases.enumerated() {
+                let item = NSMenuItem(title: PresetCopy.for(preset).title, action: #selector(applyPreset(_:)), keyEquivalent: "")
+                item.target = self
+                item.tag = index
+                item.state = current == preset ? .on : .off
+                submenu.addItem(item)
+            }
+            modes.submenu = submenu
+            menu.addItem(modes)
+        }
         menu.addItem(.separator())
         if state.backend != nil {
             let pause = NSMenuItem(title: state.policy.paused ? String(localized: "Resume Postern…") : String(localized: "Pause Postern"), action: #selector(togglePause), keyEquivalent: "")

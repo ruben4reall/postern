@@ -87,7 +87,7 @@ final class OnboardingModel {
         switch await Authenticator.confirm(String(localized: "let your apps read your mail", comment: "Touch ID: “Postern” is trying to …"), allowPassword: false) {
         case .confirmed:
             do {
-                try PolicyStore(vault: vault).save(.readOnly)
+                try PolicyStore(vault: vault).save(Policy(enabledTools: ToolPreset.read.tools))
                 CoreState.shared.reloadPolicy()
                 step = .done
             } catch {

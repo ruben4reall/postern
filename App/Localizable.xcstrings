@@ -25606,6 +25606,70 @@
         }
       }
     },
+    "Sent: %lld of %lld this hour, %lld of %lld today" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Gesendet: %1$lld von %2$lld in dieser Stunde, %3$lld von %4$lld heute"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enviados: %1$lld de %2$lld esta hora, %3$lld de %4$lld hoy"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Envoyés : %1$lld sur %2$lld cette heure, %3$lld sur %4$lld aujourd’hui"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Inviate: %1$lld di %2$lld in quest’ora, %3$lld di %4$lld oggi"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "送信：この1時間 %1$lld/%2$lld 通、今日 %3$lld/%4$lld 通"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "보낸 메일: 이번 시간 %2$lld통 중 %1$lld통, 오늘 %4$lld통 중 %3$lld통"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Verstuurd: %1$lld van %2$lld dit uur, %3$lld van %4$lld vandaag"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wysłane: %1$lld z %2$lld w tej godzinie, %3$lld z %4$lld dzisiaj"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Enviados: %1$lld de %2$lld nesta hora, %3$lld de %4$lld hoje"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "已发送：本小时 %1$lld/%2$lld 封，今天 %3$lld/%4$lld 封"
+          }
+        }
+      }
+    },
     "Set Up Postern…" : {
       "localizations" : {
         "de" : {
@@ -29695,6 +29759,70 @@
           "stringUnit" : {
             "state" : "translated",
             "value" : "欢迎使用 Postern"
+          }
+        }
+      }
+    },
+    "What Apps May Do" : {
+      "localizations" : {
+        "de" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Was Apps dürfen"
+          }
+        },
+        "es" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Qué pueden hacer las apps"
+          }
+        },
+        "fr" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Ce que les apps peuvent faire"
+          }
+        },
+        "it" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Cosa possono fare le app"
+          }
+        },
+        "ja" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "アプリに許可すること"
+          }
+        },
+        "ko" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "앱이 할 수 있는 일"
+          }
+        },
+        "nl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Wat apps mogen"
+          }
+        },
+        "pl" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "Co mogą aplikacje"
+          }
+        },
+        "pt-BR" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "O que os apps podem fazer"
+          }
+        },
+        "zh-Hans" : {
+          "stringUnit" : {
+            "state" : "translated",
+            "value" : "应用可以做什么"
           }
         }
       }
