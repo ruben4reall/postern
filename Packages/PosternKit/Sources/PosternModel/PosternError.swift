@@ -18,6 +18,8 @@ public enum PosternErrorCode: String, Codable, Sendable {
     case sendRefused = "send_refused"
     /// Proton refused the email because the account reached Proton's own sending limit; it did not leave.
     case protonLimit = "proton_limit"
+    /// Proton has blocked the account from sending for a while (up to 48 hours); nothing can leave until it lifts.
+    case protonBlocked = "proton_blocked"
     case sendUncertain = "send_uncertain"
     /// The text announces a file, and none is attached.
     case attachmentMissing = "attachment_missing"

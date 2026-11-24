@@ -394,7 +394,7 @@ public actor BatchBoard {
         if decision != .approved {
             let why: String = switch decision {
             case .rejected(let reason): "The user rejected the batch" + (reason.map { ": \($0)" } ?? "") + "; the draft stays in Drafts."
-            case .notAuthenticated: "The user did not confirm with Touch ID; the draft stays in Drafts."
+            case .notAuthenticated: "The user did not confirm it was them; the draft stays in Drafts."
             case .expired: "The user did not answer in time; the draft stays in Drafts."
             default: "The draft stays in Drafts."
             }

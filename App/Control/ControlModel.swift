@@ -341,6 +341,14 @@ struct ToolCopy {
             ToolCopy(title: String(localized: "Read conversations"), verb: String(localized: "read your conversations", comment: "Completes the Touch ID sentence “Postern” is trying to let your apps …"),
                      allows: String(localized: "Follow a conversation across folders."),
                      risk: String(localized: "Like reading messages, for every message of the conversation."))
+        case .getMessages:
+            ToolCopy(title: String(localized: "Read several messages at once"), verb: String(localized: "read several messages at once", comment: "Completes the Touch ID sentence “Postern” is trying to let your apps …"),
+                     allows: String(localized: "Read up to ten messages in one go, to summarize a list of results."),
+                     risk: String(localized: "Like reading messages, ten at a time."))
+        case .topSenders:
+            ToolCopy(title: String(localized: "See who writes the most"), verb: String(localized: "count who writes to you", comment: "Completes the Touch ID sentence “Postern” is trying to let your apps …"),
+                     allows: String(localized: "Count the messages of a mailbox by sender, to find the newsletters that fill it."),
+                     risk: String(localized: "Apps learn who writes to you and how often."))
         case .markRead:
             ToolCopy(title: String(localized: "Mark as read"), verb: String(localized: "mark your mail as read", comment: "Completes the Touch ID sentence “Postern” is trying to let your apps …"),
                      allows: String(localized: "Mark messages as read."),
@@ -389,6 +397,14 @@ struct ToolCopy {
             ToolCopy(title: String(localized: "Delete drafts"), verb: String(localized: "delete drafts", comment: "Completes the Touch ID sentence “Postern” is trying to let your apps …"),
                      allows: String(localized: "Delete a draft from Drafts. Claude Code also asks you each time."),
                      risk: String(localized: "A deleted draft is gone for good."))
+        case .draftReply:
+            ToolCopy(title: String(localized: "Write replies as drafts"), verb: String(localized: "write replies as drafts", comment: "Completes the Touch ID sentence “Postern” is trying to let your apps …"),
+                     allows: String(localized: "Save a reply in Drafts, in the same conversation. Nothing is sent."),
+                     risk: String(localized: "Drafts sync to Proton on all your devices."))
+        case .draftForward:
+            ToolCopy(title: String(localized: "Write forwards as drafts"), verb: String(localized: "write forwards as drafts", comment: "Completes the Touch ID sentence “Postern” is trying to let your apps …"),
+                     allows: String(localized: "Save a forward in Drafts, with the original's attachments. Nothing is sent."),
+                     risk: String(localized: "Drafts sync to Proton on all your devices."))
         case .sendMessage:
             ToolCopy(title: String(localized: "Send new emails"), verb: String(localized: "send emails", comment: "Completes the Touch ID sentence “Postern” is trying to let your apps …"),
                      allows: String(localized: "Write and send an email. Each one waits for you on the approval panel."),

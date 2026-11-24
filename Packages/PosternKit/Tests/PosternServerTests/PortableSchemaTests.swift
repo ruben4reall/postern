@@ -46,8 +46,8 @@ import Testing
     @Test func theWholeListStaysSmall() throws {
         let tools = ToolCatalog.tools(for: Policy(enabledTools: Set(ToolID.allCases)))
         let bytes = try JSONEncoder().encode(tools).count
-        // About four characters a token: every tool on costs about 8,500 tokens, read once per session.
-        #expect(bytes < 34_500, "\(bytes) bytes")
+        // About four characters a token: every tool on, 34 of them, costs about 9,700 tokens, read once per session.
+        #expect(bytes < 39_500, "\(bytes) bytes")
         let instructions = ServerInstructions.text(for: Policy(enabledTools: Set(ToolID.allCases)))
         #expect(instructions.count < 1600 && ServerInstructions.text(for: .initial).count < 900)
     }

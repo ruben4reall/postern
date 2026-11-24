@@ -1,7 +1,8 @@
 # Tool reference
 
 Every tool Postern offers, by tier. A tool that is off is not listed to clients and cannot be called. Turning one on
-asks for Touch ID in the Postern window.
+asks for proof that it is you in the Postern window: Touch ID on a Mac, Windows Hello on Windows, your password or
+fingerprint through polkit on Linux.
 
 Message ids are opaque strings returned by `search_messages`, `get_thread` and the tools that change messages. Bridge
 gives a message a new id when it moves, so the tools that move messages return the new ids.
@@ -19,8 +20,10 @@ Postern's own sentences in `summary`. Schemas keep to what every client and mode
 | Tool | Arguments | What it does |
 |---|---|---|
 | `list_mailboxes` | none | Lists the folders, labels and system mailboxes you let apps see, with total and unread counts. |
-| `search_messages` | `mailbox` (default `INBOX`), `from`, `to`, `subject`, `text`, `since` and `before` (`YYYY-MM-DD`), `unread`, `starred`, `limit` (1 to 50, default 20), `cursor` | Finds messages, newest first, and returns ids with sender, subject and date. `next_cursor` gives the next page. |
+| `search_messages` | `mailbox` (default `INBOX`; `*` for every mailbox you let apps see), `from`, `to`, `subject`, `text`, `since` and `before` (`YYYY-MM-DD`), `unread`, `starred`, `limit` (1 to 50, default 20), `cursor` | Finds messages, newest first, and returns ids with sender, subject and date. `next_cursor` gives the next page. With `*`, Postern searches All Mail, or each visible folder when a hidden mailbox hides All Mail, and lists each message once. |
 | `get_message` | `id`, `max_chars` (500 to 100,000, default 20,000) | Reads one message, cleaned: hidden text, invisible characters and images removed, links listed with their real destination, attachments listed by number, and a sender verdict. |
+| `get_messages` | `ids` (1 to 10), `max_chars` per message (200 to 20,000, default 4,000) | Reads several messages in one call, each as `get_message` gives it: the way to summarize a page of search results. A message that cannot be read gets its own error and the others still come. |
+| `top_senders` | `mailbox` (default `INBOX`, or `*`), `by` (`sender`, `domain` or `recipient`), `since`, `unread`, `limit` (1 to 100, default 25) | Counts the newest 1,000 messages a search finds by sender, sender domain or recipient, with how many are unread and the latest date: the newsletters that fill a mailbox, or with `by: recipient` on Sent, the people you write to most. |
 | `get_thread` | `id` | Lists the messages of the conversation a message belongs to, oldest first, across mailboxes: in All Mail, or folder by folder when a hidden mailbox hides All Mail. Reads only the message's header to find them. |
 | `awaiting_reply` | `since` (`YYYY-MM-DD`, default 30 days ago), `quiet_days` (default 7), `to`, `subject`, `include_answered`, `limit` (1 to 200, default 50) | Lists the people you wrote to who have not answered, the longest wait first: the follow-ups to write. Sent emails are grouped by their first recipient; people written to in the last `quiet_days` are left out. An answer is a reply in the conversation, or any later email from the same address, or from the same company domain (not for public providers such as gmail.com), Spam included. |
 | `list_addresses` | none | Lists the addresses Postern may send from: the account's, and the aliases you added in the window. |
@@ -61,7 +64,9 @@ whether Postern saw it applied.
 |---|---|---|
 | `create_draft` | `to`, `cc`, `bcc`, `from`, `subject`, `body` (plain text), and files: `attachments`, `inline_attachments`, `email_attachments`; `no_attachment` | Saves a draft in Drafts, then reads back how many files Bridge kept: a draft that lost one is removed and the call fails with `attachments_lost`. Nothing is sent. |
 | `create_drafts` | `template`: `subject`, `body`, `attachments`, `inline_attachments`, `email_attachments`, `from`, `cc`, `bcc`; and either `drafts` (1 to 5,000, each with `to`, `values` as a list of `{name, value}` and any field of its own) or `data_file` (a spreadsheet in the outbox); `dry_run`; `skip_invalid`; `no_attachment` | Saves up to 5,000 drafts from one template. `{{name}}` in the subject, body and attachment names is replaced by each draft's value. Every draft is checked first; if one has a problem, none is saved unless `skip_invalid` is true. `dry_run` checks them all and shows the first one, saving nothing. Each draft is composed again when its turn to be saved comes, so thousands never sit in memory, and each is checked to still hold its files. A long batch goes on in the background and the answer gives its `batch` id. Nothing is sent. |
-| `list_outbox` | none | Lists the files in `~/Downloads/Postern/Outbox` and its subfolders, with their size. On whenever `create_draft`, `create_drafts`, `update_draft` or `send_message` is. |
+| `draft_reply` | `id`, `body`, `reply_all` (default `false`), `from`, files, `no_attachment` | Saves a reply in Drafts, above a quote of the original, in the same conversation. Proton does not keep a draft's In-Reply-To, so Postern remembers it and puts it back when the draft is sent. Nothing is sent. |
+| `draft_forward` | `id`, `to`, `note`, `include_attachments` (default `true`), `from`, files, `no_attachment` | Saves a forward in Drafts, with the original's attachments. Nothing is sent. |
+| `list_outbox` | none | Lists the files in `~/Downloads/Postern/Outbox` and its subfolders, with their size. On whenever `create_draft`, `create_drafts`, `update_draft`, `draft_reply`, `draft_forward` or `send_message` is. |
 | `batch_status` | `id` (none lists every batch), `all`, `offset`, `limit` (1 to 100) | Shows how a batch stands: what is saved or sent, what waits and why, and the items that need attention. On whenever `create_drafts` or `send_drafts` is. |
 | `update_draft` | `id`, and any of `to`, `cc`, `bcc`, `from`, `subject`, `body`, `attachments`, `inline_attachments`, `email_attachments`, `no_attachment` | Replaces those fields; the others keep their value. The files stay unless one of the three file arguments is given: then they replace them all (`email_attachments` can name the draft's own files). Returns the draft's new id. |
 | `delete_draft` | `id` | Deletes one draft from Drafts. The client also asks you each time. |
@@ -183,3 +188,18 @@ When Postern refuses, the client gets a code and a sentence it can repeat to you
 | `certificate_mismatch` | Bridge presented a different certificate than the one you trusted. |
 | `authentication_failed` | Bridge refused the password. |
 | `parse_failed` | The message could not be read. |
+
+## Prompts
+
+Postern also offers ready-made requests, which apps show as slash commands (in Claude Code, `/` then the prompt's
+name). A prompt is only text that you choose to send; it changes no permission. Each one is listed only while the
+tools it needs are on.
+
+| Prompt | Arguments | Needs | What it asks |
+|---|---|---|---|
+| `triage_inbox` | `days` (default 3) | `search_messages`, `get_message` | Sort the recent inbox into needs a reply, to read, newsletters, can be archived; change nothing and propose actions. |
+| `draft_replies` | `days` (default 2) | `search_messages`, `get_message`, `draft_reply` | Write a reply draft for each email that needs an answer, in your tone. Nothing is sent. |
+| `follow_ups` | `since`, `subject` | `awaiting_reply` | List who has not answered and propose polite follow-ups, saved as drafts when `draft_reply` is on. |
+| `find_invoices` | `since` (default the first day of last month) | `search_messages`, `get_message` | A table of invoices, receipts and bills in every mailbox, reading PDF attachments when `read_attachment` is on. |
+| `clean_up_newsletters` | `days` (default 90) | `top_senders` | Find who fills the inbox and propose keep, file, archive or unsubscribe, with a dry run before any change. |
+| `weekly_digest` | none | `search_messages`, `get_message` | Summarize the last seven days: actions and deadlines, decisions, open conversations, likely phishing. |

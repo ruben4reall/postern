@@ -9,6 +9,8 @@ public enum ToolID: String, Codable, Sendable, CaseIterable {
     case searchMessages = "search_messages"
     case getMessage = "get_message"
     case getThread = "get_thread"
+    case getMessages = "get_messages"
+    case topSenders = "top_senders"
     case awaitingReply = "awaiting_reply"
     case markRead = "mark_read"
     case markUnread = "mark_unread"
@@ -22,6 +24,8 @@ public enum ToolID: String, Codable, Sendable, CaseIterable {
     case createDrafts = "create_drafts"
     case updateDraft = "update_draft"
     case deleteDraft = "delete_draft"
+    case draftReply = "draft_reply"
+    case draftForward = "draft_forward"
     case sendMessage = "send_message"
     case replyToMessage = "reply_to_message"
     case forwardMessage = "forward_message"
@@ -38,10 +42,11 @@ public enum ToolID: String, Codable, Sendable, CaseIterable {
 
     public var tier: Tier {
         switch self {
-        case .listMailboxes, .searchMessages, .getMessage, .getThread, .awaitingReply, .saveAttachment, .readAttachment, .listAddresses: .read
+        case .listMailboxes, .searchMessages, .getMessage, .getThread, .getMessages, .topSenders, .awaitingReply,
+             .saveAttachment, .readAttachment, .listAddresses: .read
         case .markRead, .markUnread, .setStarred, .moveMessages, .archiveMessages, .addLabel, .removeLabel,
              .createMailbox: .organize
-        case .createDraft, .createDrafts, .updateDraft, .deleteDraft, .listOutbox, .batchStatus: .draft
+        case .createDraft, .createDrafts, .updateDraft, .deleteDraft, .draftReply, .draftForward, .listOutbox, .batchStatus: .draft
         case .sendMessage, .replyToMessage, .forwardMessage, .sendDraft, .sendDrafts, .cancelBatch: .send
         case .trashMessages, .deletePermanently: .delete
         }
@@ -50,7 +55,7 @@ public enum ToolID: String, Codable, Sendable, CaseIterable {
     /// A companion has no switch of its own: it is on whenever one of these tools is.
     public var companionOf: Set<ToolID>? {
         switch self {
-        case .listOutbox: [.createDraft, .createDrafts, .updateDraft, .sendMessage]
+        case .listOutbox: [.createDraft, .createDrafts, .updateDraft, .draftReply, .draftForward, .sendMessage]
         case .batchStatus, .cancelBatch: [.createDrafts, .sendDrafts]
         default: nil
         }

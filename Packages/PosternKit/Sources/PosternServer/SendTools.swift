@@ -50,9 +50,13 @@ struct SendTools {
         case .sendMessage:
             return try await deliver(try await compose(arguments), tool: tool, context: nil, extra: [:])
         case .replyToMessage:
-            return try await reply(arguments)
+            return try await reply(arguments, asDraft: false)
         case .forwardMessage:
-            return try await forward(arguments)
+            return try await forward(arguments, asDraft: false)
+        case .draftReply:
+            return try await reply(arguments, asDraft: true)
+        case .draftForward:
+            return try await forward(arguments, asDraft: true)
         case .sendDraft:
             let id = try await draftID(arguments["id"])
             if let batch = await board.heldDrafts()[id] {
@@ -82,7 +86,7 @@ struct SendTools {
 
     // MARK: Replies and forwards
 
-    private func reply(_ arguments: [String: Value]) async throws -> CallTool.Result {
+    private func reply(_ arguments: [String: Value], asDraft: Bool) async throws -> CallTool.Result {
         let id = try await messageID(arguments["id"])
         guard let body = string(arguments["body"]) else { throw PosternError(.invalidArgument, "body is required.") }
         let original = try await backend.message(id, maxChars: Self.quoteLimit)
@@ -119,6 +123,11 @@ struct SendTools {
         }
         // The subject is the original's: only the text the client wrote is read.
         try requireAnnouncedFiles(message, arguments, subject: false)
+        if asDraft {
+            let draft = try await saveVerified(message)
+            return result("Saved a reply to \(message.envelopeRecipients.joined(separator: ", "))\(Self.withFiles(message)) in Drafts, in the same conversation. Nothing was sent.",
+                          ["draft_id": .string(draft.opaque), "attachments": Self.fileList(message)], untrusted: Self.fileNames(message))
+        }
         var extra: [String: [ApprovalBadge]] = [:]
         if let replyTo = headers.replyTo.first, let from = headers.from.first,
            replyTo.email.lowercased() != from.email.lowercased() {
@@ -127,7 +136,7 @@ struct SendTools {
         return try await deliver(message, tool: .replyToMessage, context: "Reply to \(sender): \(headers.subject)", extra: extra)
     }
 
-    private func forward(_ arguments: [String: Value]) async throws -> CallTool.Result {
+    private func forward(_ arguments: [String: Value], asDraft: Bool) async throws -> CallTool.Result {
         let id = try await messageID(arguments["id"])
         let recipients = try addresses(arguments["to"])
         guard !recipients.isEmpty else { throw PosternError(.invalidArgument, "to is required.") }
@@ -149,6 +158,11 @@ struct SendTools {
             throw PosternError(.invalidArgument, Self.explain(error))
         }
         try requireAnnouncedFiles(message, arguments, subject: false)
+        if asDraft {
+            let draft = try await saveVerified(message)
+            return result("Saved a forward to \(message.envelopeRecipients.joined(separator: ", "))\(Self.withFiles(message)) in Drafts. Nothing was sent.",
+                          ["draft_id": .string(draft.opaque), "attachments": Self.fileList(message)], untrusted: Self.fileNames(message))
+        }
         let sender = headers.from.first.map(Self.describe) ?? "someone"
         return try await deliver(message, tool: .forwardMessage, context: "Forward of \(sender): \(headers.subject)", extra: [:])
     }
@@ -195,7 +209,7 @@ struct SendTools {
         case .approved(let approved):
             try await sendCounted(approved)
             left = true
-            return result("The user read the email, approved it with Touch ID, and it was sent to \(approved.recipients.joined(separator: ", "))\(Self.withFiles(approved.message)).",
+            return result("The user read the email, approved it in Postern, and it was sent to \(approved.recipients.joined(separator: ", "))\(Self.withFiles(approved.message)).",
                           ["sent": .bool(true), "attachments": Self.fileList(approved.message)], untrusted: Self.fileNames(approved.message))
         case .saveAsDraft(let draft):
             let id = try await saveVerified(draft)
@@ -203,7 +217,7 @@ struct SendTools {
         case .rejected(let reason):
             throw PosternError(.approvalRejected, "The user rejected this email" + (reason.map { ": \($0)" } ?? "."))
         case .notAuthenticated:
-            throw PosternError(.approvalRejected, "The user did not confirm with Touch ID, so nothing was sent.")
+            throw PosternError(.approvalRejected, "The user did not confirm it was them, so nothing was sent.")
         case .expired:
             throw PosternError(.approvalTimeout, "The user did not answer within two minutes, so nothing was sent.")
         }
@@ -297,11 +311,18 @@ struct SendTools {
         let body = arguments["body"] == nil ? base?.body ?? "" : (string(arguments["body"]) ?? "")
         let files = Self.givesFiles(arguments) ? try await self.files(arguments, cache: cache) : baseFiles
         let from = try await sender(arguments["from"], draft: base?.headers.from.first)
+        var inReplyTo = base?.headers.inReplyTo
+        var references = base?.headers.references ?? []
+        // Proton drops a draft's In-Reply-To and References: put back the ones Postern remembered for it.
+        if inReplyTo == nil, let draftID = base?.headers.messageID, let remembered = DraftThreads.shared.reference(for: draftID) {
+            inReplyTo = remembered.inReplyTo
+            references = remembered.references
+        }
         let message: OutgoingMessage
         do {
             message = try OutgoingMessage.make(
                 from: from, to: to, cc: cc, bcc: bcc, subject: subject, body: body,
-                inReplyTo: base?.headers.inReplyTo, references: base?.headers.references ?? [], attachments: files,
+                inReplyTo: inReplyTo, references: references, attachments: files,
                 messageID: messageID
             )
         } catch let error as ComposeError {
@@ -414,6 +435,9 @@ struct SendTools {
 
     static func saveVerified(_ message: OutgoingMessage, backend: any MailBackend) async throws -> MessageID {
         let id = try await backend.saveDraft(message)
+        if let inReplyTo = message.inReplyTo {
+            DraftThreads.shared.remember(message.messageID, ThreadReference(inReplyTo: inReplyTo, references: message.references))
+        }
         let expected = message.attachments.count
         guard expected > 0, let count = try? await backend.attachmentCount(of: id), count < expected else { return id }
         // The structure alone can miscount: the files themselves decide. When they cannot be read, the draft stays.

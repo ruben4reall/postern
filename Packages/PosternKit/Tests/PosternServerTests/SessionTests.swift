@@ -42,8 +42,10 @@ final class FakeBackend: MailBackend, @unchecked Sendable {
             return draft
         }
         if id.mailbox == "Drafts", let saved = savedDraft(id) {
+            // As Proton does: the draft keeps its Message-ID and loses In-Reply-To and References.
             return SanitizedMessage(
-                headers: SanitizedHeaders(from: [saved.from], to: saved.to, cc: saved.cc, bcc: saved.bcc, subject: saved.subject),
+                headers: SanitizedHeaders(from: [saved.from], to: saved.to, cc: saved.cc, bcc: saved.bcc, subject: saved.subject,
+                                          messageID: saved.messageID),
                 body: saved.body, bodyTruncated: false, bodyWasHTML: false, hiddenElementsRemoved: 0, imagesOmitted: 0,
                 links: [], attachments: [],
                 verdict: SenderVerdict(level: .internal, spf: nil, dkim: nil, dmarc: nil, origin: nil, reasons: [], forgedHeaderSeen: false, authservIDsSeen: [])
@@ -323,7 +325,7 @@ final class Reports: @unchecked Sendable {
         #expect(try await readOnly.listTools().tools.count == 4)
         let (all, _) = try await connect(policy: organizePolicy)
         let tools = try await all.listTools().tools
-        #expect(tools.count == 16)
+        #expect(tools.count == 18)
         let move = try #require(tools.first { $0.name == "move_messages" })
         #expect(move.annotations.readOnlyHint == false && move.annotations.destructiveHint == false)
     }
@@ -520,7 +522,7 @@ final class MemoryLedger: SendLedger, @unchecked Sendable {
         let ledger = MemoryLedger()
         let (client, presenter) = try await connect(backend: backend, ledger: ledger)
         let (output, isError) = try await send(client)
-        #expect(isError != true && output.contains("approved it with Touch ID"))
+        #expect(isError != true && output.contains("approved it in Postern"))
         let shown = try #require(presenter.lock.withLock { presenter.requests.first })
         let sent = try #require(backend.lock.withLock { backend.sent.first })
         #expect(sent.digest == shown.digest)

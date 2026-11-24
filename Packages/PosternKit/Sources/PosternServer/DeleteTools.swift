@@ -29,8 +29,8 @@ struct DeleteTools {
         case .approved(let approved):
             let report = permanent ? try await backend.erase(approved) : try await backend.trash(approved)
             var text = permanent
-                ? "The user approved with Touch ID; \(report.done.count) message(s) erased for good."
-                : "The user approved with Touch ID; \(report.done.count) message(s) moved to Trash."
+                ? "The user approved; \(report.done.count) message(s) erased for good."
+                : "The user approved; \(report.done.count) message(s) moved to Trash."
             if !report.failed.isEmpty {
                 text += " Not done for \(report.failed.count): " + Set(report.failed.map(\.reason)).sorted().joined(separator: " ")
             }
@@ -48,7 +48,7 @@ struct DeleteTools {
         case .rejected(let reason):
             throw PosternError(.approvalRejected, "The user refused this deletion" + (reason.map { ": \($0)" } ?? "."))
         case .notAuthenticated:
-            throw PosternError(.approvalRejected, "The user did not confirm with Touch ID, so nothing was deleted.")
+            throw PosternError(.approvalRejected, "The user did not confirm it was them, so nothing was deleted.")
         case .expired:
             throw PosternError(.approvalTimeout, "The user did not answer within two minutes, so nothing was deleted.")
         }

@@ -14,6 +14,12 @@ struct ReadTools {
     static let defaultLimit = 20
     static let maxLimit = 50
     static let defaultMaxChars = 20_000
+    /// get_messages reads at most this many at once.
+    static let maxBatchRead = 10
+    /// top_senders counts at most this many messages, the newest.
+    static let maxCounted = 1000
+    /// The mailbox name that means every mailbox the user lets Postern see.
+    static let everyMailbox = "*"
 
     func call(_ tool: ToolID, _ arguments: [String: Value]) async throws -> CallTool.Result {
         switch tool {
@@ -21,6 +27,8 @@ struct ReadTools {
         case .searchMessages: try await search(arguments)
         case .getMessage: try await getMessage(arguments)
         case .getThread: try await getThread(arguments)
+        case .getMessages: try await getMessages(arguments)
+        case .topSenders: try await topSenders(arguments)
         case .listAddresses: try await listAddresses()
         default: throw PosternError(.invalidArgument, "\(tool.rawValue) is not a read tool.")
         }
@@ -47,7 +55,7 @@ struct ReadTools {
 
     private func search(_ arguments: [String: Value]) async throws -> CallTool.Result {
         var query = SearchQuery(mailbox: string(arguments["mailbox"]) ?? "INBOX")
-        guard !policy.isHidden(query.mailbox) else {
+        guard query.mailbox == Self.everyMailbox || !policy.isHidden(query.mailbox) else {
             throw PosternError(.scopeHidden, "The user has hidden \"\(query.mailbox)\" from Postern.")
         }
         query.from = string(arguments["from"])
@@ -62,7 +70,7 @@ struct ReadTools {
         let offset = string(arguments["cursor"]).flatMap(Int.init) ?? 0
         guard offset >= 0 else { throw PosternError(.invalidArgument, "cursor is not valid.") }
 
-        let page = try await backend.search(query, limit: limit, offset: offset)
+        let page = try await searchVisible(query, limit: limit, offset: offset)
         for item in page.items { provenance.record(item.from + item.to + item.cc) }
         let nextOffset = offset + page.items.count
         let next: Value = nextOffset < page.total ? .string(String(nextOffset)) : .null
@@ -71,7 +79,8 @@ struct ReadTools {
             "messages": .array(page.items.map(summaryValue)),
         ])
         let listing = page.items.map(summaryLine).joined(separator: "\n")
-        var text = "\(page.total) message(s) in \(query.mailbox)"
+        let place = query.mailbox == Self.everyMailbox ? "every mailbox Postern can see" : query.mailbox
+        var text = "\(page.total) message(s) in \(place)"
         if case .string(let cursor) = next { text += ", more with cursor \(cursor)" }
         text += "."
         if !listing.isEmpty { text += "\n" + renderer.wrap(listing, source: "message list") }
@@ -170,6 +179,119 @@ struct ReadTools {
     /// and Trash and Spam hold what the user put aside.
     static func notSearchedForThreads(_ name: String) -> Bool {
         name.hasPrefix("Labels/") || ["All Mail", "Starred", "Trash", "Spam"].contains(name)
+    }
+
+    /// One mailbox, or with `*` every mailbox the user lets Postern see: All Mail when it is visible, else each
+    /// real folder (labels and Starred only repeat them), merged newest first, each message once.
+    func searchVisible(_ query: SearchQuery, limit: Int, offset: Int) async throws -> (items: [MessageSummary], total: Int) {
+        guard query.mailbox == Self.everyMailbox else { return try await backend.search(query, limit: limit, offset: offset) }
+        let names = try await backend.mailboxNames().filter { !policy.isHidden($0) }
+        if names.contains("All Mail") {
+            var all = query
+            all.mailbox = "All Mail"
+            return try await backend.search(all, limit: limit, offset: offset)
+        }
+        var merged: [MessageSummary] = []
+        var seen: Set<String> = []
+        var total = 0
+        for name in names where !Self.notSearchedForThreads(name) || name == "Trash" || name == "Spam" {
+            var each = query
+            each.mailbox = name
+            let page = try await backend.search(each, limit: offset + limit, offset: 0)
+            total += page.total
+            for item in page.items where seen.insert(item.messageIDHeader ?? item.id.opaque).inserted { merged.append(item) }
+        }
+        merged.sort { ($0.date ?? .distantPast) > ($1.date ?? .distantPast) }
+        return (Array(merged.dropFirst(offset).prefix(limit)), max(total, merged.count))
+    }
+
+    /// Several messages at once, each as get_message gives it, read one after the other.
+    private func getMessages(_ arguments: [String: Value]) async throws -> CallTool.Result {
+        guard case .array(let list)? = arguments["ids"], !list.isEmpty else {
+            throw PosternError(.invalidArgument, "ids is a list of message ids from search_messages.")
+        }
+        guard list.count <= Self.maxBatchRead else {
+            throw PosternError(.invalidArgument, "get_messages reads at most \(Self.maxBatchRead) messages at once.")
+        }
+        let maxChars = min(max(int(arguments["max_chars"]) ?? 4000, 200), 20_000)
+        var texts: [String] = []
+        var items: [Value] = []
+        for value in list {
+            let id = string(value) ?? ""
+            do {
+                let one = try await getMessage(["id": .string(id), "max_chars": .int(maxChars)])
+                if let structured = one.structuredContent { items.append(structured) }
+                for case .text(let text, _, _) in one.content { texts.append(text) }
+            } catch let error as PosternError {
+                items.append(.object(["id": .string(UntrustedRenderer.defuse(id)), "error": .object([
+                    "code": .string(error.code.rawValue), "message": .string(error.message),
+                ])]))
+                texts.append("Message \(UntrustedRenderer.defuse(id)): \(error.code.rawValue): \(error.message)")
+            }
+        }
+        let read = items.filter { if case .object(let fields) = $0 { fields["error"] == nil } else { false } }.count
+        let text = "Read \(read) of \(list.count) message(s).\n\n" + texts.joined(separator: "\n\n")
+        return result(text: text, .object(["messages": .array(items)]))
+    }
+
+    /// The newest messages a search finds, counted by sender, sender domain or recipient.
+    private func topSenders(_ arguments: [String: Value]) async throws -> CallTool.Result {
+        var query = SearchQuery(mailbox: string(arguments["mailbox"]) ?? "INBOX")
+        guard query.mailbox == Self.everyMailbox || !policy.isHidden(query.mailbox) else {
+            throw PosternError(.scopeHidden, "The user has hidden \"\(query.mailbox)\" from Postern.")
+        }
+        query.since = try day(arguments["since"], field: "since")
+        query.unread = bool(arguments["unread"])
+        let by = string(arguments["by"]) ?? "sender"
+        guard ["sender", "domain", "recipient"].contains(by) else {
+            throw PosternError(.invalidArgument, "by is sender, domain or recipient.")
+        }
+        let top = min(max(int(arguments["limit"]) ?? 25, 1), 100)
+        let page = try await searchVisible(query, limit: Self.maxCounted, offset: 0)
+
+        struct Tally { var count = 0; var unread = 0; var latest: Date?; var names: [String: Int] = [:] }
+        var tallies: [String: Tally] = [:]
+        for item in page.items {
+            let people = by == "recipient" ? item.to + item.cc : Array(item.from.prefix(1))
+            provenance.record(people)
+            for person in people {
+                let email = person.email.lowercased()
+                let key = by == "domain" ? String(email.split(separator: "@").last ?? Substring(email)) : email
+                var tally = tallies[key] ?? Tally()
+                tally.count += 1
+                if item.unread { tally.unread += 1 }
+                if let date = item.date, date > (tally.latest ?? .distantPast) { tally.latest = date }
+                if by != "domain", let name = person.name, !name.isEmpty { tally.names[name, default: 0] += 1 }
+                tallies[key] = tally
+            }
+        }
+        let ranked = tallies.sorted { $0.value.count == $1.value.count ? $0.key < $1.key : $0.value.count > $1.value.count }.prefix(top)
+        let iso = ISO8601DateFormatter()
+        let rows: [Value] = ranked.map { key, tally in
+            let name = tally.names.max { $0.value < $1.value }?.key
+            return .object([
+                "untrusted_\(by == "domain" ? "domain" : "address")": .string(UntrustedRenderer.defuse(key)),
+                "untrusted_name": name.map { .string(UntrustedRenderer.defuse($0)) } ?? .null,
+                "messages": .int(tally.count), "unread": .int(tally.unread),
+                "latest": tally.latest.map { .string(iso.string(from: $0)) } ?? .null,
+            ])
+        }
+        let lines = ranked.enumerated().map { index, entry -> String in
+            let (key, tally) = entry
+            let top: String? = tally.names.max { $0.value < $1.value }?.key
+            let name = top.map { "\($0) " } ?? ""
+            let latest = tally.latest.map { ", latest " + iso.string(from: $0) } ?? ""
+            return "\(index + 1). \(name)<\(key)>: \(tally.count) message(s), \(tally.unread) unread\(latest)"
+        }
+        let place = query.mailbox == Self.everyMailbox ? "every mailbox Postern can see" : query.mailbox
+        let counted = page.items.count
+        let scope = counted < page.total ? "the newest \(counted) of \(page.total)" : "\(counted)"
+        var text = "Counted \(scope) message(s) in \(place), by \(by)."
+        if !lines.isEmpty { text += "\n" + renderer.wrap(lines.joined(separator: "\n"), source: "sender counts") }
+        return result(text: text, .object([
+            "mailbox": .string(query.mailbox), "by": .string(by), "counted": .int(counted), "total": .int(page.total),
+            "ranking": .array(rows),
+        ]))
     }
 
     // MARK: Helpers

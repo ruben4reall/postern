@@ -18,11 +18,19 @@ enum ServerInstructions {
             failed or unverified one when it matters, and links whose text names another site.
             """,
         ]
-        let writes: Set<ToolID> = [.createDraft, .createDrafts, .updateDraft, .sendMessage, .replyToMessage, .forwardMessage]
+        let writes: Set<ToolID> = [.createDraft, .createDrafts, .updateDraft, .draftReply, .draftForward, .sendMessage, .replyToMessage, .forwardMessage]
         if !writes.isDisjoint(with: policy.enabledTools) {
             parts.append("""
-                Sending and deleting wait for the user's approval on the Mac, with Touch ID. Attach every file an email \
-                announces: Postern refuses an email that says "attached" or "ci-joint" without a file.
+                Sending and deleting wait for the user's approval in Postern's window, proved with Touch ID, Windows \
+                Hello or the system password. Attach every file an email announces: Postern refuses an email that says \
+                "attached" or "ci-joint" without a file.
+                """)
+        }
+        let readsMany: Set<ToolID> = [.getMessages, .topSenders]
+        if !readsMany.isDisjoint(with: policy.enabledTools) {
+            parts.append("""
+                To summarize many emails, search with mailbox "*" for every mailbox, then get_messages up to 10 at a \
+                time; top_senders finds who fills a mailbox.
                 """)
         }
         if policy.enabledTools.contains(.createDrafts) {

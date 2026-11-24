@@ -15,7 +15,9 @@ extension SendTools {
     /// How long a batch waits before trying an email Bridge did not take again: then every ten minutes.
     static let retryDelays: [TimeInterval] = [30, 120, 600]
     /// Failures that say nothing about the email itself: the batch holds instead of failing every email in turn.
-    static let holdingCodes: Set<PosternErrorCode> = [.bridgeUnreachable, .authenticationFailed, .certificateMismatch, .notConfigured, .protonLimit]
+    static let holdingCodes: Set<PosternErrorCode> = [.bridgeUnreachable, .authenticationFailed, .certificateMismatch, .notConfigured, .protonLimit, .protonBlocked]
+    /// After Proton blocks the account, the batch tries again only this much later: sending into a block can prolong it.
+    static let protonBlockDelay: TimeInterval = 6 * 3600
     /// Once the account reaches Proton's own sending limit, Proton asks to wait an hour before sending again.
     static let protonLimitDelay: TimeInterval = 3600
 
@@ -296,7 +298,7 @@ extension SendTools {
         case .rejected(let reason) where batch.count(.sent) == 0:
             throw PosternError(.approvalRejected, "The user rejected these emails, so nothing was sent" + (reason.map { ": \($0)" } ?? "."))
         case .notAuthenticated:
-            throw PosternError(.approvalRejected, "The user did not confirm with Touch ID, so nothing was sent.")
+            throw PosternError(.approvalRejected, "The user did not confirm it was them, so nothing was sent.")
         case .expired:
             throw PosternError(.approvalTimeout, "The user did not answer in time, so nothing was sent.")
         default:
@@ -346,7 +348,7 @@ extension SendTools {
             start: start, spacing: spacing, sendsPerHour: policy.sendsPerHour, sendsPerDay: policy.sendsPerDay,
             finish: SendBudget.finish(count: items.count, start: start ?? Date(), spacing: spacing, policy: policy, sends: ledger.recentSends())
         )
-        await board.set(id, phase: .waiting(until: nil, reason: "The approval panel is open on the Mac: \(items.count) emails wait for the user's answer."))
+        await board.set(id, phase: .waiting(until: nil, reason: "The approval panel is open on the user's computer: \(items.count) emails wait for the user's answer."))
         let request = BatchApprovalRequest(tool: ToolID.sendDrafts.rawValue, client: client, items: items, schedule: schedule)
         items = []
         let outcome = await desk.reviewBatch(request)
@@ -460,7 +462,7 @@ extension SendTools {
     private func startArgument(_ value: Value?) throws -> Date? {
         guard let value else { return nil }
         guard case .string(let text) = value, let date = Self.date(text) else {
-            throw PosternError(.invalidArgument, "start_at is a date and time such as 2026-11-10T08:00 (the Mac's time zone) or 2026-11-10T08:00:00+01:00.")
+            throw PosternError(.invalidArgument, "start_at is a date and time such as 2026-11-10T08:00 (the computer's time zone) or 2026-11-10T08:00:00+01:00.")
         }
         let wait = date.timeIntervalSinceNow
         guard wait > -60 else { throw PosternError(.invalidArgument, "start_at is in the past.") }
@@ -494,8 +496,8 @@ extension SendTools {
             let read = batch.items.filter { !$0.recipients.isEmpty || $0.status != .waiting }.count
             lines = [
                 read < batch.items.count
-                    ? "Postern is reading the drafts for the approval panel (\(read) of \(batch.items.count)). Nothing is sent before the user approves them with Touch ID."
-                    : "The approval panel is open on the Mac with \(batch.items.count - batch.count(.refused)) emails. Nothing is sent before the user approves them with Touch ID.",
+                    ? "Postern is reading the drafts for the approval panel (\(read) of \(batch.items.count)). Nothing is sent before the user approves them."
+                    : "The approval panel is open on the user's computer with \(batch.items.count - batch.count(.refused)) emails. Nothing is sent before the user approves them.",
                 "batch_status with id \"\(batch.id)\" tells what the user decided and follows the sending. These drafts are held by this batch: do not call send_drafts for them again.",
             ]
         case (_, false):
@@ -503,11 +505,11 @@ extension SendTools {
             if let start = batch.start, start > Date() { plan += ", starting \(Self.dateText(start))" }
             if let estimate = batch.estimate { plan += "; the last should leave around \(Self.dateText(estimate))" }
             lines = [
-                "The user approved \(sent + waiting + batch.count(.failed) + batch.count(.uncertain)) emails with Touch ID. \(sent) sent so far. \(plan).",
+                "The user approved \(sent + waiting + batch.count(.failed) + batch.count(.uncertain)) emails. \(sent) sent so far. \(plan).",
                 "batch_status with id \"\(batch.id)\" follows them; cancel_batch stops the ones not sent yet, and their drafts stay in Drafts.",
             ]
         default:
-            lines = [sent == 0 ? "Nothing was sent." : "The user approved the batch with Touch ID; \(sent) of \(batch.items.count) emails were sent."]
+            lines = [sent == 0 ? "Nothing was sent." : "The user approved the batch; \(sent) of \(batch.items.count) emails were sent."]
         }
         let listed = batch.items.filter { item in
             batch.items.count <= Self.listedItems || (item.status != .sent && item.status != .waiting)
@@ -568,6 +570,14 @@ extension SendTools {
                 if let last, spacing > 0 { try await sleep(until: last.addingTimeInterval(spacing)) }
                 var attempt = 0
                 func hold(_ error: PosternError) async throws {
+                    if error.code == .protonBlocked {
+                        // Proton has blocked the account: every email would bounce the same way. The batch stops
+                        // where it is and tries again much later, and the user can stop it for good.
+                        let until = Date().addingTimeInterval(protonBlockDelay)
+                        await board.set(id, phase: .waiting(until: until, reason: "Proton has blocked this account from sending for a while, so the batch stopped before the next email. Postern tries again in six hours; Stop ends the batch."))
+                        try await sleep(until: until)
+                        return
+                    }
                     if error.code == .protonLimit {
                         // Proton's own limit, not this email: the same email goes again in an hour.
                         let until = Date().addingTimeInterval(protonLimitDelay)

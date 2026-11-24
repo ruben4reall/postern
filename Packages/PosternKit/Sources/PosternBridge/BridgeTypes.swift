@@ -81,6 +81,16 @@ extension BridgeError {
         guard case .commandFailed(let reply) = self, reply.hasPrefix("SMTP 4") || reply.hasPrefix("SMTP 5") else { return false }
         // Proton's words name a sending limit; a size limit says nothing about the account and must not hold a batch.
         let text = reply.lowercased()
+        guard !isProtonSendingBlock else { return false }
         return text.contains("limit reached") || text.contains("sending limit")
+    }
+
+    /// Proton stopped the account from sending for a while ("temporarily banned from sending", up to 48 hours),
+    /// usually after a burst of mail that looked like spam. Every email would be refused the same way until it lifts.
+    public var isProtonSendingBlock: Bool {
+        guard case .commandFailed(let reply) = self, reply.hasPrefix("SMTP 4") || reply.hasPrefix("SMTP 5") else { return false }
+        let text = reply.lowercased()
+        return text.contains("banned") || text.contains("blocked from sending") || text.contains("sending is disabled")
+            || text.contains("sending has been disabled") || text.contains("suspended from sending")
     }
 }

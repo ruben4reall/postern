@@ -46,7 +46,7 @@ public actor Session {
         self.server = Server(
             name: Self.serverName, version: version, title: "Proton Mail (Postern)",
             instructions: ServerInstructions.text(for: policy()),
-            capabilities: Server.Capabilities(tools: .init(listChanged: true))
+            capabilities: Server.Capabilities(prompts: .init(listChanged: true), tools: .init(listChanged: true))
         )
     }
 
@@ -63,6 +63,14 @@ public actor Session {
             guard readiness() == nil, !policy().paused else { return ListTools.Result(tools: []) }
             return ListTools.Result(tools: ToolCatalog.tools(for: policy()))
         }
+        await server.withMethodHandler(ListPrompts.self) { _ in
+            guard readiness() == nil, !policy().paused else { return ListPrompts.Result(prompts: []) }
+            return ListPrompts.Result(prompts: PromptCatalog.prompts(for: policy()))
+        }
+        await server.withMethodHandler(GetPrompt.self) { parameters in
+            if let readiness = readiness() { throw MCPError.invalidRequest(readiness.message) }
+            return try PromptCatalog.get(parameters.name, arguments: parameters.arguments ?? [:], policy: policy())
+        }
         await server.withMethodHandler(CallTool.self) { parameters in
             let result = await Self.call(parameters, backend: backend, policy: policy(), readiness: readiness(), send: context)
             onCall(ToolCallReport(tool: parameters.name, result: result))
@@ -78,6 +86,7 @@ public actor Session {
     /// Tells the client to fetch the tool list again.
     public func toolsChanged() async {
         try? await server.notify(ToolListChangedNotification.message())
+        try? await server.notify(PromptListChangedNotification.message())
     }
 
     struct SendContext: Sendable {
