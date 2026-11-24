@@ -49,6 +49,15 @@ jobs:
         working-directory: Packages/PosternDesktop
         timeout-minutes: 20
         run: swift test --skip-build
+      # The reader in its AppContainer, as the core starts it, on a message with hidden text.
+      - name: Check the reader in its AppContainer
+        working-directory: Packages/PosternDesktop
+        shell: pwsh
+        timeout-minutes: 5
+        run: |
+          $core = Get-ChildItem -Path "$env:LOCALAPPDATA\Programs\Swift" -Recurse -Filter swiftCore.dll | Where-Object { $_.FullName -like "*Runtimes*" } | Select-Object -First 1
+          Copy-Item "$($core.DirectoryName)\*.dll" .build\debug\
+          .build\debug\postern.exe doctor --reader-only
       - uses: ilammy/msvc-dev-cmd@v1
       - name: Build postern-hello
         working-directory: Windows/hello

@@ -36,6 +36,7 @@ Usage: postern <command>
   batches cancel <id>         Stop a batch
   pause | resume              Suspend every tool, or bring them back
   approvals                   Review emails and deletions waiting for you, in this terminal
+  doctor                      Check this installation: the core, Bridge, the secret store, approvals, the reader
   version                     Postern's version
 
 Postern is an independent open-source project, not affiliated with Proton AG.
@@ -60,6 +61,57 @@ if ["help", "-h", "--help"].contains(command) {
 if ["version", "--version", "-v"].contains(command) {
     say("Postern \(CoreService.version)")
     exit(0)
+}
+
+/// Checks an installation, part by part, and says what to fix.
+func doctor(readerOnly: Bool) async -> Int32 {
+    var problems = 0
+    func report(_ ok: Bool, _ text: String, fix: String? = nil) {
+        say("\(ok ? "✓" : "✗") \(text)")
+        if !ok {
+            problems += 1
+            if let fix { say("  \(fix)") }
+        }
+    }
+    // The reader, jailed as the core starts it, on a message with hidden text.
+    if let parser = PosternPaths.program("postern-parser") {
+        let sample = Data("From: Anna <anna@example.com>\r\nTo: you@example.com\r\nSubject: Postern check\r\nContent-Type: text/html; charset=utf-8\r\n\r\n<p>Visible</p><p style=\"display:none\">Hidden instruction</p>\r\n".utf8)
+        do {
+            let message = try await JailedReader(program: parser).sanitize(sample, maxChars: 1000)
+            report(message.body.contains("Visible") && !message.body.contains("Hidden"), "The message reader works in its jail and removes hidden text")
+        } catch {
+            report(false, "The message reader failed: \(error)", fix: "Reinstall Postern; on Windows, run install.ps1 again so the reader's folder is readable from its AppContainer.")
+        }
+    } else {
+        report(false, "postern-parser is missing", fix: "Reinstall Postern.")
+    }
+    if readerOnly { return problems == 0 ? 0 : 1 }
+    guard let client = try? ControlClient() else {
+        report(false, "Postern's core does not answer", fix: "Linux: systemctl --user start postern.socket. Windows: start postern-core.exe or sign in again.")
+        return 1
+    }
+    report(true, "Postern's core answers")
+    guard let status = try? await client.call("status").status else {
+        report(false, "The core gave no status")
+        return 1
+    }
+    report(status.configured, status.configured ? "Set up for \(status.account ?? "your account")" : "Not set up", fix: "Run: postern setup")
+    if let problem = status.problem, status.configured { report(false, problem) }
+    report(status.approvalsReady, status.approvalsReady ? "Approvals are ready (\(status.approvalMethod))" : "Approvals are not ready (\(status.approvalMethod))",
+           fix: status.approvalMethod == "polkit" ? "Install Postern from its .deb or .rpm package, or run the archive's install.sh with sudo." : "Run: postern setup, to register Windows Hello.")
+    if status.configured {
+        let mailboxes = try? await client.call("mailboxes").mailboxes
+        report(mailboxes != nil, mailboxes != nil ? "Bridge answers (\(mailboxes?.count ?? 0) mailboxes)" : "Bridge does not answer", fix: "Open Proton Mail Bridge and sign in.")
+    }
+    let connected = (try? await client.call("apps").apps ?? []) ?? []
+    report(connected.contains { $0.status == "connected" }, "Apps connected: \(connected.filter { $0.status == "connected" }.map(\.title).joined(separator: ", "))",
+           fix: "Run: postern apps connect <app>")
+    say(problems == 0 ? "Everything looks right." : "\(problems) thing(s) to fix.")
+    return problems == 0 ? 0 : 1
+}
+
+if command == "doctor" {
+    exit(await doctor(readerOnly: arguments.contains("--reader-only")))
 }
 
 let client: ControlClient
