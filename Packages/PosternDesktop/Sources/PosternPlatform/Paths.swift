@@ -95,9 +95,21 @@ public enum PosternPaths {
 /// The account the programs run as.
 public enum CurrentUser {
     /// The user's security identifier, such as S-1-5-21-…, from the process token.
-    public static let sid: String? = {
+    public static let sid: String? = sid(of: GetCurrentProcess())
+
+    /// Whether another process runs as this user. Pipe names are shared by every account on the machine, so the
+    /// relays, the app and the command line check that the core at the other end is theirs before saying anything.
+    public static func owns(processID: ULONG) -> Bool {
+        // PROCESS_QUERY_LIMITED_INFORMATION: another account's process does not even open.
+        guard let mine = sid, let process = OpenProcess(DWORD(0x1000), false, processID) else { return false }
+        defer { CloseHandle(process) }
+        return sid(of: process) == mine
+    }
+
+    /// The account a process runs as, from its token.
+    static func sid(of process: HANDLE) -> String? {
         var token: HANDLE?
-        guard OpenProcessToken(GetCurrentProcess(), DWORD(TOKEN_QUERY), &token), let token else { return nil }
+        guard OpenProcessToken(process, DWORD(TOKEN_QUERY), &token), let token else { return nil }
         defer { CloseHandle(token) }
         var size: DWORD = 0
         _ = GetTokenInformation(token, TokenUser, nil, 0, &size)
@@ -110,6 +122,6 @@ public enum CurrentUser {
         guard ConvertSidToStringSidW(user.User.Sid, &text), let text else { return nil }
         defer { LocalFree(text) }
         return String(decodingCString: text, as: UTF16.self)
-    }()
+    }
 }
 #endif

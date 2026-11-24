@@ -210,8 +210,10 @@ final class Endpoint: @unchecked Sendable {
 public final class LocalListener: @unchecked Sendable {
     #if os(Windows)
     private let name: String
-    private var first = true
     private let security: UnsafeMutableRawPointer?
+    /// The instance the next client opens. One is always there from the start, and the next one is made before a
+    /// connection is handed over, so a client never finds the name missing and takes a busy core for a stopped one.
+    private var waiting: HANDLE
     #else
     private let descriptor: Int32
     #endif
@@ -227,12 +229,33 @@ public final class LocalListener: @unchecked Sendable {
         }
         guard ok, let descriptor else { throw LocalChannelError.unavailable("Postern could not protect its pipe.") }
         security = UnsafeMutableRawPointer(descriptor)
+        // The first instance claims the name. If another program holds it, refuse to serve rather than share it.
+        guard let first = Self.instance(name, security, first: true) else {
+            if let other = try? LocalChannel.connect() {
+                other.close()
+                throw LocalChannelError.alreadyRunning
+            }
+            throw LocalChannelError.unavailable("Another program holds Postern's pipe name, so the core refuses to start. Sign out and back in; if this comes back, another account on this PC may be imitating Postern.")
+        }
+        waiting = first
         #else
         descriptor = try Self.socket()
         #endif
     }
 
     #if os(Windows)
+    /// A new instance of the pipe, open to this user and the system only.
+    private static func instance(_ name: String, _ security: UnsafeMutableRawPointer?, first: Bool) -> HANDLE? {
+        let mode = DWORD(PIPE_ACCESS_DUPLEX) | DWORD(FILE_FLAG_OVERLAPPED) | (first ? DWORD(FILE_FLAG_FIRST_PIPE_INSTANCE) : 0)
+        var attributes = SECURITY_ATTRIBUTES(nLength: DWORD(MemoryLayout<SECURITY_ATTRIBUTES>.size), lpSecurityDescriptor: security, bInheritHandle: false)
+        let handle = name.withCString(encodedAs: UTF16.self) {
+            CreateNamedPipeW($0, mode, DWORD(PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS),
+                             DWORD(PIPE_UNLIMITED_INSTANCES), 65_536, 65_536, 0, &attributes)
+        }
+        guard let handle, handle != INVALID_HANDLE_VALUE else { return nil }
+        return handle
+    }
+
     /// Waits until a client opens this pipe instance.
     private static func waitForClient(_ handle: HANDLE) -> Bool {
         let event = CreateEventW(nil, true, false, nil)
@@ -293,20 +316,16 @@ public final class LocalListener: @unchecked Sendable {
     public func accept() -> LocalConnection? {
         #if os(Windows)
         while true {
-            let mode = DWORD(PIPE_ACCESS_DUPLEX) | DWORD(FILE_FLAG_OVERLAPPED) | (first ? DWORD(FILE_FLAG_FIRST_PIPE_INSTANCE) : 0)
-            var attributes = SECURITY_ATTRIBUTES(nLength: DWORD(MemoryLayout<SECURITY_ATTRIBUTES>.size), lpSecurityDescriptor: security, bInheritHandle: false)
-            let handle = name.withCString(encodedAs: UTF16.self) {
-                CreateNamedPipeW($0, mode, DWORD(PIPE_TYPE_BYTE | PIPE_READMODE_BYTE | PIPE_WAIT | PIPE_REJECT_REMOTE_CLIENTS),
-                                 DWORD(PIPE_UNLIMITED_INSTANCES), 65_536, 65_536, 0, &attributes)
-            }
-            guard let handle, handle != INVALID_HANDLE_VALUE else {
-                // Another process owns the name: refuse to serve rather than share it.
-                if first { return nil }
+            let handle = waiting
+            let connected = Self.waitForClient(handle)
+            // The next instance before this one is handed over: the name stays open to the next client.
+            var next = Self.instance(name, security, first: false)
+            while next == nil {
                 Sleep(200)
-                continue
+                next = Self.instance(name, security, first: false)
             }
-            first = false
-            guard Self.waitForClient(handle) else {
+            waiting = next!
+            guard connected else {
                 CloseHandle(handle)
                 continue
             }
@@ -355,13 +374,19 @@ public enum LocalChannel {
     public static func connect() throws -> LocalConnection {
         #if os(Windows)
         let name = PosternPaths.pipeName
+        // SECURITY_SQOS_PRESENT | SECURITY_IDENTIFICATION: whoever serves the pipe may learn who connects, never act as them.
+        let flags = DWORD(FILE_FLAG_OVERLAPPED) | DWORD(0x0010_0000) | DWORD(0x0001_0000)
         for _ in 0..<10 {
             let handle = name.withCString(encodedAs: UTF16.self) {
-                CreateFileW($0, GENERIC_READ | DWORD(GENERIC_WRITE), 0, nil, DWORD(OPEN_EXISTING), DWORD(FILE_FLAG_OVERLAPPED), nil)
+                CreateFileW($0, GENERIC_READ | DWORD(GENERIC_WRITE), 0, nil, DWORD(OPEN_EXISTING), flags, nil)
             }
             if let handle, handle != INVALID_HANDLE_VALUE {
                 var pid: ULONG = 0
-                GetNamedPipeServerProcessId(handle, &pid)
+                // Every account on the PC shares pipe names: talk only to a core that runs as this user.
+                guard GetNamedPipeServerProcessId(handle, &pid), CurrentUser.owns(processID: pid) else {
+                    CloseHandle(handle)
+                    throw LocalChannelError.unavailable("The program behind Postern's pipe does not run as you, so Postern will not talk to it. Sign out and back in; if this comes back, another account on this PC may be imitating Postern.")
+                }
                 return LocalConnection(endpoint: Endpoint(handle: handle, server: false), peer: LocalPeer(processID: Int32(pid), userID: nil))
             }
             guard GetLastError() == DWORD(ERROR_PIPE_BUSY) else { break }

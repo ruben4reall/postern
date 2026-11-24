@@ -220,7 +220,8 @@ them read access to Bridge's folder or your keyring.
 
 Cheap hardening still applies: the Linux core makes itself non-dumpable, so other programs of yours cannot read its
 memory through `ptrace` or `/proc`; the packages install the programs where only an administrator can change them
-(`/usr`); the Windows core refuses to start if another program already owns its pipe name.
+(`/usr`); the Windows core refuses to start if another program already owns its pipe name, and the relays, the app
+and the command line only talk to a core that runs as you, which may learn who connects but never act as them.
 
 **Polkit's dialog does not show the email.** It shows a fixed sentence ("Confirm that you approve what Postern's
 window shows"); the link between what you saw and what you approve is Postern's window. Windows Hello's prompt is the
