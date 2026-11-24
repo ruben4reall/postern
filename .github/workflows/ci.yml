@@ -134,7 +134,7 @@ jobs:
   desktop-windows:
     name: Postern for Windows
     runs-on: windows-2022
-    timeout-minutes: 75
+    timeout-minutes: 150
     continue-on-error: true
     steps:
       - uses: actions/checkout@v4
@@ -145,10 +145,13 @@ jobs:
       - name: Use the Windows forks
         shell: bash
         run: scripts/windows-forks.sh
-      - name: Build
-        working-directory: Packages/PosternDesktop
-        run: swift build -c release
-      - name: Test
+      # Two BoringSSL copies, SwiftNIO, the IMAP parser and the MCP SDK take most of an hour the first time.
+      - uses: actions/cache@v4
+        with:
+          path: Packages/PosternDesktop/.build
+          key: windows-build-${{ hashFiles('Packages/PosternKit/Package.swift', 'Packages/PosternDesktop/Package.swift', 'scripts/windows-forks.sh') }}
+          restore-keys: windows-build-
+      - name: Build and test
         working-directory: Packages/PosternDesktop
         run: swift test
 
