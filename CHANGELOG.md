@@ -6,7 +6,7 @@ Postern 2: one core for macOS, Linux and Windows, new tools and prompts, and a n
 
 - **Postern for Linux.** A per-user core that systemd starts on demand, the relay MCP apps launch, a GTK 4 and
   libadwaita app in Proton's colors, and a full command line (`postern setup`, `postern tools`, `postern apps connect`,
-  `postern approvals` for servers without a desktop). Every email and deletion is approved in Postern's window, then
+  `postern approvals` for servers without a desktop, `postern doctor` to check an installation). Every email and deletion is approved in Postern's window, then
   proved by polkit: your password, or your fingerprint where fprintd is set up. Secrets live in the desktop's keyring
   (Secret Service), and every message is read by a fresh process locked in with seccomp, Landlock and limits.
   Packages for Ubuntu, Debian and Fedora, and an archive with an install script for the others.
