@@ -86,9 +86,10 @@ final class ApprovalWindow {
         case .deletion: sendTitle = approval.permanent ? "Erase for good…" : "Move to Trash…"
         }
         let send = button(sendTitle, ["pill", approval.kind == .deletion ? "destructive-action" : "suggested-action"]) { finish(.send) }
-        let note = label("After you choose, the system asks for your password or fingerprint. Postern never takes a window's word for it.", ["dim-label", "caption"])
-        expand(note)
-        let actions = box(false, spacing: 10, [note, reject] + (approval.kind == .email ? [keep] : []) + [send])
+        append(content, label("After you choose, the system asks for your password or fingerprint. Postern never takes a window's word for it.", ["dim-label", "caption"]))
+        let spacer = box(false, spacing: 0)
+        expand(spacer)
+        let actions = box(false, spacing: 10, [spacer, reject] + (approval.kind == .email ? [keep] : []) + [send])
         margins(actions, 14)
 
         let toolbar = raw(adw_toolbar_view_new())
