@@ -305,14 +305,47 @@ final class PosternApp {
     }
 
     private var current: W?
+    private var currentPane: Pane?
 
+    /// Puts the new drawing of a pane in place. When it is the same pane drawn again after a change, it keeps where
+    /// the user had scrolled, so turning on a tool at the bottom of the list does not jump back to the top.
     func replacePane(_ content: W?) {
         guard let content else { return }
+        let offset = currentPane == pane ? scrollOffset(of: current) : nil
         let name = "pane-\(UUID().uuidString)"
         gtk_stack_add_named(cast(stack), cast(content), name)
+        gtk_stack_set_transition_type(cast(stack), offset == nil ? GTK_STACK_TRANSITION_TYPE_CROSSFADE : GTK_STACK_TRANSITION_TYPE_NONE)
         gtk_stack_set_visible_child_name(cast(stack), name)
         if let old = current { gtk_stack_remove(cast(stack), cast(old)) }
         current = content
+        currentPane = pane
+        if let offset, offset > 0 {
+            // Once GTK has measured the new page.
+            DispatchQueue.global().asyncAfter(deadline: .now() + 0.05) {
+                onMain { [weak self] in
+                    guard let self, self.current == content, let adjustment = self.adjustment(in: content) else { return }
+                    gtk_adjustment_set_value(adjustment, offset)
+                }
+            }
+        }
+    }
+
+    private func scrollOffset(of page: W?) -> Double? {
+        adjustment(in: page).map { gtk_adjustment_get_value($0) }
+    }
+
+    /// The vertical adjustment of the first scrolled window inside a pane.
+    private func adjustment(in widget: W?) -> UnsafeMutablePointer<GtkAdjustment>? {
+        guard let widget else { return nil }
+        if g_type_check_instance_is_a(cast(widget), gtk_scrolled_window_get_type()) != 0 {
+            return gtk_scrolled_window_get_vadjustment(cast(widget))
+        }
+        var child = raw(gtk_widget_get_first_child(cast(widget)))
+        while let current = child {
+            if let found = adjustment(in: current) { return found }
+            child = raw(gtk_widget_get_next_sibling(cast(current)))
+        }
+        return nil
     }
 
     // MARK: Setup and approvals
