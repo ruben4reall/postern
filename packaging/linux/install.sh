@@ -17,6 +17,6 @@ install -m 0644 "$here/share/ch.rubencatalao.postern.policy" /usr/share/polkit-1
 sed 's#/usr/libexec/postern#/usr/local/libexec/postern#' "$here/share/ch.rubencatalao.postern.desktop" > /usr/share/applications/ch.rubencatalao.postern.desktop
 install -m 0644 "$here/share/ch.rubencatalao.postern.svg" /usr/share/icons/hicolor/scalable/apps/
 install -m 0644 "$here/share/ch.rubencatalao.postern-symbolic.svg" /usr/share/icons/hicolor/symbolic/apps/
-gtk-update-icon-cache -f -q /usr/share/icons/hicolor >/dev/null 2>&1 || true
+gtk4-update-icon-cache -f -q /usr/share/icons/hicolor >/dev/null 2>&1 || gtk-update-icon-cache -f -q /usr/share/icons/hicolor >/dev/null 2>&1 || true
 systemctl --global enable postern.socket >/dev/null 2>&1 || true
 echo "Postern is installed. Sign out and in again (or run: systemctl --user start postern.socket), then open Postern or run: postern setup"
