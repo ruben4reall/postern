@@ -28,7 +28,7 @@ public enum PosternPaths {
         var candidates = [programFolder.appendingPathComponent(file)]
         #if os(Linux)
         candidates += [URL(fileURLWithPath: "/usr/libexec/postern/\(file)"), URL(fileURLWithPath: "/usr/bin/\(file)"),
-                       URL(fileURLWithPath: "/opt/postern/\(file)")]
+                       URL(fileURLWithPath: "/usr/local/libexec/postern/\(file)"), URL(fileURLWithPath: "/usr/local/bin/\(file)")]
         #endif
         return candidates.first { FileManager.default.isExecutableFile(atPath: $0.path) }
     }

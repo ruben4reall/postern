@@ -1,0 +1,65 @@
+# Postern's Linux packages (.deb and .rpm), built by CI with nfpm. Programs go where only an administrator can change
+# them; the core starts per user, on demand, through systemd's socket.
+name: postern
+arch: "${NFPM_ARCH}"
+platform: linux
+version: "${POSTERN_VERSION}"
+section: mail
+priority: optional
+maintainer: "Ruben Catalao <84439148+ruben4reall@users.noreply.github.com>"
+description: |
+  Proton Mail for your AI apps, safely. Postern is an MCP server for Proton Mail Bridge: Claude Code, Claude
+  Desktop, Cursor, Codex, VS Code, Gemini CLI and any MCP app can read, sort, draft and send your Proton Mail within
+  the limits you set. Every tool starts off, every email and deletion is approved in Postern's window and with polkit,
+  and emails are cleaned of hidden instructions before an app reads them. Independent project, not affiliated with
+  Proton AG.
+vendor: Postern
+homepage: https://getpostern.vercel.app
+license: MIT
+depends:
+  - libsecret-1-0
+  - libgtk-4-1
+  - libadwaita-1-0 (>= 1.5)
+  - polkitd | policykit-1
+overrides:
+  rpm:
+    depends:
+      - libsecret
+      - gtk4
+      - libadwaita >= 1.5
+      - polkit
+contents:
+  - src: ./stage/postern-core
+    dst: /usr/libexec/postern/postern-core
+    file_info: { mode: 0755 }
+  - src: ./stage/postern-parser
+    dst: /usr/libexec/postern/postern-parser
+    file_info: { mode: 0755 }
+  - src: ./stage/postern-app
+    dst: /usr/libexec/postern/postern-app
+    file_info: { mode: 0755 }
+  - src: ./stage/postern-mcp
+    dst: /usr/bin/postern-mcp
+    file_info: { mode: 0755 }
+  - src: ./stage/postern
+    dst: /usr/bin/postern
+    file_info: { mode: 0755 }
+  - src: ./packaging/linux/postern.socket
+    dst: /usr/lib/systemd/user/postern.socket
+  - src: ./packaging/linux/postern.service
+    dst: /usr/lib/systemd/user/postern.service
+  - src: ./packaging/linux/ch.rubencatalao.postern.policy
+    dst: /usr/share/polkit-1/actions/ch.rubencatalao.postern.policy
+  - src: ./packaging/linux/ch.rubencatalao.postern.desktop
+    dst: /usr/share/applications/ch.rubencatalao.postern.desktop
+  - src: ./packaging/linux/ch.rubencatalao.postern.metainfo.xml
+    dst: /usr/share/metainfo/ch.rubencatalao.postern.metainfo.xml
+  - src: ./packaging/linux/icons/ch.rubencatalao.postern.svg
+    dst: /usr/share/icons/hicolor/scalable/apps/ch.rubencatalao.postern.svg
+  - src: ./packaging/linux/icons/ch.rubencatalao.postern-symbolic.svg
+    dst: /usr/share/icons/hicolor/symbolic/apps/ch.rubencatalao.postern-symbolic.svg
+  - src: ./LICENSE
+    dst: /usr/share/doc/postern/LICENSE
+scripts:
+  postinstall: ./packaging/linux/postinstall.sh
+  preremove: ./packaging/linux/preremove.sh

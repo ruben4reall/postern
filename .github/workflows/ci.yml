@@ -93,6 +93,36 @@ jobs:
           mkdir -p /usr/share/icons/hicolor/scalable/apps
           cp packaging/linux/icons/*.svg /usr/share/icons/hicolor/scalable/apps/
           scripts/linux-screenshots.sh Packages/PosternDesktop/.build/release/postern-app Packages/PosternDesktop/screenshots
+      - name: Package
+        env:
+          NFPM_VERSION: "2.40.0"
+          POSTERN_VERSION: "2.0.0"
+        run: |
+          mkdir -p stage dist
+          for program in postern-core postern-parser postern-app postern-mcp postern; do
+            cp Packages/PosternDesktop/.build/release/$program stage/
+            strip stage/$program
+          done
+          curl -fsSL -o /tmp/nfpm.tar.gz "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
+          curl -fsSL -o /tmp/checksums.txt "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/checksums.txt"
+          (cd /tmp && grep " nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz$" checksums.txt | sha256sum -c -)
+          tar -xzf /tmp/nfpm.tar.gz -C /usr/local/bin nfpm
+          NFPM_ARCH=amd64 nfpm package --config packaging/linux/nfpm.yaml --packager deb --target dist/
+          NFPM_ARCH=amd64 nfpm package --config packaging/linux/nfpm.yaml --packager rpm --target dist/
+          archive=postern-${POSTERN_VERSION}-linux-x86_64
+          mkdir -p $archive/bin $archive/share
+          cp stage/* $archive/bin/
+          cp packaging/linux/postern.socket packaging/linux/postern.service packaging/linux/ch.rubencatalao.postern.policy \
+             packaging/linux/ch.rubencatalao.postern.desktop packaging/linux/icons/*.svg $archive/share/
+          cp packaging/linux/install.sh LICENSE $archive/
+          tar -czf dist/$archive.tar.gz $archive
+          (cd dist && sha256sum * > SHA256SUMS)
+          ls -la dist
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-packages
+          path: dist
+          retention-days: 14
       - uses: actions/upload-artifact@v4
         with:
           name: linux-screenshots
