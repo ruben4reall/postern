@@ -133,3 +133,13 @@ final class Seen: @unchecked Sendable {
         #endif
     }
 }
+
+/// Linux and Windows announce the version the Mac app ships.
+@Suite struct VersionTests {
+    @Test func theDesktopCoreHasTheMacAppsVersion() throws {
+        let repository = URL(fileURLWithPath: #filePath).deletingLastPathComponent().deletingLastPathComponent()
+            .deletingLastPathComponent().deletingLastPathComponent().deletingLastPathComponent()
+        let project = try String(contentsOf: repository.appendingPathComponent("project.yml"), encoding: .utf8)
+        #expect(project.contains("MARKETING_VERSION: \"\(CoreService.version)\""))
+    }
+}
