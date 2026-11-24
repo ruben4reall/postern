@@ -99,6 +99,29 @@ jobs:
           path: Packages/PosternDesktop/screenshots
           retention-days: 7
 
+  # Postern for Windows: the whole core with two pinned forks (scripts/windows-forks.sh), the relay, the reader in
+  # its AppContainer and the command line. A preview while the Windows app comes together.
+  desktop-windows:
+    name: Postern for Windows
+    runs-on: windows-2022
+    timeout-minutes: 75
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v4
+      - uses: compnerd/gha-setup-swift@v0.5.1
+        with:
+          branch: swift-6.2.4-release
+          tag: 6.2.4-RELEASE
+      - name: Use the Windows forks
+        shell: bash
+        run: scripts/windows-forks.sh
+      - name: Build
+        working-directory: Packages/PosternDesktop
+        run: swift build -c release
+      - name: Test
+        working-directory: Packages/PosternDesktop
+        run: swift test
+
   scripts:
     name: Release script tests
     runs-on: macos-26
