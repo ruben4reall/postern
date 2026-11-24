@@ -1,3 +1,4 @@
+import CPosternSys
 import Foundation
 #if canImport(Glibc)
 import Glibc
@@ -16,21 +17,7 @@ public enum CoreStarter {
         #if os(Windows)
         _ = WindowsProcess.spawnDetached(program, arguments: [])
         #elseif os(Linux)
-        var attributes = posix_spawnattr_t()
-        posix_spawnattr_init(&attributes)
-        defer { posix_spawnattr_destroy(&attributes) }
-        posix_spawnattr_setflags(&attributes, Int16(POSIX_SPAWN_SETSID))
-        var actions = posix_spawn_file_actions_t()
-        posix_spawn_file_actions_init(&actions)
-        defer { posix_spawn_file_actions_destroy(&actions) }
-        for descriptor: Int32 in [0, 1, 2] {
-            posix_spawn_file_actions_addopen(&actions, descriptor, "/dev/null", descriptor == 0 ? O_RDONLY : O_WRONLY, 0)
-        }
-        var pid: pid_t = 0
-        let path = program.path
-        let argv: [UnsafeMutablePointer<CChar>?] = [strdup(path), nil]
-        defer { for pointer in argv { free(pointer) } }
-        _ = posix_spawn(&pid, path, &actions, &attributes, argv, environ)
+        _ = postern_spawn_detached(program.path)
         #else
         // Development builds on macOS only.
         let process = Process()

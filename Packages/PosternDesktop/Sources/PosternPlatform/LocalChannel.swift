@@ -291,11 +291,10 @@ public final class LocalListener: @unchecked Sendable {
 
 #if !os(Windows)
 @inline(__always) func Glibc_or_Darwin_accept(_ fd: Int32) -> Int32 {
-    #if os(Linux)
-    accept4(fd, nil, nil, Int32(SOCK_CLOEXEC.rawValue))
-    #else
-    accept(fd, nil, nil)
-    #endif
+    let client = accept(fd, nil, nil)
+    // Not inherited by the reader processes the core starts.
+    if client >= 0 { _ = fcntl(client, F_SETFD, FD_CLOEXEC) }
+    return client
 }
 #endif
 

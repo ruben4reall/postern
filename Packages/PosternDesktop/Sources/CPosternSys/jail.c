@@ -5,6 +5,8 @@
 
 #ifdef __linux__
 #include <errno.h>
+#include <fcntl.h>
+#include <spawn.h>
 #include <stddef.h>
 #include <string.h>
 #include <sys/prctl.h>
@@ -110,10 +112,30 @@ int postern_peer_credentials(int fd, uint32_t *uid, int32_t *pid) {
 
 void postern_not_dumpable(void) { prctl(PR_SET_DUMPABLE, 0, 0, 0, 0); }
 
+extern char **environ;
+
+int postern_spawn_detached(const char *path) {
+    posix_spawnattr_t attributes;
+    posix_spawn_file_actions_t actions;
+    pid_t pid = -1;
+    if (posix_spawnattr_init(&attributes) != 0) return -1;
+    posix_spawnattr_setflags(&attributes, POSIX_SPAWN_SETSID);
+    posix_spawn_file_actions_init(&actions);
+    posix_spawn_file_actions_addopen(&actions, 0, "/dev/null", O_RDONLY, 0);
+    posix_spawn_file_actions_addopen(&actions, 1, "/dev/null", O_WRONLY, 0);
+    posix_spawn_file_actions_addopen(&actions, 2, "/dev/null", O_WRONLY, 0);
+    char *argv[] = { (char *)path, NULL };
+    int result = posix_spawn(&pid, path, &actions, &attributes, argv, environ);
+    posix_spawn_file_actions_destroy(&actions);
+    posix_spawnattr_destroy(&attributes);
+    return result == 0 ? (int)pid : -1;
+}
+
 #else
 
 int postern_jail(uint64_t max_memory_bytes, uint32_t max_cpu_seconds) { (void)max_memory_bytes; (void)max_cpu_seconds; return 0; }
 int postern_peer_credentials(int fd, uint32_t *uid, int32_t *pid) { (void)fd; *uid = 0; *pid = 0; return -1; }
 void postern_not_dumpable(void) {}
+int postern_spawn_detached(const char *path) { (void)path; return -1; }
 
 #endif

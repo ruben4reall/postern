@@ -11,6 +11,11 @@ import Crypto
 /// Shows approvals in Postern's window: the core sends each one to every open window (and opens the app when none
 /// is), and the first answer counts. The window only collects the choice: the proof that it is the user comes
 /// afterwards, from the system (`ApprovalProof`), asked by the core itself.
+extension Address {
+    /// `Anna <anna@example.com>`, or the address alone.
+    var shown: String { name.map { "\($0) <\(email)>" } ?? email }
+}
+
 final class RemotePresenter: ApprovalPresenter, @unchecked Sendable {
     weak var service: CoreService?
 
@@ -22,7 +27,7 @@ final class RemotePresenter: ApprovalPresenter, @unchecked Sendable {
     private let lock = NSLock()
     private var waiting: [String: Waiting] = [:]
 
-    func waiting() -> [ControlWire.Approval] {
+    func pending() -> [ControlWire.Approval] {
         lock.withLock { waiting.values.map(\.approval).sorted { $0.deadline < $1.deadline } }
     }
 
@@ -73,7 +78,7 @@ final class RemotePresenter: ApprovalPresenter, @unchecked Sendable {
             permanent: request.permanent
         )
         let answer = await ask(approval)
-        return answer?.0 == .send ? .send : .reject(reason: answer?.1)
+        return answer?.0 == ControlWire.Decision.send ? ApprovalIntent.send : ApprovalIntent.reject(reason: answer?.1)
     }
 
     func presentBatch(_ request: BatchApprovalRequest, deadline: Date) async -> BatchIntent {
@@ -82,8 +87,8 @@ final class RemotePresenter: ApprovalPresenter, @unchecked Sendable {
             context: nil, email: nil,
             batch: request.items.map { item in
                 ControlWire.Email(
-                    id: item.id.uuidString, from: item.from.description, to: item.to.map(\.description), cc: item.cc.map(\.description),
-                    bcc: item.bcc.map(\.description), subject: item.subject, body: item.text, quoted: nil,
+                    id: item.id.uuidString, from: item.from.shown, to: item.to.map(\.shown), cc: item.cc.map(\.shown),
+                    bcc: item.bcc.map(\.shown), subject: item.subject, body: item.text, quoted: nil,
                     attachments: item.files.map { .init(name: $0.filename, type: $0.mimeType, size: $0.size) },
                     badges: item.badges.mapValues { $0.map(\.rawValue) }, missingAttachment: item.missingAttachment
                 )
@@ -91,15 +96,16 @@ final class RemotePresenter: ApprovalPresenter, @unchecked Sendable {
             deletion: nil, permanent: false
         )
         guard let answer = await ask(approval) else { return .reject(reason: nil) }
-        guard answer.0 == .send else { return .reject(reason: answer.1) }
+        guard answer.0 == ControlWire.Decision.send else { return BatchIntent.reject(reason: answer.1) }
         let chosen = Set(answer.2 ?? request.items.map(\.id.uuidString))
-        return .send(Set(request.items.filter { chosen.contains($0.id.uuidString) }.map(\.id)))
+        let ids: Set<UUID> = Set(request.items.filter { chosen.contains($0.id.uuidString) }.map(\.id))
+        return BatchIntent.send(ids)
     }
 
     static func email(_ message: OutgoingMessage, id: String, badges: [String: [ApprovalBadge]], missing: String?) -> ControlWire.Email {
         ControlWire.Email(
-            id: id, from: message.from.description, to: message.to.map(\.description), cc: message.cc.map(\.description),
-            bcc: message.bcc.map(\.description), subject: message.subject, body: message.body, quoted: message.quoted,
+            id: id, from: message.from.shown, to: message.to.map(\.shown), cc: message.cc.map(\.shown),
+            bcc: message.bcc.map(\.shown), subject: message.subject, body: message.body, quoted: message.quoted,
             attachments: message.attachments.map { .init(name: $0.filename, type: $0.mimeType, size: $0.data.count) },
             badges: badges.mapValues { $0.map(\.rawValue) }, missingAttachment: missing
         )

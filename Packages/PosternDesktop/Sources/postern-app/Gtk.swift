@@ -7,8 +7,9 @@ import Foundation
 
 typealias W = UnsafeMutableRawPointer
 
-@inline(__always) func cast<T>(_ widget: W?) -> UnsafeMutablePointer<T>? { widget?.assumingMemoryBound(to: T.self) }
-@inline(__always) func opaque(_ widget: W?) -> OpaquePointer? { widget.map { OpaquePointer($0) } }
+/// The pointer type a GTK call expects, typed (`GtkBox *`) or opaque (a final libadwaita type): both are one address.
+@inline(__always) func cast<P>(_ widget: W?) -> P? { widget.map { unsafeBitCast($0, to: P.self) } }
+@inline(__always) func opaque<P>(_ widget: W?) -> P? { cast(widget) }
 @inline(__always) func raw<T>(_ pointer: UnsafeMutablePointer<T>?) -> W? { pointer.map { W($0) } }
 @inline(__always) func raw(_ pointer: OpaquePointer?) -> W? { pointer.map { W($0) } }
 
@@ -290,6 +291,6 @@ func installStyle() {
     """
     let provider = gtk_css_provider_new()
     gtk_css_provider_load_from_string(provider, css)
-    gtk_style_context_add_provider_for_display(gdk_display_get_default(), OpaquePointer(provider), UInt32(GTK_STYLE_PROVIDER_PRIORITY_APPLICATION))
+    gtk_style_context_add_provider_for_display(gdk_display_get_default(), cast(raw(provider)), UInt32(GTK_STYLE_PROVIDER_PRIORITY_APPLICATION))
 }
 #endif

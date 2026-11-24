@@ -15,4 +15,8 @@ int postern_peer_credentials(int fd, uint32_t *uid, int32_t *pid);
 // Keeps other programs of the same user from reading the core's memory through ptrace or /proc (Linux).
 void postern_not_dumpable(void);
 
+// Starts a program in a session of its own, its standard streams on /dev/null, so it outlives the caller (Linux).
+// Returns its process id, or -1.
+int postern_spawn_detached(const char *path);
+
 #endif

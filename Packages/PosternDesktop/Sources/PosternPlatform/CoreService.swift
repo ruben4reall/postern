@@ -1,5 +1,4 @@
 import Foundation
-import Logging
 import MCP
 import PosternApproval
 import PosternAudit
@@ -24,7 +23,6 @@ import WinSDK
 /// the command line over the same local channel.
 public final class CoreService: @unchecked Sendable {
     public static let version = "2.0.0"
-    static let log = Logger(label: "ch.rubencatalao.postern.core")
 
     public let core: CoreState
     let presenter: RemotePresenter
@@ -95,7 +93,7 @@ public final class CoreService: @unchecked Sendable {
         let key = ObjectIdentifier(connection)
         lock.withLock { interfaces[key] = connection }
         // Whatever waits for the user is shown at once to a window that just opened.
-        for approval in presenter.waiting() { send(connection, event: "approval", data: .init(approval: approval)) }
+        for approval in presenter.pending() { send(connection, event: "approval", data: .init(approval: approval)) }
         while let line = connection.readLine() {
             guard let request = try? ControlWire.decoder.decode(ControlWire.Request.self, from: line) else { continue }
             Task { [weak self] in
@@ -273,7 +271,7 @@ public final class CoreService: @unchecked Sendable {
             sendsLastHour: sends.filter { Date().timeIntervalSince($0) < 3600 }.count, sendsLastDay: sends.count,
             connectedApps: core.connectedApps,
             protonLimits: core.protonLimits.hits.map { .init(date: $0.date, sentInLastDay: $0.sentInLastDay) },
-            approvalsReady: ready, approvalMethod: method, pendingApprovals: presenter.waiting().count
+            approvalsReady: ready, approvalMethod: method, pendingApprovals: presenter.pending().count
         )
     }
 
