@@ -12,7 +12,9 @@ Postern 2: one core for macOS, Linux and Windows, new tools and prompts, and a n
   Packages for Ubuntu, Debian and Fedora, and an archive with an install script for the others.
 - **Postern for Windows, in preview.** The same core, the relay and the command line, with approvals signed by
   Windows Hello (face, fingerprint or PIN) and checked by the core, secrets sealed with DPAPI, and the message reader
-  in an AppContainer. Approvals open in a console until the Windows app comes.
+  in an AppContainer. The relay and the command line only talk to a core that runs as you, never to another
+  account's program holding Postern's pipe name. One archive with everything it needs, Swift and Visual C++
+  runtimes included. Approvals open in a console until the Windows app comes.
 - **Quick start.** Read only, Assistant or Full: a set of tools in one step, with one approval, the same three on
   every system.
 - **Replies and forwards as drafts.** `draft_reply` and `draft_forward` save them in Drafts. Proton drops a draft's
