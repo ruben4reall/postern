@@ -40,13 +40,13 @@ private let boolTrampoline: @convention(c) (W?, W?) -> gboolean = { instance, da
     return 0
 }
 
-/// A signal whose handler takes only the instance: clicked, activate, notify::…, map.
+/// A signal whose handler takes only the instance: clicked, activate, toggled, activated, apply.
 func on(_ instance: W?, _ signal: String, _ handler: @escaping () -> Void) {
     let box = Unmanaged.passRetained(Callback { _, _ in handler() }).toOpaque()
     _ = postern_connect(instance, signal, unsafeBitCast(plainTrampoline, to: GCallback.self), box, releaseCallback)
 }
 
-/// A signal whose handler takes one argument besides the instance: row-selected, row-activated.
+/// A signal whose handler takes one argument besides the instance: row-selected, row-activated, notify::….
 func on(_ instance: W?, _ signal: String, argument handler: @escaping (W?) -> Void) {
     let box = Unmanaged.passRetained(Callback { _, argument in handler(argument) }).toOpaque()
     _ = postern_connect(instance, signal, unsafeBitCast(pairTrampoline, to: GCallback.self), box, releaseCallback)
@@ -192,7 +192,8 @@ func switchRow(_ title: String, subtitle: String?, active: Bool, _ changed: @esc
     adw_preferences_row_set_use_markup(cast(widget), 0)
     if let subtitle { adw_action_row_set_subtitle(cast(widget), subtitle) }
     adw_switch_row_set_active(opaque(widget), active ? 1 : 0)
-    on(widget, "notify::active") { changed(adw_switch_row_get_active(opaque(widget)) != 0) }
+    // notify:: handlers receive the GParamSpec before the user data.
+    on(widget, "notify::active", argument: { _ in changed(adw_switch_row_get_active(opaque(widget)) != 0) })
     return widget
 }
 
