@@ -1,0 +1,15 @@
+[Desktop Entry]
+Type=Application
+Name=Postern
+GenericName=Proton Mail gate for AI apps
+GenericName[fr]=Passerelle Proton Mail pour les apps d'IA
+Comment=Let Claude, Cursor, Codex and other AI apps use your Proton Mail, within the limits you set
+Comment[fr]=Laissez Claude, Cursor, Codex et d'autres apps d'IA utiliser votre Proton Mail, dans les limites que vous fixez
+Exec=/usr/libexec/postern/postern-app
+Icon=ch.rubencatalao.postern
+Terminal=false
+Categories=Network;Email;Security;Utility;
+Keywords=Proton;Mail;MCP;AI;Claude;Cursor;Codex;Bridge;email;
+StartupNotify=true
+StartupWMClass=ch.rubencatalao.postern
+SingleMainWindow=true

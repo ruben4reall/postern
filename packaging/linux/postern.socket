@@ -1,0 +1,11 @@
+[Unit]
+Description=Postern, the gate between Proton Mail Bridge and your AI apps (socket)
+Documentation=https://github.com/ruben4reall/postern
+
+[Socket]
+ListenStream=%t/postern/core.sock
+SocketMode=0600
+DirectoryMode=0700
+
+[Install]
+WantedBy=sockets.target

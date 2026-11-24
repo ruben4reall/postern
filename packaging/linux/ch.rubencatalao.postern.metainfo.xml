@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<component type="desktop-application">
+  <id>ch.rubencatalao.postern</id>
+  <metadata_license>CC0-1.0</metadata_license>
+  <project_license>MIT</project_license>
+  <name>Postern</name>
+  <summary>Proton Mail for your AI apps, safely</summary>
+  <description>
+    <p>Postern is an MCP server for Proton Mail. It lets Claude Code, Claude Desktop, Cursor, Codex, VS Code, Gemini CLI
+    and other AI apps read, sort, draft and send your Proton Mail through Proton Mail Bridge, within the limits you set.</p>
+    <p>It treats the AI app itself as a suspect: every tool is off until you turn it on, nothing leaves without your
+    approval in Postern's window and your password or fingerprint, and emails are cleaned of hidden instructions before
+    an app reads them.</p>
+    <p>Postern is an independent open-source project, not affiliated with Proton AG.</p>
+  </description>
+  <launchable type="desktop-id">ch.rubencatalao.postern.desktop</launchable>
+  <url type="homepage">https://getpostern.vercel.app</url>
+  <url type="bugtracker">https://github.com/ruben4reall/postern/issues</url>
+  <url type="vcs-browser">https://github.com/ruben4reall/postern</url>
+  <developer id="ch.rubencatalao">
+    <name>Ruben Catalao</name>
+  </developer>
+  <content_rating type="oars-1.1" />
+  <releases>
+    <release version="2.0.0" date="2026-11-25">
+      <description>
+        <p>Postern for Linux, with polkit approvals, the desktop's keyring and a jailed message reader.</p>
+      </description>
+    </release>
+  </releases>
+</component>

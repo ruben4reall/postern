@@ -1,0 +1,46 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE policyconfig PUBLIC "-//freedesktop//DTD PolicyKit Policy Configuration 1.0//EN"
+ "http://www.freedesktop.org/standards/PolicyKit/1/policyconfig.dtd">
+<!-- Postern asks polkit before an email leaves, before messages are deleted, and before apps get more power.
+     auth_self, never auth_self_keep: every approval asks again. -->
+<policyconfig>
+  <vendor>Postern</vendor>
+  <vendor_url>https://github.com/ruben4reall/postern</vendor_url>
+  <icon_name>ch.rubencatalao.postern</icon_name>
+
+  <action id="ch.rubencatalao.postern.approve">
+    <description>Approve an email or a deletion in Postern</description>
+    <description xml:lang="fr">Valider un e-mail ou une suppression dans Postern</description>
+    <description xml:lang="de">Eine E-Mail oder ein Löschen in Postern freigeben</description>
+    <description xml:lang="es">Aprobar un correo o una eliminación en Postern</description>
+    <description xml:lang="it">Approvare un'e-mail o un'eliminazione in Postern</description>
+    <message>Confirm that you approve what Postern's window shows: an email that leaves your Proton Mail, or messages deleted.</message>
+    <message xml:lang="fr">Confirmez que vous validez ce que montre la fenêtre de Postern : un e-mail qui part de votre Proton Mail, ou des messages supprimés.</message>
+    <message xml:lang="de">Bestätigen Sie, was das Fenster von Postern zeigt: eine E-Mail, die Ihr Proton Mail verlässt, oder gelöschte Nachrichten.</message>
+    <message xml:lang="es">Confirme que aprueba lo que muestra la ventana de Postern: un correo que sale de su Proton Mail, o mensajes eliminados.</message>
+    <message xml:lang="it">Confermi di approvare ciò che mostra la finestra di Postern: un'e-mail che lascia il suo Proton Mail, o messaggi eliminati.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_self</allow_active>
+    </defaults>
+  </action>
+
+  <action id="ch.rubencatalao.postern.change-policy">
+    <description>Give your AI apps more power in Postern</description>
+    <description xml:lang="fr">Donner plus de pouvoir à vos apps d'IA dans Postern</description>
+    <description xml:lang="de">Ihren KI-Apps in Postern mehr erlauben</description>
+    <description xml:lang="es">Dar más poder a sus apps de IA en Postern</description>
+    <description xml:lang="it">Dare più potere alle sue app di IA in Postern</description>
+    <message>Confirm that you let your AI apps do more with your Proton Mail.</message>
+    <message xml:lang="fr">Confirmez que vous laissez vos apps d'IA faire davantage avec votre Proton Mail.</message>
+    <message xml:lang="de">Bestätigen Sie, dass Ihre KI-Apps mehr mit Ihrem Proton Mail tun dürfen.</message>
+    <message xml:lang="es">Confirme que deja que sus apps de IA hagan más con su Proton Mail.</message>
+    <message xml:lang="it">Confermi di lasciare che le sue app di IA facciano di più con il suo Proton Mail.</message>
+    <defaults>
+      <allow_any>no</allow_any>
+      <allow_inactive>no</allow_inactive>
+      <allow_active>auth_self</allow_active>
+    </defaults>
+  </action>
+</policyconfig>

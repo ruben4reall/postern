@@ -68,6 +68,37 @@ jobs:
             if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           }
 
+  # Postern for Linux: the core, the relay, the jailed reader, the command line and the GTK app, built with the Swift
+  # runtime inside, tested, pictured with sample data, and packaged as .deb, .rpm and .tar.gz.
+  desktop-linux:
+    name: Postern for Linux
+    runs-on: ubuntu-24.04
+    container: swift:6.2-noble
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      - name: Install GTK, libadwaita and libsecret
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libgtk-4-dev libadwaita-1-dev libsecret-1-dev \
+            xvfb imagemagick dbus dbus-x11 fonts-cantarell fonts-dejavu-core adwaita-icon-theme >/dev/null
+      - name: Test
+        working-directory: Packages/PosternDesktop
+        run: swift test
+      - name: Build the release
+        working-directory: Packages/PosternDesktop
+        run: swift build -c release --static-swift-stdlib
+      - name: Picture the app with sample data
+        run: |
+          mkdir -p /usr/share/icons/hicolor/scalable/apps
+          cp packaging/linux/icons/*.svg /usr/share/icons/hicolor/scalable/apps/
+          scripts/linux-screenshots.sh Packages/PosternDesktop/.build/release/postern-app Packages/PosternDesktop/screenshots
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-screenshots
+          path: Packages/PosternDesktop/screenshots
+          retention-days: 7
+
   scripts:
     name: Release script tests
     runs-on: macos-26
