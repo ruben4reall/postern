@@ -151,6 +151,7 @@ jobs:
           stage/postern version
           echo '{"operation":"sanitize","size":0,"maxChars":100,"index":0}' | stage/postern-parser
           echo
+          stage/postern doctor --reader-only
           mv /usr/lib/swift/linux.hidden /usr/lib/swift/linux
       - uses: actions/upload-artifact@v4
         with:

@@ -187,6 +187,7 @@ sudo dnf install ./postern-2.0.0-1.x86_64.rpm
 On other distributions, unpack `postern-2.0.0-linux-x86_64.tar.gz` and run `sudo ./install.sh`. Then open
 **Postern** from your applications, or set it up from a terminal with `postern setup`. On a server without a
 desktop, `postern approvals` shows waiting emails in the terminal and polkit asks for your password there.
+`postern doctor` checks the whole installation and says what to fix.
 
 ### Windows (preview)
 
