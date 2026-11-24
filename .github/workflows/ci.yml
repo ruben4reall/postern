@@ -143,6 +143,15 @@ jobs:
           tar -czf dist/$archive.tar.gz $archive
           (cd dist && sha256sum * > SHA256SUMS)
           ls -la dist
+      # As on a user's machine: no Swift toolchain, only the runtime shipped in the package.
+      - name: Run the packaged programs without the toolchain
+        run: |
+          readelf -d stage/postern-core | grep -E "RUNPATH|RPATH"
+          mv /usr/lib/swift/linux /usr/lib/swift/linux.hidden
+          stage/postern version
+          echo '{"operation":"sanitize","size":0,"maxChars":100,"index":0}' | stage/postern-parser
+          echo
+          mv /usr/lib/swift/linux.hidden /usr/lib/swift/linux
       - uses: actions/upload-artifact@v4
         with:
           name: linux-packages
