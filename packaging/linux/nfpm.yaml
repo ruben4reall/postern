@@ -29,21 +29,16 @@ overrides:
       - libadwaita >= 1.5
       - polkit
 contents:
-  - src: ./stage/postern-core
-    dst: /usr/libexec/postern/postern-core
-    file_info: { mode: 0755 }
-  - src: ./stage/postern-parser
-    dst: /usr/libexec/postern/postern-parser
-    file_info: { mode: 0755 }
-  - src: ./stage/postern-app
-    dst: /usr/libexec/postern/postern-app
-    file_info: { mode: 0755 }
-  - src: ./stage/postern-mcp
-    dst: /usr/bin/postern-mcp
-    file_info: { mode: 0755 }
-  - src: ./stage/postern
+  # The programs share one copy of the Swift runtime, in lib/ next to them (each program's rpath is $ORIGIN/lib).
+  - src: ./stage/
+    dst: /usr/libexec/postern/
+    type: tree
+  - src: /usr/libexec/postern/postern
     dst: /usr/bin/postern
-    file_info: { mode: 0755 }
+    type: symlink
+  - src: /usr/libexec/postern/postern-mcp
+    dst: /usr/bin/postern-mcp
+    type: symlink
   - src: ./packaging/linux/postern.socket
     dst: /usr/lib/systemd/user/postern.socket
   - src: ./packaging/linux/postern.service

@@ -36,14 +36,19 @@ jobs:
           apt-get update -qq && apt-get install -y -qq gh >/dev/null
       - name: Build
         working-directory: Packages/PosternDesktop
-        run: swift build -c release --static-swift-stdlib
+        run: swift build -c release -Xlinker -rpath -Xlinker '$ORIGIN/lib'
       - name: Package
         run: |
           export POSTERN_VERSION="${TAG#v}"
-          mkdir -p stage dist
+          mkdir -p stage/lib dist
           for program in postern-core postern-parser postern-app postern-mcp postern; do
-            cp Packages/PosternDesktop/.build/release/$program stage/ && strip stage/$program
+            cp Packages/PosternDesktop/.build/release/$program stage/
+            strip stage/$program
           done
+          # The Swift runtime the programs load, once for all of them.
+          ldd stage/postern* | awk '$3 ~ /\/usr\/lib\/swift\// {print $3}' | sort -u | xargs -I{} cp -L {} stage/lib/
+          strip --strip-unneeded stage/lib/*.so* || true
+          du -sh stage stage/lib
           curl -fsSL -o "/tmp/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz" "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
           curl -fsSL -o /tmp/checksums.txt "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/checksums.txt"
           (cd /tmp && grep " nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz$" checksums.txt | sha256sum -c -)
@@ -52,7 +57,7 @@ jobs:
           NFPM_ARCH=amd64 nfpm package --config packaging/linux/nfpm.yaml --packager rpm --target dist/
           archive=postern-${POSTERN_VERSION}-linux-x86_64
           mkdir -p $archive/bin $archive/share
-          cp stage/* $archive/bin/
+          cp -R stage/. $archive/bin/
           cp packaging/linux/postern.socket packaging/linux/postern.service packaging/linux/ch.rubencatalao.postern.policy \
              packaging/linux/ch.rubencatalao.postern.desktop packaging/linux/icons/*.svg $archive/share/
           cp packaging/linux/install.sh LICENSE $archive/

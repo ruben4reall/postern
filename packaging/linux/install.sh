@@ -9,8 +9,10 @@ if [ "$(id -u)" -ne 0 ]; then
 fi
 install -d /usr/local/libexec/postern /usr/local/bin /usr/lib/systemd/user /usr/share/polkit-1/actions \
     /usr/share/applications /usr/share/icons/hicolor/scalable/apps /usr/share/icons/hicolor/symbolic/apps
-install -m 0755 "$here/bin/postern-core" "$here/bin/postern-parser" "$here/bin/postern-app" /usr/local/libexec/postern/
-install -m 0755 "$here/bin/postern-mcp" "$here/bin/postern" /usr/local/bin/
+cp -R "$here/bin/." /usr/local/libexec/postern/
+chmod 0755 /usr/local/libexec/postern/postern*
+ln -sf /usr/local/libexec/postern/postern /usr/local/bin/postern
+ln -sf /usr/local/libexec/postern/postern-mcp /usr/local/bin/postern-mcp
 sed 's#/usr/libexec/postern#/usr/local/libexec/postern#' "$here/share/postern.service" > /usr/lib/systemd/user/postern.service
 install -m 0644 "$here/share/postern.socket" /usr/lib/systemd/user/
 install -m 0644 "$here/share/ch.rubencatalao.postern.policy" /usr/share/polkit-1/actions/
