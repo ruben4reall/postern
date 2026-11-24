@@ -100,7 +100,7 @@ func readSecret(_ prompt: String) -> String {
     var settings = termios()
     let interactive = tcgetattr(STDIN_FILENO, &settings) == 0
     print(prompt, terminator: "")
-    fflush(stdout)
+    fflush(nil)
     if interactive {
         var hidden = settings
         hidden.c_lflag &= ~tcflag_t(ECHO)
@@ -116,7 +116,7 @@ func readSecret(_ prompt: String) -> String {
 
 func ask(_ question: String) -> Bool {
     print(question + " [y/N] ", terminator: "")
-    fflush(stdout)
+    fflush(nil)
     return ["y", "yes", "o", "oui", "j", "ja", "s", "si", "sí"].contains((readLine() ?? "").trimmingCharacters(in: .whitespaces).lowercased())
 }
 
@@ -174,7 +174,7 @@ func setup() async {
         fail("Nothing was saved.")
     }
     print("Bridge username (the email address Bridge shows): ", terminator: "")
-    fflush(stdout)
+    fflush(nil)
     let username = readLine() ?? ""
     let password = readSecret("Bridge password (the one Bridge generated, not your Proton password): ")
     _ = await call("setup.connect", .init(imapPort: imap, smtpPort: smtp, username: username, password: password, fingerprint: detection.fingerprint))
@@ -261,7 +261,7 @@ func approvals() async {
         for row in approval.deletion ?? [] { say("- \(row.mailbox): \(row.from), \(row.subject)") }
         say("──────────")
         print("[s]end/delete, [d]raft, [r]eject? ", terminator: "")
-        fflush(stdout)
+        fflush(nil)
         let answer = (readLine() ?? "").lowercased()
         let decision: ControlWire.Decision = answer.hasPrefix("s") ? .send : answer.hasPrefix("d") ? .draft : .reject
         _ = try? await client.call("approval.decide", .init(id: approval.id, decision: decision))
