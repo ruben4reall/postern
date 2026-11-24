@@ -86,16 +86,20 @@ final class ApprovalWindow {
         case .deletion: sendTitle = approval.permanent ? "Erase for good…" : "Move to Trash…"
         }
         let send = button(sendTitle, ["pill", approval.kind == .deletion ? "destructive-action" : "suggested-action"]) { finish(.send) }
-        let spacer = box(false, spacing: 0)
-        expand(spacer)
-        let actions = box(false, spacing: 10, [spacer, reject] + (approval.kind == .email ? [keep] : []) + [send])
-        append(content, actions)
-        append(content, label("After you choose, the system asks for your password or fingerprint. Postern never takes a window's word for it.", ["dim-label", "caption"]))
+        let note = label("After you choose, the system asks for your password or fingerprint. Postern never takes a window's word for it.", ["dim-label", "caption"])
+        expand(note)
+        let actions = box(false, spacing: 10, [note, reject] + (approval.kind == .email ? [keep] : []) + [send])
+        margins(actions, 14)
 
         let toolbar = raw(adw_toolbar_view_new())
         adw_toolbar_view_add_top_bar(opaque(toolbar), cast(raw(adw_header_bar_new())))
-        adw_toolbar_view_set_content(opaque(toolbar), cast(scrolled(content)))
+        let body = scrolled(content)
+        expand(body, vertical: true)
+        adw_toolbar_view_set_content(opaque(toolbar), cast(body))
+        adw_toolbar_view_add_bottom_bar(opaque(toolbar), cast(actions))
+        adw_toolbar_view_set_bottom_bar_style(opaque(toolbar), ADW_TOOLBAR_RAISED_BORDER)
         adw_window_set_content(opaque(window), cast(toolbar))
+        gtk_widget_grab_focus(cast(send))
 
         finish = { [weak self] decision in
             guard let self, !self.closed else { return }
@@ -173,9 +177,11 @@ final class ApprovalWindow {
                 }
                 let name = label(index == 0 ? name : "", ["dim-label"], wrap: false, xalign: 1)
                 gtk_widget_set_size_request(cast(name), 64, -1)
-                let valueLabel = label(value, bold ? ["heading"] : [], selectable: true)
-                expand(valueLabel)
-                append(head, box(false, spacing: 10, [name, valueLabel] + pills))
+                gtk_widget_set_valign(cast(name), GTK_ALIGN_START)
+                let valueLabel = label(value, bold ? ["heading"] : [])
+                let column = box(true, spacing: 4, [valueLabel] + (pills.isEmpty ? [] : [box(false, spacing: 6, pills)]))
+                expand(column)
+                append(head, box(false, spacing: 10, [name, column]))
             }
         }
         field("From", [email.from])

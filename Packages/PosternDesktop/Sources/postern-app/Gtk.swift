@@ -271,7 +271,10 @@ func installStyle() {
     .navigation-sidebar row { border-radius: 8px; margin: 2px 8px; padding: 8px 10px; }
     .navigation-sidebar row:selected { background: alpha(#FFFFFF, 0.14); }
     .navigation-sidebar label.dim-label { color: alpha(#FFFFFF, 0.6); }
-    .sidebar-pane { background: #1B1340; }
+    .sidebar-pane { background: #1B1340; color: #FFFFFF; }
+    .sidebar-pane label { color: #FFFFFF; }
+    .sidebar-pane label.dim-label { color: alpha(#FFFFFF, 0.62); }
+    .sidebar-pane image { color: #FFFFFF; }
     .sidebar-pane headerbar { background: #1B1340; color: #FFFFFF; box-shadow: none; }
     .count-badge { background: #6D4AFF; color: #FFFFFF; border-radius: 6px; padding: 1px 7px; font-weight: 600; font-size: 0.85em; }
     .pill-badge { border-radius: 999px; padding: 2px 10px; font-weight: 700; font-size: 0.78em; }

@@ -83,6 +83,7 @@ final class PosternApp {
             Demo.fill(model)
             pane = demo
             render()
+            select(demo)
             return
         }
         connect()

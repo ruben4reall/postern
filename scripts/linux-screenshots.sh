@@ -6,6 +6,7 @@ app=$1
 out=$2
 mkdir -p "$out"
 export GSK_RENDERER=cairo
+gtk-update-icon-cache -f -q /usr/share/icons/hicolor 2>/dev/null || true
 shoot() {
     name=$1
     size=$2

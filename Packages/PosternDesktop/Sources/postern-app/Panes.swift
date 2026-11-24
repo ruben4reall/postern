@@ -208,18 +208,18 @@ extension PosternApp {
         let apps = group("Your apps", description: "Connecting writes Postern's entry in the app's settings file: the path of postern-mcp, never a password. Restart the app afterwards. Tools stay off until you turn them on.")
         for app in model.apps {
             let row = actionRow(app.title, subtitle: app.path.replacingOccurrences(of: NSHomeDirectory(), with: "~"))
-            switch app.status {
-            case "connected":
+            if app.status == "connected" {
                 suffix(row, pill("Connected", "success"))
-            default:
-                suffix(row, button(app.status == "connectedElsewhere" ? "Update" : "Connect", app.installed ? ["suggested-action"] : ["flat"]) { [unowned self] in
+            } else if !app.installed {
+                suffix(row, label("Not on this computer", ["dim-label"], wrap: false))
+            } else {
+                suffix(row, button(app.status == "connectedElsewhere" ? "Update" : "Connect", ["suggested-action"]) { [unowned self] in
                     self.ask("apps.connect", .init(app: app.id)) { _ in
                         toast(self.overlay, "\(app.title) is connected. Restart it so it loads Postern.")
                         self.refresh()
                     }
                 })
             }
-            if !app.installed { suffix(row, label("Not found", ["dim-label", "caption"], wrap: false)) }
             addRow(apps, row)
         }
         addGroup(content, apps)
