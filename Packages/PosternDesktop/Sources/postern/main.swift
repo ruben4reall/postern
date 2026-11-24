@@ -228,11 +228,12 @@ func approvals() async {
     #if os(Linux)
     // polkit asks in this terminal when no desktop agent is running, as on a server.
     var agent: Process?
+    let corePID = await status().processID
     if let pkttyagent = ["/usr/bin/pkttyagent", "/bin/pkttyagent"].first(where: { FileManager.default.isExecutableFile(atPath: $0) }),
        ProcessInfo.processInfo.environment["DISPLAY"] == nil, ProcessInfo.processInfo.environment["WAYLAND_DISPLAY"] == nil {
         let process = Process()
         process.executableURL = URL(fileURLWithPath: pkttyagent)
-        process.arguments = ["--process", "\(await status().processID)", "--fallback"]
+        process.arguments = ["--process", "\(corePID)", "--fallback"]
         try? process.run()
         agent = process
     }
