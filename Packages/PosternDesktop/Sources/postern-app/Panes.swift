@@ -72,16 +72,16 @@ extension PosternApp {
         let tiers = group("What apps can do")
         for tier in Self.tiers {
             let total = model.tools.filter { $0.tier == tier.id }.count
-            let on = model.tools.filter { $0.tier == tier.id && $0.enabled }.count
+            let enabled = model.tools.filter { $0.tier == tier.id && $0.enabled }.count
             let row = actionRow(tier.title, subtitle: tier.summary, lines: 2)
             prefix(row, image(tier.icon, size: 18, ["tier-icon"] + (tier.style.isEmpty ? [] : [tier.style])))
             let gauge = raw(gtk_level_bar_new_for_interval(0, Double(max(total, 1))))
-            gtk_level_bar_set_value(cast(gauge), Double(on))
+            gtk_level_bar_set_value(cast(gauge), Double(enabled))
             gtk_widget_set_size_request(cast(gauge), 90, -1)
             gtk_widget_set_valign(cast(gauge), GTK_ALIGN_CENTER)
             addClass(gauge, "gauge")
             suffix(row, gauge)
-            suffix(row, label(on == 0 ? "Off" : "\(on) of \(total)", ["dim-label"], wrap: false))
+            suffix(row, label(enabled == 0 ? "Off" : "\(enabled) of \(total)", ["dim-label"], wrap: false))
             gtk_list_box_row_set_activatable(cast(row), 1)
             on(row, "activated") { [unowned self] in self.select(.tools) }
             addRow(tiers, row)
@@ -137,12 +137,12 @@ extension PosternApp {
         for tier in Self.tiers {
             let tools = model.tools.filter { $0.tier == tier.id }
             guard !tools.isEmpty else { continue }
-            let on = tools.filter(\.enabled).count
-            let section = group(tier.title, description: "\(on) of \(tools.count) on. \(tier.summary)")
+            let enabled = tools.filter(\.enabled).count
+            let section = group(tier.title, description: "\(enabled) of \(tools.count) on. \(tier.summary)")
             let allOff = button("Turn all off", ["flat"]) { [unowned self] in
                 self.update { policy in for tool in tools { if let id = ToolID(rawValue: tool.id) { policy.enabledTools.remove(id) } } }
             }
-            setVisible(allOff, on > 0)
+            setVisible(allOff, enabled > 0)
             groupSuffix(section, allOff)
             for tool in tools {
                 let row = switchRow(tool.title, subtitle: "\(tool.summary)\n⚠ \(tool.risk)", active: tool.enabled) { [unowned self] active in
