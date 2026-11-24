@@ -179,11 +179,40 @@ func setup() async {
     let password = readSecret("Bridge password (the one Bridge generated, not your Proton password): ")
     _ = await call("setup.connect", .init(imapPort: imap, smtpPort: smtp, username: username, password: password, fingerprint: detection.fingerprint))
     say("Connected.")
-    if ask("Let your apps read your mail now (list, search, read)? You can change this at any time.") {
-        await update { $0.enabledTools.formUnion(Policy.readOnly.enabledTools) }
+    #if os(Windows)
+    registerWindowsHello()
+    #endif
+    if ask("Let your apps read your mail now (search, read and summarize)? You can change this at any time.") {
+        await update { $0.enabledTools.formUnion(ToolPreset.read.tools) }
     }
     say("Next: `postern apps connect claudeCode` (or another app), then ask it about your mail.")
 }
+
+#if os(Windows)
+/// Creates the Windows Hello key that signs every approval, and gives its public key to the core, which pins it.
+func registerWindowsHello() {
+    guard let helper = PosternPaths.program("postern-hello") else { fail("postern-hello.exe is missing: reinstall Postern.") }
+    say("Windows Hello now asks you to confirm: this creates the key that signs every email you approve.")
+    let process = Process()
+    process.executableURL = helper
+    process.arguments = ["register"]
+    let output = Pipe()
+    process.standardOutput = output
+    do { try process.run() } catch { fail("Windows Hello could not start: \(error)") }
+    process.waitUntilExit()
+    let key = String(decoding: output.fileHandleForReading.readDataToEndOfFile(), as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines)
+    guard process.terminationStatus == 0, !key.isEmpty else {
+        fail(process.terminationStatus == 2 ? "Windows Hello is not set up. Add a PIN in Settings › Accounts › Sign-in options, then run `postern setup` again." : "Windows Hello did not confirm.")
+    }
+    let semaphore = DispatchSemaphore(value: 0)
+    Task {
+        _ = await call("hello.register", .init(publicKey: key))
+        semaphore.signal()
+    }
+    semaphore.wait()
+    say("Windows Hello is ready: every email and deletion will ask for your face, fingerprint or PIN.")
+}
+#endif
 
 func listTools() async {
     guard let tools = await call("tools").tools else { return }
@@ -272,16 +301,8 @@ case "tools":
     default: fail("Use `postern tools`, `postern tools on <tool>` or `postern tools off <tool>`.")
     }
 case "preset":
-    let read = Policy.readOnly.enabledTools.union([.getMessages, .topSenders, .awaitingReply, .readAttachment, .listAddresses])
-    let organize = Set(ToolID.switchable.filter { $0.tier == .organize })
-    let drafts: Set<ToolID> = [.createDraft, .updateDraft, .draftReply, .draftForward]
-    let send: Set<ToolID> = [.sendMessage, .replyToMessage, .forwardMessage, .sendDraft]
-    switch rest.first {
-    case "read": await update { $0.enabledTools = read }
-    case "assistant": await update { $0.enabledTools = read.union(organize).union(drafts) }
-    case "full": await update { $0.enabledTools = read.union(organize).union(drafts).union(send) }
-    default: fail("Use `postern preset read`, `assistant` or `full`.")
-    }
+    guard let name = rest.first, let preset = ToolPreset(rawValue: name) else { fail("Use `postern preset read`, `assistant` or `full`.") }
+    await update { $0.enabledTools = preset.tools }
 case "apps":
     if rest.first == "connect", rest.count == 2 {
         let apps = await call("apps.connect", .init(app: rest[1])).apps ?? []

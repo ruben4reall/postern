@@ -76,6 +76,28 @@ public enum WindowsProcess {
         return false
     }
 
+    /// Opens a new console window running a command, for the user to read and answer.
+    public static func openConsole(_ program: URL, arguments: [String]) {
+        let commandLine = ([program.path] + arguments).map(quote).joined(separator: " ")
+        var startup = STARTUPINFOW()
+        startup.cb = DWORD(MemoryLayout<STARTUPINFOW>.size)
+        var information = PROCESS_INFORMATION()
+        var line = Array(commandLine.utf16) + [0]
+        let flags = DWORD(CREATE_NEW_CONSOLE) | DWORD(CREATE_BREAKAWAY_FROM_JOB)
+        var ok = program.path.withCString(encodedAs: UTF16.self) { path in
+            CreateProcessW(path, &line, nil, nil, false, flags, nil, nil, &startup, &information)
+        }
+        if !ok {
+            ok = program.path.withCString(encodedAs: UTF16.self) { path in
+                CreateProcessW(path, &line, nil, nil, false, DWORD(CREATE_NEW_CONSOLE), nil, nil, &startup, &information)
+            }
+        }
+        if ok {
+            CloseHandle(information.hThread)
+            CloseHandle(information.hProcess)
+        }
+    }
+
     static func quote(_ argument: String) -> String {
         guard argument.contains(where: { $0 == " " || $0 == "\"" || $0 == "\t" }) || argument.isEmpty else { return argument }
         return "\"" + argument.replacingOccurrences(of: "\"", with: "\\\"") + "\""

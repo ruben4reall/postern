@@ -154,6 +154,12 @@ jobs:
       - name: Build and test
         working-directory: Packages/PosternDesktop
         run: swift test
+      # Windows Hello: a few lines of C++/WinRT that create the key and sign approvals, nothing else.
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Build postern-hello
+        working-directory: Windows/hello
+        shell: cmd
+        run: cl /nologo /std:c++20 /EHsc /O2 /W4 /DNOMINMAX postern-hello.cpp /link windowsapp.lib /out:postern-hello.exe
 
   scripts:
     name: Release script tests

@@ -215,12 +215,6 @@ public final class CoreService: @unchecked Sendable {
                 throw ControlWire.Failure("gone", "This approval is no longer waiting.")
             }
             return .init(text: "ok")
-        case "auth.signed":
-            guard let id = params.id, let signature = params.signature.flatMap({ Data(base64Encoded: $0) }) else {
-                throw ControlWire.Failure("invalid", "id and signature are required.")
-            }
-            proof.signed(id, signature: signature)
-            return .init(text: "ok")
         case "hello.register":
             guard let key = params.publicKey.flatMap({ Data(base64Encoded: $0) }) else {
                 throw ControlWire.Failure("invalid", "publicKey is missing.")

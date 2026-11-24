@@ -53,14 +53,10 @@ extension PosternApp {
 
         // One click for a sensible set of tools.
         let presets = group("Quick start", description: "A set of tools in one step. Turning tools on asks for your password or fingerprint.")
-        let read = Policy.readOnly.enabledTools.union([.getMessages, .topSenders, .awaitingReply, .readAttachment, .listAddresses])
-        let organize = Set(ToolID.switchable.filter { $0.tier == .organize })
-        let drafts: Set<ToolID> = [.createDraft, .updateDraft, .draftReply, .draftForward]
-        let send: Set<ToolID> = [.sendMessage, .replyToMessage, .forwardMessage, .sendDraft]
         let choices: [(String, String, Set<ToolID>)] = [
-            ("Read only", "Search, read and summarize. Nothing changes in your mailbox.", read),
-            ("Assistant", "Also sort, file and write drafts for you to send.", read.union(organize).union(drafts)),
-            ("Full", "Also send, each email after your approval.", read.union(organize).union(drafts).union(send)),
+            ("Read only", "Search, read and summarize your mail. Nothing changes in your mailbox.", ToolPreset.read.tools),
+            ("Assistant", "Also sort and file your mail, and write drafts for you to send.", ToolPreset.assistant.tools),
+            ("Full", "Also send, each email after your approval.", ToolPreset.full.tools),
         ]
         for (title, summary, tools) in choices {
             let row = actionRow(title, subtitle: summary)

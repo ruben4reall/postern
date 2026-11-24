@@ -30,7 +30,7 @@ public final class ControlClient: @unchecked Sendable {
         Thread.detachNewThread { [weak self] in self?.readLoop() }
     }
 
-    /// Events from the core: `changed`, `approval`, `approval.closed`, `auth.sign`.
+    /// Events from the core: `changed`, `approval`, `approval.closed`.
     public func onEvent(_ handler: @escaping @Sendable (String, ControlWire.Result?) -> Void) {
         lock.withLock { self.handler = handler }
     }

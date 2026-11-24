@@ -120,8 +120,6 @@ final class RemotePresenter: ApprovalPresenter, @unchecked Sendable {
 ///   against the public key registered once at setup. The window cannot sign without the user's gesture.
 final class ApprovalProof: Authenticating, @unchecked Sendable {
     weak var service: CoreService?
-    private let lock = NSLock()
-    private var signatures: [String: CheckedContinuation<Data?, Never>] = [:]
 
     func confirm(reason: String) async -> Bool {
         #if os(Linux)
@@ -141,12 +139,6 @@ final class ApprovalProof: Authenticating, @unchecked Sendable {
         #else
         return false
         #endif
-    }
-
-    /// The app hands back the signature Windows Hello made.
-    func signed(_ id: String, signature: Data) {
-        let waiting = lock.withLock { signatures.removeValue(forKey: id) }
-        waiting?.resume(returning: signature)
     }
 
     func registeredKey(in vault: any SecretStore) -> Data? {
@@ -169,31 +161,31 @@ final class ApprovalProof: Authenticating, @unchecked Sendable {
     }
 
     #if os(Windows)
+    /// Windows Hello signs a fresh challenge, through postern-hello: Windows draws the prompt and the TPM signs. The
+    /// core checks the signature against the public key pinned at setup, so no window's word is taken for it.
     private func helloConfirm(reason: String) async -> Bool {
         guard let service, let keyData = registeredKey(in: service.core.vault),
-              let key = try? _RSA.Signing.PublicKey(derRepresentation: keyData) else { return false }
-        let id = UUID().uuidString
+              let key = try? _RSA.Signing.PublicKey(derRepresentation: keyData),
+              let helper = PosternPaths.program("postern-hello") else { return false }
         var nonce = Data(count: 32)
         for index in nonce.indices { nonce[index] = UInt8.random(in: 0...255) }
-        // What the user's gesture signs: a fresh challenge bound to this approval and its reason.
-        let challenge = Data("postern-approval-v1\n\(id)\n\(reason)\n".utf8) + nonce
-        if !service.hasInterface { AppLauncher.openForApproval() }
-        let signature: Data? = await withTaskCancellationHandler {
-            await withCheckedContinuation { continuation in
-                lock.withLock { signatures[id] = continuation }
-                service.broadcast(event: "auth.sign", data: .init(sign: .init(id: id, challenge: challenge.base64EncodedString(), reason: reason)))
-                DispatchQueue.global().asyncAfter(deadline: .now() + 120) { [weak self] in
-                    let late = self?.lock.withLock { self?.signatures.removeValue(forKey: id) }
-                    late??.resume(returning: nil)
-                }
-            }
-        } onCancel: {
-            let waiting = lock.withLock { signatures.removeValue(forKey: id) }
-            waiting?.resume(returning: nil)
-        }
+        let challenge = Data("postern-approval-v1\n\(UUID().uuidString)\n\(reason)\n".utf8) + nonce
+        let signature: Data? = await Task.detached {
+            let process = Process()
+            process.executableURL = helper
+            process.arguments = ["sign", challenge.base64EncodedString()]
+            let output = Pipe()
+            process.standardOutput = output
+            process.standardError = FileHandle.nullDevice
+            guard (try? process.run()) != nil else { return nil }
+            let data = output.fileHandleForReading.readDataToEndOfFile()
+            process.waitUntilExit()
+            guard process.terminationStatus == 0 else { return nil }
+            return Data(base64Encoded: String(decoding: data, as: UTF8.self).trimmingCharacters(in: .whitespacesAndNewlines))
+        }.value
         guard let signature else { return false }
         let digest = SHA256.hash(data: challenge)
-        // Windows Hello signs with RSASSA-PKCS1-v1_5 over SHA-256; PSS is accepted too, for keys made that way.
+        // Windows Hello signs with RSASSA-PKCS1-v1_5 over SHA-256; PSS is accepted too.
         let rsa = _RSA.Signing.RSASignature(rawRepresentation: signature)
         return key.isValidSignature(rsa, for: digest, padding: .insecurePKCS1v1_5) || key.isValidSignature(rsa, for: digest, padding: .PSS)
     }
@@ -207,8 +199,9 @@ enum AppLauncher {
         guard let app = PosternPaths.program("postern-app") else { return }
         spawnDetached(app, arguments: ["--approvals"])
         #elseif os(Windows)
-        guard let app = PosternPaths.program("Postern") else { return }
-        spawnDetached(app, arguments: ["--approvals"])
+        // Until the Windows app comes, approvals open in a console of their own.
+        guard let command = PosternPaths.program("postern") else { return }
+        WindowsProcess.openConsole(command, arguments: ["approvals"])
         #endif
     }
 

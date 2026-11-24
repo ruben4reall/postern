@@ -133,13 +133,12 @@ public enum ControlWire {
         public var activity: [ActivityRow]?
         public var batches: [BatchRow]?
         public var approval: Approval?
-        public var sign: SignRequest?
         public var text: String?
 
         public init(
             status: Status? = nil, tools: [ToolInfo]? = nil, detection: Detection? = nil, mailboxes: [MailboxRow]? = nil,
             apps: [AppRow]? = nil, activity: [ActivityRow]? = nil, batches: [BatchRow]? = nil, approval: Approval? = nil,
-            sign: SignRequest? = nil, text: String? = nil
+            text: String? = nil
         ) {
             self.status = status
             self.tools = tools
@@ -149,7 +148,6 @@ public enum ControlWire {
             self.activity = activity
             self.batches = batches
             self.approval = approval
-            self.sign = sign
             self.text = text
         }
     }
@@ -279,12 +277,5 @@ public enum ControlWire {
         public let from: String
         public let subject: String
         public let date: Date?
-    }
-
-    /// Windows: the core asks the app for a Windows Hello signature over a challenge.
-    public struct SignRequest: Codable, Sendable {
-        public let id: String
-        public let challenge: String
-        public let reason: String
     }
 }

@@ -123,7 +123,7 @@ final class SetupFlow {
         let allow = button("Let apps read my mail", ["pill", "suggested-action"]) { [unowned self] in
             self.call("status", nil) { result in
                 guard var policy = result.status?.policy else { return }
-                policy.enabledTools.formUnion(Policy.readOnly.enabledTools)
+                policy.enabledTools.formUnion(ToolPreset.read.tools)
                 self.call("policy.update", .init(policy: policy)) { _ in self.showApps() }
             }
         }

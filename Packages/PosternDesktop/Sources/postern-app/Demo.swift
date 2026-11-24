@@ -7,9 +7,7 @@ import PosternPolicy
 /// Sample data for screenshots: a mailbox like many, and apps at work. Nothing here comes from the core.
 enum Demo {
     static func fill(_ model: Model) {
-        var policy = Policy(enabledTools: Policy.readOnly.enabledTools.union([.getMessages, .topSenders, .awaitingReply, .readAttachment,
-                                                                               .markRead, .archiveMessages, .moveMessages, .createDraft, .draftReply,
-                                                                               .sendMessage, .replyToMessage]))
+        var policy = Policy(enabledTools: ToolPreset.assistant.tools)
         policy.sendsPerHour = 20
         policy.sendsPerDay = 100
         policy.hiddenMailboxes = ["Folders/Health"]
