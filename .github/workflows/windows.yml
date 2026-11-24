@@ -47,6 +47,7 @@ jobs:
           key: windows-build-${{ hashFiles('Packages/PosternKit/Package.swift', 'Packages/PosternDesktop/Package.swift', 'scripts/windows-forks.sh') }}-${{ github.sha }}
       - name: Test
         working-directory: Packages/PosternDesktop
+        timeout-minutes: 20
         run: swift test --skip-build
       - uses: ilammy/msvc-dev-cmd@v1
       - name: Build postern-hello
