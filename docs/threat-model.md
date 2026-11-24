@@ -3,6 +3,9 @@
 What Postern protects, from whom, where it draws its lines, and what it does not cover. Kept current with the code:
 when a change moves a line described here, it updates this page.
 
+Postern runs on macOS, Linux and Windows with the same core. Everything below describes the Mac first; [Linux and
+Windows](#linux-and-windows) says what is the same there and what is not, starting with the one line that moves.
+
 ## What is worth protecting
 
 - **The mail itself**: bodies, attachments, and who you write to.
@@ -182,3 +185,64 @@ reads Bridge's own window; a compromised Proton account.
 | Update settings, and a downloaded update until it is installed | Same | Postern |
 | Mail | Nowhere | |
 | Attachments an app saved | `~/Downloads/Postern`, marked as downloaded | You |
+
+## Linux and Windows
+
+The core is the same code on the three systems: the policy, the approval desk, the limits, the hidden-text reader,
+the pinned TLS connection to Bridge, the untrusted envelope and the activity log. What each system provides differs.
+
+| | macOS | Linux | Windows (preview) |
+|---|---|---|---|
+| Core | `Postern.app`, started by launchd | `postern-core`, one per user, started by systemd on its socket | `postern-core.exe`, one per user, started at sign-in or by the relay |
+| Relay to core | XPC, both sides check the other's code signature | Unix socket in `$XDG_RUNTIME_DIR`, mode 0600, peer's user checked with `SO_PEERCRED` | Named pipe whose access list allows only this user and the system, remote clients refused |
+| Proof that you approved | Touch ID or Apple Watch | polkit (`auth_self`, every time): your password, or your fingerprint where fprintd is set up | Windows Hello (face, fingerprint or PIN): a signature made by the TPM, checked by the core against the key registered at setup |
+| Secrets and policy | Data protection Keychain, Postern's access group | Secret Service (GNOME Keyring, KWallet, KeePassXC) through libsecret; no plain-file fallback | Files sealed with DPAPI for your Windows account |
+| Message reader | `PosternParser.xpc`, App Sandbox with no entitlement | `postern-parser`, a fresh process per message: no new privileges, Landlock with no file or TCP access, seccomp without `open`, `socket`, `connect` or `exec`, memory and CPU limits | `postern-parser.exe` in an AppContainer with no capability, inside a job limited to one process and 3 GB |
+| Attachments read as text | PDFs, scans and photos (PDFKit, Vision) | Text, CSV, JSON, calendar, contacts, HTML; PDFs and pictures not yet | Same as Linux |
+| Updates | Sparkle, EdDSA-signed feed and images | Your package manager (`.deb`, `.rpm`) | New installer from GitHub Releases |
+
+**The line that moves: programs that run as you.** On a Mac, the Keychain opens only to Postern's signed code, and
+the hardened runtime keeps other programs out of its memory, so even an app with a shell (A2) cannot read Postern's
+secrets or forge an approval. Linux and Windows have no such wall between two programs of the same user:
+
+- Any program running as you can ask the Secret Service for unlocked items (GNOME treats this as by design) or
+  unseal your DPAPI files.
+- More important, **Proton Mail Bridge itself** keeps its vault key in the same places (the Secret Service or `pass`
+  on Linux, the Credential Manager on Windows). A program running as you can read that key, open Bridge's vault and
+  talk to Bridge directly, without going through Postern at all.
+
+So on Linux and Windows, Postern protects you from **A1** (a stranger's email: hidden text, booby-trapped messages,
+addresses slipped into replies) and from **an app that acts through MCP**: its tools, its arguments, its batches,
+every email and deletion proved by the system (polkit, Windows Hello), never by the app or by Postern's own window.
+It cannot protect you from an app that runs arbitrary programs as you, because that app can bypass Bridge's own
+protection too. Run your AI apps with their sandbox on (Claude Code, Codex and others have one), and do not give
+them read access to Bridge's folder or your keyring.
+
+Cheap hardening still applies: the Linux core makes itself non-dumpable, so other programs of yours cannot read its
+memory through `ptrace` or `/proc`; the packages install the programs where only an administrator can change them
+(`/usr`); the Windows core refuses to start if another program already owns its pipe name.
+
+**Polkit's dialog does not show the email.** It shows a fixed sentence ("Confirm that you approve what Postern's
+window shows"); the link between what you saw and what you approve is Postern's window. Windows Hello's prompt is the
+same. Compare the window with the prompt before you touch the sensor.
+
+**Two pinned forks on Windows.** Until upstream merges their Windows fixes, the Windows build uses
+`ruben4reall/swift-sdk` (the MCP Swift SDK 0.12.1 with modelcontextprotocol/swift-sdk#279) and
+`ruben4reall/swift-nio-ssl` (apple/swift-nio-ssl#567, with BoringSSL's TLS callback renamed so it can link with
+swift-crypto), each pinned by commit in `scripts/windows-forks.sh`. macOS and Linux build from upstream.
+
+### Data at rest on Linux
+
+| What | Where | Who can read it |
+|---|---|---|
+| Bridge username and password, policy, pinned certificate, send counters, log chain head | Secret Service, items labeled "Postern: …" | Postern, and any program of yours while the keyring is unlocked |
+| Activity log, sealed batches | `~/.local/share/postern` | You |
+| Attachments an app saved | `~/Downloads/Postern` (your desktop's Downloads folder) | You |
+
+### Data at rest on Windows
+
+| What | Where | Who can read it |
+|---|---|---|
+| Bridge username and password, policy, pinned certificate, send counters, log chain head, Windows Hello public key | `%LOCALAPPDATA%\Postern\Vault`, sealed with DPAPI | Postern, and any program running as you |
+| Activity log, sealed batches | `%LOCALAPPDATA%\Postern` | You |
+| Attachments an app saved | `Downloads\Postern`, with the Mark of the Web | You |
