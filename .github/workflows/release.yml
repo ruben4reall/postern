@@ -44,10 +44,10 @@ jobs:
           for program in postern-core postern-parser postern-app postern-mcp postern; do
             cp Packages/PosternDesktop/.build/release/$program stage/ && strip stage/$program
           done
-          curl -fsSL -o /tmp/nfpm.tar.gz "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
+          curl -fsSL -o "/tmp/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz" "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
           curl -fsSL -o /tmp/checksums.txt "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/checksums.txt"
           (cd /tmp && grep " nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz$" checksums.txt | sha256sum -c -)
-          tar -xzf /tmp/nfpm.tar.gz -C /usr/local/bin nfpm
+          tar -xzf "/tmp/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz" -C /usr/local/bin nfpm
           NFPM_ARCH=amd64 nfpm package --config packaging/linux/nfpm.yaml --packager deb --target dist/
           NFPM_ARCH=amd64 nfpm package --config packaging/linux/nfpm.yaml --packager rpm --target dist/
           archive=postern-${POSTERN_VERSION}-linux-x86_64
