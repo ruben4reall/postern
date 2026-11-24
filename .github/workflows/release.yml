@@ -98,23 +98,10 @@ jobs:
       - name: Package
         shell: pwsh
         run: |
+          # SwiftPM's .build\release link cannot be walked through on Windows: ask for the real folder.
+          $built = swift build -c release --show-bin-path --package-path Packages\PosternDesktop | Select-Object -Last 1
           $version = $env:TAG.TrimStart("v")
-          $name = "postern-$version-windows-x86_64"
-          $bin = "$name\bin"
-          New-Item -ItemType Directory -Force -Path $bin | Out-Null
-          foreach ($program in "postern-core", "postern-mcp", "postern-parser", "postern") {
-            Copy-Item "Packages\PosternDesktop\.build\release\$program.exe" $bin
-          }
-          Copy-Item "Windows\hello\postern-hello.exe" $bin
-          # The Swift runtime and Foundation, next to the programs.
-          $runtime = Get-ChildItem -Path "$env:LOCALAPPDATA\Programs\Swift\Runtimes" -Directory | Sort-Object Name | Select-Object -Last 1
-          Copy-Item "$($runtime.FullName)\usr\bin\*.dll" $bin
-          Copy-Item "Packages\PosternDesktop\.build\release\*.dll" $bin -ErrorAction SilentlyContinue
-          Copy-Item "Windows\package\install.ps1", "Windows\package\README-Windows.txt", "LICENSE" $name
-          New-Item -ItemType Directory -Force -Path dist | Out-Null
-          Compress-Archive -Path $name -DestinationPath "dist\$name.zip"
-          $hash = (Get-FileHash "dist\$name.zip" -Algorithm SHA256).Hash.ToLower()
-          "$hash  $name.zip" | Out-File -Encoding ascii "dist\$name.zip.sha256"
+          Windows\package\package.ps1 -Version $version -Built $built -Hello Windows\hello\postern-hello.exe
       - name: Attach to the release
         shell: bash
         env:

@@ -55,11 +55,19 @@ jobs:
         shell: pwsh
         timeout-minutes: 5
         run: |
+          # SwiftPM's .build\debug link cannot be walked through on Windows: use the real folder.
+          $bin = swift build --show-bin-path | Select-Object -Last 1
           $core = Get-ChildItem -Path "$env:LOCALAPPDATA\Programs\Swift" -Recurse -Filter swiftCore.dll | Where-Object { $_.FullName -like "*Runtimes*" } | Select-Object -First 1
-          Copy-Item "$($core.DirectoryName)\*.dll" .build\debug\
-          .build\debug\postern.exe doctor --reader-only
+          Copy-Item "$($core.DirectoryName)\*.dll" $bin
+          & "$bin\postern.exe" doctor --reader-only
       - uses: ilammy/msvc-dev-cmd@v1
       - name: Build postern-hello
         working-directory: Windows/hello
         shell: cmd
         run: cl /nologo /std:c++20 /EHsc /O2 /W4 /DNOMINMAX postern-hello.cpp /link windowsapp.lib /out:postern-hello.exe
+      # The archive a release attaches, made and started once on every pull request.
+      - name: Package, as a release does
+        shell: pwsh
+        run: |
+          $built = swift build --show-bin-path --package-path Packages\PosternDesktop | Select-Object -Last 1
+          Windows\package\package.ps1 -Version ci -Built $built -Hello Windows\hello\postern-hello.exe
