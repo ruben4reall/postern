@@ -1,0 +1,117 @@
+name: Release assets for Linux and Windows
+
+# scripts/publish.sh publishes the Mac disk image and creates the release; this workflow then builds Postern for Linux
+# and the Windows preview from the same tag and attaches them, with their SHA-256 sums.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Release tag, such as v2.0.0"
+        required: true
+
+permissions:
+  contents: write
+
+jobs:
+  linux:
+    name: Linux packages
+    runs-on: ubuntu-24.04
+    container: swift:6.2-noble
+    timeout-minutes: 60
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      NFPM_VERSION: "2.40.0"
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - name: Install the build dependencies
+        run: |
+          apt-get update -qq
+          DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libgtk-4-dev libadwaita-1-dev libsecret-1-dev curl >/dev/null
+          curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /usr/share/keyrings/githubcli-archive-keyring.gpg
+          echo "deb [arch=$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list
+          apt-get update -qq && apt-get install -y -qq gh >/dev/null
+      - name: Build
+        working-directory: Packages/PosternDesktop
+        run: swift build -c release --static-swift-stdlib
+      - name: Package
+        run: |
+          export POSTERN_VERSION="${TAG#v}"
+          mkdir -p stage dist
+          for program in postern-core postern-parser postern-app postern-mcp postern; do
+            cp Packages/PosternDesktop/.build/release/$program stage/ && strip stage/$program
+          done
+          curl -fsSL -o /tmp/nfpm.tar.gz "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz"
+          curl -fsSL -o /tmp/checksums.txt "https://github.com/goreleaser/nfpm/releases/download/v${NFPM_VERSION}/checksums.txt"
+          (cd /tmp && grep " nfpm_${NFPM_VERSION}_Linux_x86_64.tar.gz$" checksums.txt | sha256sum -c -)
+          tar -xzf /tmp/nfpm.tar.gz -C /usr/local/bin nfpm
+          NFPM_ARCH=amd64 nfpm package --config packaging/linux/nfpm.yaml --packager deb --target dist/
+          NFPM_ARCH=amd64 nfpm package --config packaging/linux/nfpm.yaml --packager rpm --target dist/
+          archive=postern-${POSTERN_VERSION}-linux-x86_64
+          mkdir -p $archive/bin $archive/share
+          cp stage/* $archive/bin/
+          cp packaging/linux/postern.socket packaging/linux/postern.service packaging/linux/ch.rubencatalao.postern.policy \
+             packaging/linux/ch.rubencatalao.postern.desktop packaging/linux/icons/*.svg $archive/share/
+          cp packaging/linux/install.sh LICENSE $archive/
+          tar -czf dist/$archive.tar.gz $archive
+          (cd dist && for file in *; do sha256sum "$file" > "$file.sha256"; done)
+      - name: Attach to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          git config --global --add safe.directory "$GITHUB_WORKSPACE"
+          gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
+
+  windows:
+    name: Windows preview
+    runs-on: windows-2022
+    timeout-minutes: 180
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ env.TAG }}
+      - uses: compnerd/gha-setup-swift@v0.5.1
+        with:
+          branch: swift-6.2.4-release
+          tag: 6.2.4-RELEASE
+      - name: Use the Windows forks
+        shell: bash
+        run: scripts/windows-forks.sh
+      - name: Build
+        working-directory: Packages/PosternDesktop
+        run: swift build -c release
+      - uses: ilammy/msvc-dev-cmd@v1
+      - name: Build postern-hello
+        working-directory: Windows/hello
+        shell: cmd
+        run: cl /nologo /std:c++20 /EHsc /O2 /DNOMINMAX postern-hello.cpp /link windowsapp.lib /out:postern-hello.exe
+      - name: Package
+        shell: pwsh
+        run: |
+          $version = $env:TAG.TrimStart("v")
+          $name = "postern-$version-windows-x86_64"
+          $bin = "$name\bin"
+          New-Item -ItemType Directory -Force -Path $bin | Out-Null
+          foreach ($program in "postern-core", "postern-mcp", "postern-parser", "postern") {
+            Copy-Item "Packages\PosternDesktop\.build\release\$program.exe" $bin
+          }
+          Copy-Item "Windows\hello\postern-hello.exe" $bin
+          # The Swift runtime and Foundation, next to the programs.
+          $runtime = Get-ChildItem -Path "$env:LOCALAPPDATA\Programs\Swift\Runtimes" -Directory | Sort-Object Name | Select-Object -Last 1
+          Copy-Item "$($runtime.FullName)\usr\bin\*.dll" $bin
+          Copy-Item "Packages\PosternDesktop\.build\release\*.dll" $bin -ErrorAction SilentlyContinue
+          Copy-Item "Windows\package\install.ps1", "Windows\package\README-Windows.txt", "LICENSE" $name
+          New-Item -ItemType Directory -Force -Path dist | Out-Null
+          Compress-Archive -Path $name -DestinationPath "dist\$name.zip"
+          $hash = (Get-FileHash "dist\$name.zip" -Algorithm SHA256).Hash.ToLower()
+          "$hash  $name.zip" | Out-File -Encoding ascii "dist\$name.zip.sha256"
+      - name: Attach to the release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release upload "$TAG" dist/* --clobber --repo "$GITHUB_REPOSITORY"
