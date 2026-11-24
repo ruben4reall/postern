@@ -1,4 +1,5 @@
 import Foundation
+import PosternCore
 import PosternModel
 import PosternServer
 
@@ -20,30 +21,20 @@ final class CoreListener: NSObject, NSXPCListenerDelegate, @unchecked Sendable {
         connection.exportedInterface = NSXPCInterface(with: CoreXPC.self)
         connection.exportedObject = handler
 
-        let key = ObjectIdentifier(handler)
-        let state = CoreState.shared
-        let session = Session(
-            transport: transport, backend: LiveBackend(), version: Bundle.main.shortVersion,
-            policy: { state.policy }, readiness: { state.readiness },
-            onCall: { [weak handler] report in state.record(report, client: handler?.clientName ?? "MCP client") },
-            desk: state.desk, ledger: state.ledger,
-            clientName: { [weak handler] in handler?.clientName ?? String(localized: "An app") }, board: state.board
-        )
-        state.add(session, connection: handler, for: key)
+        let session = CoreState.shared.openSession(transport: transport, connection: handler)
         let stop: @Sendable () -> Void = {
             transport.finish()
-            if let session = state.removeSession(for: key) { Task { await session.stop() } }
+            session.close()
         }
         connection.invalidationHandler = stop
         connection.interruptionHandler = stop
         connection.resume()
-        Task { try? await session.start() }
         return true
     }
 }
 
 /// Receives the relay's messages for one session.
-final class RelayConnection: NSObject, CoreXPC, @unchecked Sendable {
+final class RelayConnection: NSObject, CoreXPC, ClientConnection, @unchecked Sendable {
     private let transport: XPCTransport
     private let lock = NSLock()
     private var name = "MCP client"
@@ -66,13 +57,7 @@ final class RelayConnection: NSObject, CoreXPC, @unchecked Sendable {
     }
 
     /// A readable name for the process that launched the relay.
-    static func label(for process: String) -> String {
-        let name = process.lowercased()
-        if name == "claude" || name.contains("claude-code") { return "Claude Code" }
-        if name.contains("claude") { return "Claude Desktop" }
-        if name.contains("codex") { return "Codex" }
-        return String(process.prefix(40))
-    }
+    static func label(for process: String) -> String { ClientNames.label(forProcess: process) }
 }
 
 /// XPC proxies are safe to message from any thread; this box says so to the compiler.

@@ -1,4 +1,5 @@
 import AppKit
+import PosternCore
 import PosternPolicy
 import ServiceManagement
 import SwiftUI
@@ -25,8 +26,9 @@ final class AppDelegate: NSObject, NSApplicationDelegate, NSWindowDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         control.backgroundServiceOff = !launchedByAgent
-        CoreState.shared.onChange = { [weak self] in
-            Task { @MainActor in self?.control.refresh() }
+        let control = self.control
+        CoreState.shared.onChange {
+            Task { @MainActor in control.refresh() }
         }
         PosternFolders.prepare()
         control.updates = updates

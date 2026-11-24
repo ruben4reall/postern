@@ -4,6 +4,7 @@ import Observation
 import PosternAudit
 import PosternBridge
 import PosternClients
+import PosternCore
 import PosternModel
 import PosternPolicy
 import PosternServer
@@ -127,8 +128,7 @@ final class ControlModel {
     func resumeBatch(_ id: String) {
         Task {
             let state = CoreState.shared
-            await BatchResumer(board: state.board, desk: state.desk, backend: LiveBackend(), ledger: state.ledger,
-                               policy: { CoreState.shared.policy }).resume(id)
+            await state.resume(batch: id)
             batches = await state.board.all()
         }
     }

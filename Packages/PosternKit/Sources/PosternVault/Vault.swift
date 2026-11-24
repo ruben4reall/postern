@@ -17,6 +17,12 @@ public enum VaultKey: String, CaseIterable, Sendable {
     case batchKey = "batch-key"
     /// The digest of each batch's latest files, so an older copy put back is refused.
     case batchIndex = "batch-index"
+    /// When Proton refused an email for its own sending limit, and how many had left in the day before.
+    case protonLimits = "proton-limits"
+    /// The conversation of each reply saved as a draft, which Proton does not keep, by the draft's Message-ID.
+    case draftThreads = "draft-threads"
+    /// Windows: the public key of the Windows Hello credential that signs every approval.
+    case approvalKey = "approval-key"
 }
 
 public enum VaultError: Error, Equatable, Sendable {

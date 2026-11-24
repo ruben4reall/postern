@@ -17,6 +17,7 @@ let package = Package(
         .library(name: "PosternClients", targets: ["PosternClients"]),
         .library(name: "PosternCompose", targets: ["PosternCompose"]),
         .library(name: "PosternApproval", targets: ["PosternApproval"]),
+        .library(name: "PosternCore", targets: ["PosternCore"]),
     ],
     dependencies: [
         .package(url: "https://github.com/modelcontextprotocol/swift-sdk.git", exact: "0.12.1"),
@@ -73,6 +74,19 @@ let package = Package(
         .target(name: "PosternCompose", dependencies: ["PosternModel", "PosternText", .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux, .windows]))]),
         // The only producer of an ApprovedMessage: the user saw everything and proved it was them.
         .target(name: "PosternApproval", dependencies: ["PosternCompose", "PosternModel", .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux, .windows]))]),
+        // The core every platform hosts: the Bridge backend, the sessions, the policy in force, the limits and the log.
+        // The Mac app, the Linux core and the Windows core differ only by the `CorePlatform` they give it.
+        .target(
+            name: "PosternCore",
+            dependencies: [
+                "PosternModel", "PosternText", "PosternPolicy", "PosternCompose", "PosternApproval", "PosternAudit",
+                "PosternBridge", "PosternServer", "PosternVault",
+                .product(name: "MCP", package: "swift-sdk"),
+                .product(name: "Logging", package: "swift-log"),
+                .product(name: "NIOCore", package: "swift-nio"),
+                .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux, .windows])),
+            ]
+        ),
         .testTarget(name: "PosternComposeTests", dependencies: ["PosternCompose"]),
         .testTarget(name: "PosternApprovalTests", dependencies: ["PosternApproval", "PosternCompose", "PosternModel"]),
         .testTarget(name: "PosternAuditTests", dependencies: ["PosternAudit"]),
@@ -92,6 +106,7 @@ let package = Package(
             ]
         ),
         .testTarget(name: "PosternPolicyTests", dependencies: ["PosternPolicy", "PosternVault"]),
+        .testTarget(name: "PosternCoreTests", dependencies: ["PosternCore", "PosternServer", "PosternVault", "PosternApproval", "PosternModel"]),
         .testTarget(name: "PosternServerTests", dependencies: ["PosternServer", "PosternApproval", "PosternCompose", .product(name: "MCP", package: "swift-sdk"), .product(name: "Crypto", package: "swift-crypto", condition: .when(platforms: [.linux, .windows]))]),
     ],
     swiftLanguageModes: [.v6]

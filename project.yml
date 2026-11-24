@@ -26,6 +26,10 @@ packages:
   Sparkle:
     url: https://github.com/sparkle-project/Sparkle
     exactVersion: 2.10.0
+  # The core logs through swift-log; the app sends it to the unified log. Same exact pin as PosternKit.
+  swift-log:
+    url: https://github.com/apple/swift-log.git
+    exactVersion: 1.16.1
 targets:
   Postern:
     type: application
@@ -112,6 +116,10 @@ targets:
         product: PosternCompose
       - package: PosternKit
         product: PosternApproval
+      - package: PosternKit
+        product: PosternCore
+      - package: swift-log
+        product: Logging
       - package: Sparkle
       - target: postern-mcp
         link: false

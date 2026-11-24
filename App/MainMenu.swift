@@ -1,4 +1,5 @@
 import AppKit
+import PosternCore
 
 /// The menu bar of the app while its window is open.
 @MainActor

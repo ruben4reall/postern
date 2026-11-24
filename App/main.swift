@@ -1,5 +1,8 @@
 import AppKit
+import Logging
 import ServiceManagement
+
+LoggingSystem.bootstrap { OSLogHandler(label: $0) }
 
 // `Postern --register-agent` registers the launch agent and exits, for scripts that install a build.
 if CommandLine.arguments.contains("--register-agent") {

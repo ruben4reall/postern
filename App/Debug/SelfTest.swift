@@ -6,6 +6,7 @@ import NIOCore
 import PosternApproval
 import PosternBridge
 import PosternCompose
+import PosternCore
 import PosternModel
 import PosternServer
 import PosternVault
@@ -66,7 +67,7 @@ enum SelfTest {
             return nil
         }
         return SelfTestRun(
-            backend: BridgeBackend(endpoint: endpoint, pin: pin, credentials: credentials),
+            backend: BridgeBackend(endpoint: endpoint, pin: pin, credentials: credentials, reader: ParserClient()),
             client: BridgeClient(endpoint: endpoint, pin: pin, credentials: credentials),
             account: Address(name: "Postern", email: credentials.username), stamp: stamp
         )
@@ -80,7 +81,7 @@ enum SelfTest {
             say("FAIL Postern is not set up in this Keychain.")
             return 1
         }
-        let backend = BridgeBackend(endpoint: endpoint, pin: pin, credentials: credentials)
+        let backend = BridgeBackend(endpoint: endpoint, pin: pin, credentials: credentials, reader: ParserClient())
         let client = BridgeClient(endpoint: endpoint, pin: pin, credentials: credentials)
         let run = SelfTestRun(backend: backend, client: client, account: Address(name: "Postern", email: credentials.username))
         defer { Task { await backend.shutdown(); await client.shutdown() } }

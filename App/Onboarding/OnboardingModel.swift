@@ -1,6 +1,7 @@
 import Foundation
 import Observation
 import PosternBridge
+import PosternCore
 import PosternModel
 import PosternPolicy
 import PosternVault
