@@ -97,11 +97,11 @@ final class RunningCore: @unchecked Sendable {
         let request = Task { await presenter.presentDeletion(.init(tool: "trash_messages", client: "Cursor", items: [], permanent: false), deadline: Date().addingTimeInterval(60)) }
         try await Task.sleep(for: .milliseconds(300))
         let id = try #require(seen.first)
-        #expect(presenter.waiting().count == 1)
+        #expect(presenter.pending().count == 1)
         _ = try await client.call("approval.decide", .init(id: id, decision: .reject, reason: "Not these"))
         let intent = await request.value
         #expect(intent == .reject(reason: "Not these"))
-        #expect(presenter.waiting().isEmpty)
+        #expect(presenter.pending().isEmpty)
         client.close()
     }
 }
