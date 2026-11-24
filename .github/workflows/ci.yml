@@ -81,7 +81,7 @@ jobs:
         run: |
           apt-get update -qq
           DEBIAN_FRONTEND=noninteractive apt-get install -y -qq libgtk-4-dev libadwaita-1-dev libsecret-1-dev \
-            xvfb imagemagick dbus dbus-x11 fonts-cantarell fonts-dejavu-core adwaita-icon-theme >/dev/null
+            xvfb imagemagick dbus dbus-x11 fonts-cantarell fonts-dejavu-core adwaita-icon-theme curl >/dev/null
       - name: Restore the build cache
         uses: actions/cache/restore@v4
         with:
@@ -108,6 +108,12 @@ jobs:
           mkdir -p /usr/share/icons/hicolor/scalable/apps
           cp packaging/linux/icons/*.svg /usr/share/icons/hicolor/scalable/apps/
           scripts/linux-screenshots.sh Packages/PosternDesktop/.build/release/postern-app Packages/PosternDesktop/screenshots
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: linux-screenshots
+          path: Packages/PosternDesktop/screenshots
+          retention-days: 7
       - name: Package
         env:
           NFPM_VERSION: "2.40.0"
@@ -138,11 +144,6 @@ jobs:
           name: linux-packages
           path: dist
           retention-days: 14
-      - uses: actions/upload-artifact@v4
-        with:
-          name: linux-screenshots
-          path: Packages/PosternDesktop/screenshots
-          retention-days: 7
 
   scripts:
     name: Release script tests
