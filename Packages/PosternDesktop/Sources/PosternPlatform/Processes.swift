@@ -108,6 +108,11 @@ public enum WindowsProcess {
 /// objects, and inside a job that kills it past its time or memory. It talks only through two pipes.
 enum AppContainerLauncher {
     static let profile = "ch.rubencatalao.postern.reader"
+    /// ProcThreadAttributeValue(ProcThreadAttributeHandleList, FALSE, TRUE, FALSE): a function-like macro Swift does
+    /// not import.
+    static let handleListAttribute = DWORD_PTR(0x0002_0002)
+    /// ProcThreadAttributeValue(ProcThreadAttributeSecurityCapabilities, FALSE, TRUE, FALSE).
+    static let securityCapabilitiesAttribute = DWORD_PTR(0x0002_0009)
     /// ALL APPLICATION PACKAGES: the reader's own files must be readable from inside the container.
     static let allPackages = "*S-1-15-2-1"
     nonisolated(unsafe) static var preparedFolder: String?
@@ -161,15 +166,15 @@ enum AppContainerLauncher {
         _ = InitializeProcThreadAttributeList(nil, 2, 0, &size)
         let list = UnsafeMutableRawPointer.allocate(byteCount: Int(size), alignment: 16)
         defer { list.deallocate() }
-        let attributes = LPPROC_THREAD_ATTRIBUTE_LIST(OpaquePointer(list))
+        let attributes: LPPROC_THREAD_ATTRIBUTE_LIST = OpaquePointer(list)
         guard InitializeProcThreadAttributeList(attributes, 2, 0, &size) else { throw ReaderLaunchError.attributes }
         defer { DeleteProcThreadAttributeList(attributes) }
         var capabilities = SECURITY_CAPABILITIES(AppContainerSid: sid, Capabilities: nil, CapabilityCount: 0, Reserved: 0)
         var handles: [HANDLE?] = [childIn, childOut]
-        let securityOK = UpdateProcThreadAttribute(attributes, 0, DWORD_PTR(PROC_THREAD_ATTRIBUTE_SECURITY_CAPABILITIES),
+        let securityOK = UpdateProcThreadAttribute(attributes, 0, securityCapabilitiesAttribute,
                                                    &capabilities, SIZE_T(MemoryLayout<SECURITY_CAPABILITIES>.size), nil, nil)
         let handlesOK = handles.withUnsafeMutableBufferPointer { buffer in
-            UpdateProcThreadAttribute(attributes, 0, DWORD_PTR(PROC_THREAD_ATTRIBUTE_HANDLE_LIST), buffer.baseAddress,
+            UpdateProcThreadAttribute(attributes, 0, handleListAttribute, buffer.baseAddress,
                                       SIZE_T(MemoryLayout<HANDLE?>.size * buffer.count), nil, nil)
         }
         guard securityOK, handlesOK else { throw ReaderLaunchError.attributes }
@@ -216,18 +221,29 @@ enum AppContainerLauncher {
         }
         ResumeThread(information.hThread)
 
+        // Handles cross into these closures as numbers: they are plain addresses, owned by this function.
+        let inputPipe = UInt(bitPattern: parentIn)
         let writer = Thread {
+            guard let pipe = HANDLE(bitPattern: inputPipe) else { return }
             var offset = 0
             while offset < input.count {
                 var written: DWORD = 0
-                let ok = input.withUnsafeBytes { WriteFile(parentIn, $0.baseAddress! + offset, DWORD(min(input.count - offset, 1 << 20)), &written, nil) }
+                let ok = input.withUnsafeBytes { WriteFile(pipe, $0.baseAddress! + offset, DWORD(min(input.count - offset, 1 << 20)), &written, nil) }
                 guard ok, written > 0 else { break }
                 offset += Int(written)
             }
-            CloseHandle(parentIn)
+            CloseHandle(pipe)
         }
         writer.start()
-        let watchdog = DispatchWorkItem { if let job { TerminateJobObject(job, 1) } else { TerminateProcess(information.hProcess, 1) } }
+        let jobHandle = job.map { UInt(bitPattern: $0) }
+        let processHandle = information.hProcess.map { UInt(bitPattern: $0) }
+        let watchdog = DispatchWorkItem {
+            if let jobHandle, let handle = HANDLE(bitPattern: jobHandle) {
+                TerminateJobObject(handle, 1)
+            } else if let processHandle, let handle = HANDLE(bitPattern: processHandle) {
+                TerminateProcess(handle, 1)
+            }
+        }
         DispatchQueue.global().asyncAfter(deadline: .now() + seconds, execute: watchdog)
         defer { watchdog.cancel() }
         var output = Data()
